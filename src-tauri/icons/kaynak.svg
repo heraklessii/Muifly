@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Muifly uygulama ikonunun KAYNAĞI.
+
+    Buradaki her PNG (icon.png, icon.ico, Square*Logo.png ...) bu dosyadan
+    üretiliyor. İkonu değiştirmek isteyen önce burayı düzenler, sonra:
+
+        npx tauri icon src-tauri/icons/kaynak.svg
+
+    Komut Windows dışı hedefler de üretir (android/, ios/, icon.icns);
+    Muifly yalnızca nsis+msi paketlediği için onlar silinir.
+
+    Glyph, arayüzdeki marka işaretiyle (`src/components/Icons.tsx` →
+    IconMuifly) ve site favicon'uyla (`site/index.html`) AYNI yoldur; sadece
+    24'lük ızgaradan 1024'e ölçeklenmiş hâli: X = 32u + 128, Y = 32v + 128.
+    Üçünden biri değişirse diğer ikisi de değişmeli.
+
+    Kare/gradyan iskeleti Mui ailesinden (Muiget, Muivly) geliyor: aynı
+    köşe yarıçapı, aynı koyu zemin, aynı teal vurgu.
+  -->
+  <defs>
+    <linearGradient id="zemin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b232c"/>
+      <stop offset="1" stop-color="#0b0d11"/>
+    </linearGradient>
+    <linearGradient id="cizgi" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="48" y="48" width="928" height="928" rx="232" fill="url(#zemin)"/>
+
+  <g fill="none" stroke="url(#cizgi)" stroke-width="88"
+     stroke-linecap="round" stroke-linejoin="round">
+    <!-- yükselen çizgi: (3,17.5) (9,11) (13,15) (21,6.5) -->
+    <path d="M224 688 L416 480 L544 608 L800 336"/>
+    <!-- ok ucu: (21,11) (21,6.5) (16.5,6.5) -->
+    <path d="M800 480 L800 336 L656 336"/>
+  </g>
+</svg>

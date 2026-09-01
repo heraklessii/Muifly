@@ -1,0 +1,38 @@
+# Tanitim sayfasini GitHub Pages'e yayinlar.
+#
+# YALNIZCA `site/` klasoru yayinlaniyor. Bu depo public oldugunda kaynak kod
+# burada bulunmayacak (bkz. docs/DISTRIBUTION.md); is akisi da bilerek dar
+# tutuldu ki yanlislikla baska bir klasor yayinlanmasin.
+name: Tanitim sayfasi
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  yayinla:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.dagitim.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: dagitim
+        uses: actions/deploy-pages@v4

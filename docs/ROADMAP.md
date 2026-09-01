@@ -1,0 +1,122 @@
+# Roadmap
+
+> Fazlar sırayla ilerler. Bir faz "kabul kriterleri" karşılanmadan bir sonrakine
+> geçilmez (bkz. `DESIGN_PRINCIPLES.md` → Faz Disiplini).
+
+## Faz 1 — Sistem Optimizasyonu (temel)
+
+**Kapsam**:
+- Oyun process algılama (foreground + whitelist)
+- Process priority/affinity ayarlama
+- Arka plan process suspend/resume (whitelist tabanlı, kullanıcı onaylı liste)
+- Güç planı otomatik geçiş ve geri yükleme
+- Açılış modu (startup servis gecikmesi)
+- Temel profil sistemi (JSON, manuel düzenleme)
+- Şeffaflık log ekranı (ne yapıldı, ne zaman, geri alındı mı)
+
+**Kabul kriterleri**:
+- Her aksiyon geri alınabilir ve test edilmiş olmalı (oyun kapatıldığında sistem
+  tam olarak önceki duruma dönüyor mu?)
+- En az 5-10 farklı oyunla manuel test edilmiş olmalı
+- Hiçbir process injection/hooking yok
+- Log ekranı tüm aksiyonları doğru şekilde gösteriyor
+
+**Neden önce bu**: En düşük risk, en yüksek güven inşası, ML/görüntü işleme
+gerektirmiyor, mevcut Rust/Windows sistem deneyimiyle doğrudan örtüşüyor.
+
+## Faz 2 — Network Optimizasyonu
+
+**Kapsam**:
+- DNS test ve öneri (Cloudflare/Google/ISP karşılaştırması)
+- Route/path testi (oyun sunucusuna en düşük gecikmeli yol tespiti)
+- QoS önceliklendirme (oyun trafiğine öncelik, arka plan indirmelerini throttle)
+- TCP tuning (Nagle kapatma, ACK frequency) — geri alınabilir registry değişiklikleri
+- Jitter/packet loss canlı izleme, `monitor` modülüne entegre
+
+**Kabul kriterleri**:
+- Tüm network değişiklikleri geri alınabilir ve varsayılana dönüş butonu çalışıyor
+- Sayısal vaat içeren hiçbir UI metni yok (bkz. `DESIGN_PRINCIPLES.md`)
+- Jitter/packet loss grafiği öncesi/sonrası karşılaştırma gösterebiliyor
+
+## Faz 3 — Spatial Upscaling (ML değil)
+
+**Kapsam**:
+- Desktop Duplication API ile ekran yakalama (pencereli/kenarlıksız mod)
+- Klasik upscaling algoritmaları: Lanczos, xBR, integer scaling
+- Rekabetçi Mod'da bu modülün otomatik kapalı/kısıtlı olması
+
+**Kabul kriterleri**:
+- Görüntü kalitesi kabul edilebilir seviyede (görsel karşılaştırma testleri)
+- Gecikme artışı ölçülmüş ve kullanıcıya gösterilebilir durumda
+- Anti-cheat riski taşımıyor (sadece ekran okuma, injection yok)
+
+## Faz 4 — ML Tabanlı Frame Generation (uzun vadeli)
+
+**Kapsam**: Lossless Scaling'in LSFG'sine benzer, iki ardışık frame'i analiz edip
+aralarına yapay bir frame üreten özel eğitilmiş model.
+
+**Not**: Bu faz, Faz 1-3'ten çok daha büyük bir mühendislik yatırımı gerektirir
+(ML model eğitimi, veri toplama, GPU inference optimizasyonu). Solo geliştirici
+için bu, referans aldığımız Lossless Scaling'in kendisinin de yedi yıllık bir
+evrimle ulaştığı bir nokta. İlk sürümlerde bu faza girilmesi ZORUNLU DEĞİL —
+ürün Faz 1-3 ile de bağımsız bir değer önerisi sunabilir.
+
+**Kabul kriterleri**: Bu faza başlanmadan önce ayrı bir fizibilite değerlendirmesi
+yapılmalı (gerekli veri seti, eğitim maliyeti, inference hızı hedefleri).
+
+## Faz 5 — Ekran Çevirisi (değerlendiriliyor, kapsamı karara bağlı)
+
+**Kapsam**: Tuşa basınca, oyun profiline kaydedilmiş bir ekran alanındaki
+yazıyı okuyup (OCR) seçilen dil çiftinde çeviren, sonucu ayrı bir üst pencerede
+gösteren modül. Sürekli/otomatik çeviri **yok** — gerekçe karar #22'de.
+
+**Öğrenme**: Model ince ayarı değil, çeviri belleği + oyuna özel terim sözlüğü.
+Kullanıcının onayladığı/düzelttiği çeviri oyun başına bir JSON'da birikiyor,
+sonraki seferde aynen kullanılıyor. Karar #22.
+
+**Bu faz Faz 3'ten önce başlamaz.** Ekran yakalama katmanı orada geliyor; daha
+erken başlanırsa aynı iş ikinci kez yazılır. Faz 1'in saha doğrulaması da hâlâ
+önkoşul (faz disiplini).
+
+**Kabul kriterlerinden önce cevaplanacak iki soru** (fizibilite, ayrı ve
+atılacak bir denemeyle):
+- `Windows.Media.Ocr` hedeflenen oyunların yazı tiplerini gerçekten okuyor mu?
+- Yerel EN→TR çeviri kalitesi gerçek oyun diyaloğunda kabul edilebilir mi?
+
+İkisinden biri olumsuzsa faz açılmadan kapanır. Özelliğin kaderi bu iki soruda;
+geri kalan mühendislik bilinen türden.
+
+**Kabul kriterleri**:
+- Çeviri isteği oyunun akışını kesmiyor (duraklamış diyalog kutusu senaryosu)
+- Overlay'in exclusive fullscreen'de çalışmadığı kullanıcıya baştan söyleniyor
+- Model ikiliye gömülü değil, isteğe bağlı indiriliyor (karar #1 ile tutarlılık)
+- Çeviri belleği kullanıcı tarafından okunabiliyor, düzenlenebiliyor, silinebiliyor
+- Özellik sıfır geri bildirimle de tam çalışıyor
+
+**Açık soru**: Muifly modülü mü, ayrı bir Mui ürünü mü? Karar #22'de iki tarafın
+gerekçeleri duruyor; Faz 3'ün yakalama katmanı gerçekleştikten sonra bakılacak.
+
+## Faz Sonrası / Sürekli
+
+- İkinci GPU'ya (iGPU+dGPU) hesaplama offload desteği
+- Overlay geliştirmeleri (DXGI hook, dikkatli risk değerlendirmesiyle)
+- Community profil paylaşımı (güvenlik incelemesiyle)
+- Linux/Steam Deck desteği (ayrı büyük mühendislik kapsamı, henüz planlanmadı)
+
+## Yayın Kilometre Taşları (faz planından bağımsız, paralel yürür)
+
+Ürün ticari (bkz. `DISTRIBUTION.md`). Kod fazlarıyla mağaza işleri paralel
+ilerler; ikincisi ilkini beklerse yayın tarihi kayar.
+
+| Kilometre taşı | Ne zaman | Kapsam |
+|---|---|---|
+| **M1 — Tanıtım sayfası** | Faz 1 kodu çalışır çalışmaz | Public GitHub deposu + Pages sitesi, "yakında" durumu, e-posta/wishlist yönlendirmesi yok (henüz Steam sayfası yok) |
+| **M2 — Steam sayfası** | Faz 1 kabul kriterleri karşılandığında | Steam Direct ücreti, mağaza sayfası, ekran görüntüleri, wishlist açılır. Yayından **en az 2 ay önce** açılmalı — wishlist sayısı Steam algoritmasını doğrudan etkiliyor |
+| **M3 — Demo** | Faz 1 + kod imzalama | Demo kapsamı `DISTRIBUTION.md`'de. Hem Steam demo hem GitHub Releases'te imzalı kurulum |
+| **M4 — 1.0 yayını** | Faz 1 + Faz 2 stabil | Steam + itch.io eşzamanlı. Faz 3 yokken de bağımsız bir değer önerisi var |
+| **M5 — Scaling güncellemesi** | Faz 3 | Ücretsiz güncelleme, fiyat artışı yapılabilir (mevcut sahipler etkilenmez) |
+
+**Kod imzalama sertifikası M3'ün önkoşuludur.** İmzasız bir kurulum dosyasında
+SmartScreen uyarısı çıkıyor; performans aracı kategorisinde bu uyarı doğrudan
+"virüs mü" algısı yaratıyor ve indirmelerin çoğu orada duruyor. Bu kodla
+çözülmüyor, satın alınması gerekiyor.

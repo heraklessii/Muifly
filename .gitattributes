@@ -1,0 +1,31 @@
+# Satır sonları: depoda LF, çalışma kopyasında platformun kendisi.
+#
+# Neden önemli: proje Windows'ta geliştiriliyor ama CI Ubuntu'da da koşuyor
+# (`.github/workflows/pages.yml`). Normalleştirme olmadan aynı dosya iki
+# makinede farklı görünür ve fark (diff) gürültüsü gerçek değişikliği gizler.
+* text=auto eol=lf
+
+# Windows kabuk betikleri CRLF olmak zorunda.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# İkili dosyalar: dönüştürme yok, fark gösterme yok.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.pdf   binary
+
+# Üretilen dosyalar: gözden geçirmede katlanmış gelsinler ve dil
+# istatistiklerini bozmasınlar. İkisi de ÜRETİLEN, elle düzenlenmez
+# (docs/decisions.md #21).
+package-lock.json      linguist-generated=true
+src-tauri/ucuncu-taraf.json linguist-generated=true
+
+# `katalog.json` bilerek listede YOK: o elle bakımı yapılan bir dosya
+# (docs/decisions.md #26) ve gözden geçirmede görünmesi gerekiyor.

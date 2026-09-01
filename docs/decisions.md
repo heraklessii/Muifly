@@ -1,0 +1,562 @@
+# Mimari Kararlar
+
+> ADR tarzı, kronolojik. Bir karar değişirse **silinmez**, altına "revize edildi"
+> notu düşülür — kodda "neden böyle" sorusunun cevabı burada aranıyor ve
+> silinmiş bir kararın izi kalmazsa aynı tartışma altı ay sonra baştan yapılır.
+>
+> Kod yorumları buraya numarayla atıf yapıyor (`docs/decisions.md #6` gibi).
+> Numaraları değiştirme.
+
+---
+
+## #1 — Tauri v2 + React, Electron değil
+
+**Karar**: Masaüstü kabuk Tauri v2, arayüz React + Vite + TypeScript.
+
+**Neden**: Muifly, sürekli arka planda duran bir araç. Electron'un ~120 MB RAM
+tabanı, "sistemini hafifleten araç" iddiasıyla doğrudan çelişirdi. Tauri
+sistemin WebView'ini kullanıyor ve Rust çekirdeği zaten gerekli (Windows API
+çağrıları için).
+
+Ailedeki Muiget ve Muivly de aynı yığında; birikmiş deneyim aktarılıyor.
+
+---
+
+## #2 — Windows'a özel, çapraz platform soyutlama katmanı yok
+
+**Karar**: Sistem çağrıları doğrudan `windows` crate'i üzerinden. Windows dışı
+hedefler için yalnızca `Error::Unsupported` dönen ince stub'lar var.
+
+**Neden**: Ürünün tamamı platform API'lerine dayanıyor —
+`SetPriorityClass`, `NtSuspendProcess`, `PowerSetActiveScheme`, QoS Paket
+Zamanlayıcı, Desktop Duplication. Bunların Linux/macOS karşılığı ya yok ya
+tamamen farklı. Genel bir "PlatformBackend" trait'i yazmak, tek bir
+implementasyonu olan bir soyutlama olurdu.
+
+Stub'lar yine de duruyor: saf mantık (jitter hesabı, profil doğrulama, defter
+serileştirme) Windows dışında da derlenip test edilebilsin diye.
+
+---
+
+## #3 — Geri alma defteri diske yazılıyor
+
+**Karar**: Her sistem değişikliğinin eski değeri `%APPDATA%\Muifly\geri-alma-defteri.json`
+dosyasına yazılıyor; program açılışında bekleyen oturum kayıtları geri alınıyor.
+
+**Neden**: Tasarım ilkesi 1 (tersine çevrilebilirlik) yalnızca bellekte tutulan
+bir listeyle sağlanamıyor. Program çökerse ya da kullanıcı Görev
+Yöneticisi'nden sonlandırırsa, dondurulmuş süreçler donmuş, güç planı
+değişmiş halde kalırdı — üstelik kullanıcı bunu geri alacak arayüze de
+ulaşamazdı.
+
+**Sonuç**: `ledger.rs` veri, `revert.rs` uygulayıcı. Ayrım şart: defter, geri
+alma kodunu tanımadan serileştirilebiliyor ve bambaşka bir program oturumunda
+okunabiliyor.
+
+**Ek karar**: Bozuk bir defter dosyası programı açılmaz hale getirmiyor; dosya
+`.bozuk` uzantısıyla saklanıp boş defterle devam ediliyor.
+
+---
+
+## #4 — `REALTIME_PRIORITY_CLASS` tip seviyesinde imkânsız
+
+**Karar**: `Oncelik` enum'ında gerçek zamanlı varyantı **yok**. Profil dosyası
+`"realtime"` yazsa bile ayrıştırma hata veriyor.
+
+**Neden**: `docs/RISKS.md` bu sınıfın sistem servislerini (fare/klavye
+sürücüleri dahil) aç bırakıp makineyi kilitleyebildiğini not ediyor. Bunu bir
+`if` kontrolüyle engellemek yerine temsil edilemez kılmak, ileride yazılacak
+yeni bir kod yolunun kontrolü atlamasını da imkânsız kılıyor.
+
+`priority.rs` içinde bir test hiçbir varyantın `0x00000100` üretmediğini
+doğruluyor.
+
+---
+
+## #5 — Sistem süreçleri sabit kodlanmış bir listeyle korunuyor
+
+**Karar**: `detect::DOKUNULMAZ` listesindeki süreçler dondurulamıyor. Liste
+kullanıcı tarafından düzenlenemiyor.
+
+**Neden**: Düzenlenebilir bir "güvenli liste" olsaydı, paylaşılan bir profil onu
+boşaltarak `csrss.exe` ya da `explorer.exe`'yi dondurabilir ve makineyi
+kilitleyebilirdi. Profil formatı açık ve paylaşılabilir (#9); bu yüzden
+güvenlik kontrolü profilin dışında olmak zorunda.
+
+Kontrol iki katmanlı: profil doğrulaması listeyi temizliyor
+(`schema::dogrula`), dondurma anında ayrıca kontrol ediliyor
+(`suspend::dondurma_engeli`). Oyunun kendi PID'i de dondurulamıyor ve bu,
+fonksiyon imzasında zorunlu bir parametre.
+
+---
+
+## #6 — DNS ölçülüyor ama değiştirilmiyor
+
+**Karar**: Muifly çözümleyicileri gerçek DNS sorgularıyla karşılaştırıp en
+hızlısını gösteriyor; sistem DNS ayarına dokunmuyor.
+
+**Neden**: Adaptör seviyesinde DNS değiştirmenin güvenilir yolu `netsh`. Geri
+alması ise adaptörün önceki durumunun (statik liste mi DHCP mi) doğru
+okunmasına bağlı. Bu okuma yanlış olursa kullanıcı internetsiz kalıyor — ve
+programın geri alma vaadi tam da en kötü anda tutmuyor oluyor.
+
+Ölçüp önermek, yanlış uygulamaktan iyi. Kullanıcı sonucu görüp Windows'un
+kendi ayarından değiştirebiliyor.
+
+**Yeniden değerlendirme koşulu**: Registry'den (`Tcpip\Parameters\Interfaces\{GUID}\NameServer`)
+okunan önceki durumun `netsh` sonucuyla birebir eşleştiği bir test yazılabilirse
+bu karar tekrar açılabilir.
+
+---
+
+## #7 — Yol testi var, yol değiştirme yok
+
+**Karar**: Traceroute benzeri ölçüm yapılıyor ve gecikmenin en çok arttığı
+atlama gösteriliyor. Statik route eklenmiyor.
+
+**Neden**: `route add` sistemin yönlendirme tablosunu değiştiriyor; yanlış bir
+kayıt kullanıcıyı internetsiz bırakıyor. Ayrıca "daha iyi bir yol" seçmek
+programın elinde değil — yolu ISS'nin BGP kararları belirliyor.
+
+Ölçümün değeri şu: kullanıcı gecikmenin kendi modeminde mi yoksa ISS'nin
+omurgasında mı biriktiğini görebiliyor. Bu, servis sağlayıcısıyla konuşurken
+elindeki tek somut veri.
+
+---
+
+## #8 — Ölçüm ICMP `IcmpSendEcho` ile, ham soketle değil
+
+**Karar**: Gecikme ölçümü `IcmpSendEcho` API'si üzerinden.
+
+**Neden**: Ham soket (`SOCK_RAW`) Windows'ta yönetici yetkisi istiyor. Sürekli
+açık duran ölçüm tarafının yükseltilmiş yetki gerektirmemesi tasarım ilkesi 5
+(minimum ve açık admin yetkisi). `IcmpSendEcho` yetki istemiyor.
+
+---
+
+## #9 — Profiller ayrı JSON dosyaları, veritabanı değil
+
+**Karar**: Her profil `%APPDATA%\Muifly\profiller\<kimlik>.json`.
+
+**Neden**: Ürün kapalı kaynak (`DISTRIBUTION.md`) ama profil formatı açık.
+Kullanıcı profilini metin editöründe açıp okuyabilmeli ve bir arkadaşına
+gönderebilmeli. Tek dosyalık bir veritabanı bunu imkânsız kılardı.
+
+Bozuk bir profil diğerlerini engellemiyor: okunamayan dosya atlanıp hata
+listesine yazılıyor.
+
+**Güvenlik notu**: Profil kimliği kullanıcı girdisi ve dosya adına dönüşüyor;
+`store::dosya_adi` yol kaçışını (`..\..\`) engelliyor ve bunun bir testi var.
+
+---
+
+## #10 — Otomatik uygulama varsayılan KAPALI
+
+**Karar**: `Ayarlar::otomatik_uygula` varsayılan `false`. Oyun algılansa bile
+optimizasyon kendiliğinden uygulanmıyor.
+
+**Neden**: Bir performans aracı, kurulduğu anda sistemi değiştirmeye
+başlamamalı. Kullanıcı önce ne olduğunu görmeli, sonra istemeli. Rakiplerin
+"kur ve unut" yaklaşımı, tam da güven kaybeden davranış.
+
+Aynı mantıkla dondurma listesi de varsayılan boş: program tanımadığı bir
+oyunda kullanıcının uygulamalarına dokunmuyor. Öneri listesi var, otomatik
+seçim yok.
+
+---
+
+## #11 — Güç planı oluşturulmuyor, yalnızca değiştiriliyor
+
+**Karar**: "Üstün performans" planı sistemde yoksa yüksek performansa
+düşülüyor. `powercfg -duplicatescheme` ile plan üretilmiyor.
+
+**Neden**: Plan üretmek sistemde kalıcı bir kayıt bırakıyor ve tam geri alma
+(planı silmek), kullanıcının kendi oluşturduğu bir planı silme riskini
+taşıyor. Geri alınamayacak bir değişikliği yapmaktansa hiç yapmamak doğru.
+
+Düşüş **sessiz değil**: hangi planın gerçekten uygulandığı günlüğe yazılıyor.
+
+---
+
+## #12 — Servis geciktirme özelliği ertelendi
+
+**Karar**: `ROADMAP.md` Faz 1'de geçen "startup servis gecikmesi" bu sürümde
+yok. Arayüzde gri bir düğme de yok — özellik hiç görünmüyor.
+
+**Neden**: Üç sorun var: (a) yanlış servisi geciktirmek (antivirüs, sürücü,
+VPN) makineyi açılışta savunmasız bırakabilir; (b) hangi servisin "gereksiz"
+olduğuna program karar veremez, kullanıcı da çoğunu tanımaz; (c) kullanıcı
+arada servisi elle değiştirirse defterdeki eski değer artık doğru değil.
+
+Sistem Açılışı modunun kalan parçaları (Muifly'ın kendisinin Windows ile
+başlaması, açılışta güç planı) var.
+
+---
+
+## #13 — QoS ilkesi kalıcı kapsamda, oturumluk değil
+
+**Karar**: QoS ilkesi oluşturulunca defterde `Kalici` kapsamda duruyor; oyun
+kapanınca kaldırılmıyor.
+
+**Neden**: İlke, Windows'un ilke yenilemesinde/oturum açılışında devreye
+giriyor. Her oyun kapanışında silinip her açılışta yeniden yazılsa hiçbir
+zaman etkin olmazdı. Kullanıcı isterse tek tıkla kaldırıyor.
+
+**Ön ek kuralı**: Muifly yalnızca `Muifly-` ön ekli ilkeleri kaldırıyor;
+kullanıcının ya da kurumsal bir grup ilkesinin oluşturduğu QoS ilkelerine
+dokunmuyor.
+
+---
+
+## #14 — FPS ölçümü Faz 2'ye ertelendi, sahte değer gösterilmiyor
+
+**Karar**: `monitor::fps_destegi_var()` `false` dönüyor ve arayüz FPS alanını
+"henüz ölçülmüyor" olarak gösteriyor.
+
+**Neden**: Hook'suz FPS ölçümünün doğru yolu ETW (Event Tracing for Windows) —
+PresentMon'un kullandığı yaklaşım. Hook'lu alternatif tasarım ilkesi 3'e
+takılıyor. ETW yolu araştırılana kadar boş bırakmak, tahmini bir sayı
+göstermekten dürüst.
+
+---
+
+## #15 — Öncesi/sonrası tek bir "iyileşme oranı" üretmiyor
+
+**Karar**: Karşılaştırma iki özeti yan yana gösteriyor; "%12 iyileşme" gibi bir
+oran hesaplanmıyor.
+
+**Neden**: Böyle bir oran, ölçüm koşullarının iki pencerede aynı olduğunu
+varsayar — oyun içi yük asla aynı değil. Tek sayıya indirgemek, tasarım ilkesi
+4'ün (sayısal vaat yok) arka kapıdan ihlali olurdu: kullanıcı onu bir vaat
+gibi okur ve tutmadığında güven kaybeder.
+
+Jitter için yalnızca **yön** söyleniyor ("düştü" / "arttı" / "değişmedi") ve
+cümle bunun o oturuma özel bir ölçüm olduğunu açıkça yazıyor.
+
+---
+
+## #16 — Bellek/standby list temizleme yok
+
+**Karar**: `system_boost::bellek_temizleme_destegi()` `false` ve bir testle
+korunuyor.
+
+**Neden**: "Bellek temizlendi, X MB boşaldı" ekranı rakiplerin en çok
+kullandığı placebo göstergesi. Standby list temizlemenin ölçülebilir bir
+faydası gösterilemiyor; temizleme anında yeniden yükleme maliyeti yüzünden
+kısa bir yavaşlama üretiyor. Muifly'ın konumlandırması tam olarak buna karşı
+(`PRODUCT_VISION.md`).
+
+---
+
+## #17 — Arayüz metinleri Rust tarafında
+
+**Karar**: Ağ ayarlarının açıklamaları, "ne yapmaz" listesi ve benzeri ürün
+metinleri Rust'ta sabit ve komutla arayüze veriliyor.
+
+**Neden**: Tasarım ilkesi 4'e (sayısal vaat yok) karşı gözden geçirme tek bir
+yerde yapılabiliyor ve **testle korunabiliyor** —
+`network_boost::tcp::testler::aciklamalarda_sayisal_vaat_yok` metinlerde
+yasaklı kalıpları arıyor. Metin TypeScript'e dağılsaydı bu kontrol mümkün
+olmazdı.
+
+---
+
+## #18 — `parking_lot::Mutex`, standart `Mutex` değil
+
+**Karar**: Motor kilidi `parking_lot::Mutex`.
+
+**Neden**: Standart `Mutex`'in zehirlenme (poisoning) davranışı burada zarar
+veriyor: bir panik sonrası motor erişilemez hale gelirdi ve kullanıcı **geri
+alma arayüzüne de** ulaşamazdı. Panik anında en çok ihtiyaç duyulan şey tam
+olarak o arayüz.
+
+Aynı sebeple `Cargo.toml`'da `panic = "abort"` yok: bir optimizasyon panic
+ederse defterin çalışabilmesi için unwind gerekiyor.
+
+---
+
+## #19 — Kapanış iki aşamalı: pencere kapanır, program oturumu geri alarak çıkar
+
+**Karar**: Pencerenin kapatılması (varsayılan ayarla) programı sonlandırmıyor,
+tepsiye indiriyor. Program gerçekten çıkarken — tepsi menüsünden "Çıkış",
+ayar kapalıyken pencere kapatma ya da oturum kapanması — `RunEvent::Exit`
+üzerinde **oturumluk** kayıtlar geri alınıyor. Kalıcı kayıtlar defterde
+kalıyor.
+
+**Neden**: Çıkışta geri alma yapılmadığında dondurulmuş bir uygulama, Muifly
+bir daha açılıp `revert::acilista_temizle` çalışana kadar dondurulmuş kalıyordu
+(karar #3'teki defter bunu ancak *sonraki* açılışta düzeltir). Açılış
+temizliği çökme için son savunma; normal çıkışta ona ihtiyaç duyulmamalı.
+
+Kalıcı kayıtların çıkışta geri alınmaması bilinçli: kullanıcı onları açıkça
+istedi ve arayüzdeki "varsayılana dön" ile duruyorlar. Program her
+kapandığında geri alınsalardı "kalıcı" sözü anlamsızlaşırdı.
+
+---
+
+## #20 — Demo/tam sürüm ayrımı derleme bayrağıyla, çalışma zamanı lisansıyla değil
+
+**Karar**: Demo ayrı bir ikili: `cargo build --features demo`. Kapsam tek bir
+yerde (`src-tauri/src/surum.rs` → `Kisitlar`), komutlar bu kısıtları kendi
+kontrol ediyor; arayüz kapalı özelliğin sekmesini hiç göstermiyor.
+
+**Neden**: Çalışma zamanı lisans kontrolü (anahtar doğrulama, sunucuya sorma)
+üç şey getirirdi: ağa çıkan bir yol, saklanacak bir sır ve kullanıcının
+göremediği bir davranış. Üçü de ürünün duruşuyla çelişiyor — telemetri yok
+(`DISTRIBUTION.md`) ve şeffaflık ilkesi programın ne yaptığını gösteriyor
+olmasını istiyor.
+
+**Sınır özellik seviyesinde, zaman seviyesinde değil.** Demoda kalan gün,
+deneme sayacı, kapanma ekranı yok; `surum::testler::kisitlarda_zaman_alani_yok`
+bunu koruyor. Geri alma ve temizlik yolları demoda da tamamen açık: sürüm
+farkı, kullanıcının sistemine bırakılan izi asla artırmamalı.
+
+---
+
+## #21 — Üçüncü taraf bildirimleri ikiliye gömülü, üreteci depoda
+
+**Karar**: Bileşen listesi ve lisans metinleri `src-tauri/ucuncu-taraf.json`
+dosyasında duruyor, `include_str!` ile ikiliye gömülüyor ve arayüzde
+Ayarlar → Yasal altından okunuyor. Dosyayı `arac/ucuncu-taraf-uret.mjs`
+üretiyor; `cargo-about` kullanılmıyor.
+
+**Neden gömülü**: EULA madde 8 "uygulama içindeki bölüm"den söz ediyor.
+Kurulum dizinine ayrı bir dosya konsa kullanıcı onu silebilir ya da bozabilir
+ve uygulama yazılı bir sözü tutamaz hâle gelirdi. Gömülü olan silinemez.
+
+**Neden kendi üretecimiz**: `cargo-about` doğru aracı ama kurulum + derleme
+istiyor; buradaki veri zaten çevrimdışı elde edilebiliyor (`cargo tree`,
+`cargo metadata`, `npm ls` ve kayıt önbelleğindeki LICENSE dosyaları). Aynı
+sonucu ek bir araç bağımlılığı olmadan veriyorsa, bağımlılık taşımıyoruz.
+
+**Kapsam ikiliye gireni içeriyor**: Rust tarafında `-e normal`, npm tarafında
+`--omit=dev`. Test ya da derleme sırasında kullanılıp dağıtılmayan bir
+kütüphaneyi listelemek, listeyi okunmaz yapmaktan başka işe yaramaz.
+
+**Metni olmayan bileşen gizlenmiyor.** Bazı paketler (`webview2-com`,
+`unic-*`, `selectors`, `alloc-stdlib`) yayımlanan sürümlerinde LICENSE
+dosyası taşımıyor. Onları listeden çıkarmak listeyi temiz gösterirdi ama
+eksik yapardı; SPDX kimliği ve kaynak adresiyle duruyorlar, eksik olan da
+ekranda açıkça yazıyor. `cargo-about` da bu duvara çarpardı — sorun araçta
+değil, paketlerde.
+
+**Tazelik testle korunuyor**: `ucuncu_taraf::testler::listedeki_surumler_cargo_lock_ile_ayni`
+listedeki her crate'i `Cargo.lock` ile karşılaştırıyor. Bir bağımlılık
+yükseltilip üreteç çalıştırılmazsa CI kırmızıya döner — kullanıcıya yanlış
+sürüm gösterilmesi bir belge hatası değil, lisans uyumu sorunudur.
+
+**Yan etki**: Yazı tipinin OFL-1.1 metni depoda yoktu; fontu dağıtıp
+lisansını dağıtmamak OFL'in kendi şartına aykırıydı.
+`src/assets/fonts/LICENSE-OFL.txt` ve `site/fonts/LICENSE-OFL.txt` eklendi.
+
+---
+
+## #22 — Ekran çevirisi: isteğe bağlı, seçili alanda, çeviri belleğiyle
+
+**Karar**: Gerçek zamanlı ekran çevirisi **Faz 5** olarak planlandı ve şimdilik
+yazılmıyor. Yazıldığında aşağıdaki sınırlarla yazılacak. Bu maddeler tartışma
+sonucu çıktı; kod yazılmadan önce kaybolmasınlar diye buraya kondu.
+
+**Sürekli çeviri YOK, tuşa basınca seçili alan var.** Gerekçe performans değil,
+**kalite**: hareket eden ekranda yazı yarı render edilmiş, fade animasyonu
+içinde ya da motion blur altında yakalanır ve OCR çöp üretir. OCR'ın güvenilir
+olduğu tek rejim duran bir diyalog kutusudur. Alan seçimi oyun profiline
+kaydedilir (profil sistemi zaten var, karar #9).
+
+**Kısayol `RegisterHotKey` ile, `WH_KEYBOARD_LL` ile değil.** İkisi dışarıdan
+aynı görünür ama ikincisi bir kanca (hook) ve tasarım ilkesi 3'ü ihlal eder.
+Yakalama `Windows.Graphics.Capture` / Desktop Duplication — Faz 3'ün risk
+profilinin aynısı, yeni bir kategori açmıyor (`RISKS.md`).
+
+**Overlay ayrı bir her-zaman-üstte pencere.** `RISKS.md` → "Overlay için
+DirectX Hook İhtiyacı" bunu zaten karara bağlamıştı. Sonucu kabul ediyoruz:
+kenarlıksız modda çalışır, **exclusive fullscreen'de çalışmaz**. Bu, mağaza
+sayfasında ve özelliğin kendi ekranında baştan yazılacak bir sınır.
+
+**Çeviri modeli ikiliye GİRMEZ.** Karar #1 Electron'u "~120 MB RAM tabanı,
+'sistemini hafifleten araç' iddiasıyla çelişir" diye elemişti; yerel bir NMT
+modeli (kabaca 100–300 MB disk, yüklüyken yüzlerce MB RAM) aynı argümanı bu
+sefer bize karşı çalıştırır. Model isteğe bağlı indirilir, boştayken bellekten
+düşer. OCR tarafında böyle bir bedel yok: `Windows.Media.Ocr` Windows 10+'ta
+hazır ve `windows` crate'i zaten bağımlılığımız — ikiliye sıfır bayt ekliyor.
+
+**Öğrenme = çeviri belleği + oyun sözlüğü. Model ince ayarı DEĞİL.**
+
+İnce ayar üç sebeple reddedildi: (1) onayla/reddet ikili sinyali seq2seq
+eğitimi için çok zayıf, doğrusunun ne olduğunu söylemiyor; (2) ürünün içinde
+bir eğitim hattı taşımak gerekirdi ve gerilemeyi ölçmenin yolu olmazdı;
+(3) zamanla kayan bir model, tasarım ilkesi 2'nin yasakladığı kara kutunun ta
+kendisidir — kullanıcı çevirinin neden değiştiğini göremez.
+
+Yerine: birebir eşleşme önbelleği (aynı metin daha önce onaylandıysa aynen
+kullanılır) + oyuna özel terim sözlüğü (`Stamina → Dayanıklılık`,
+`Whiterun → Whiterun`). Oyun başına bir JSON, profil dosyalarıyla aynı şekilde
+okunabilir/düzenlenebilir/silinebilir. Bu daha az şeffaf değil **daha**
+şeffaf: günlük "bu çeviri senin onayladığın kayıttan geldi" diyebilir. Yan
+faydası: önbellek isabeti anında döner, model hiç çalışmaz — oyunlar metni
+çok tekrarladığı için isabet oranı yüksek olur.
+
+**Geri bildirimde asıl olan "Düzelt", "Reddet" değil.** Reddetme yalnızca
+yanlış olduğunu söyler, doğrusunu söylemez. Ve özellik **sıfır geri bildirimle
+tam çalışmak zorunda**: kullanıcıların çoğu hiçbir şeyi puanlamaz. Puanlamaya
+bağımlı bir tasarım, kullanılmayacak bir tasarımdır.
+
+**Açık kalan soru: Muifly modülü mü, ayrı bir Mui ürünü mü?**
+
+Karara bağlanmadı, çünkü şu an yeterli veri yok. Faz 3'ün yakalama katmanı
+gerçekleştikten sonra tekrar bakılacak. Tartışmanın iki tarafı:
+
+- *Ayrı ürün lehine*: `PRODUCT_VISION.md` farklılaşma maddesi #1 "üç kategoriyi
+  tek araçta birleştirme" — dördüncü ve alakasız bir kategori bu cümleyi
+  bozar. Alıcı da farklı (JRPG/VN oynayan kitle), rakipler de farklı
+  (Translumo, LunaTranslator, Textractor — çoğu ücretsiz ve açık kaynak, zor
+  bir fiyat çıpası). Üstelik model çıkarımı çalışırken frame hitch'i yaratır;
+  kimliği "oyununu daha iyi çalıştırır" olan bir araçta bu ironik. Özellik
+  zaten duraklamış diyalog kutusuna, yani metin ağırlıklı oyunlara daralıyor.
+- *Modül lehine*: Faz 3 ile ortak altyapı (ekran yakalama, sunum penceresi),
+  tek satın alma, kabuk zaten kurulu.
+
+**Neden şimdi yazılmıyor**: Faz 1 hâlâ tek bir gerçek oyunda denenmedi
+(`tasks.md` madde 1). Mevcut modüllerin hepsinden büyük bir modülü, çekirdek
+ürün sahada doğrulanmadan açmak faz disiplininin engellemek için var olduğu
+şeydir. Ayrıca yakalama katmanı Faz 3'te geliyor; daha önce başlanırsa aynı iş
+ikinci kez yazılır.
+
+---
+
+## #23 — Profil içe aktarma iki adımlı ve var olanı ezmiyor
+
+**Karar**: Bir profil dosyasını içe aktarmak iki komut: `profil_onizle`
+dosyayı okuyup doğruluyor ve "bu profil uygulanınca ne olacak" listesini
+üretiyor — **diske hiçbir şey yazmadan**; `profil_ice_aktar` ancak kullanıcı
+önizlemeyi gördükten sonra çağrılıyor. Kimlik çakışırsa varsayılan davranış
+**yeni bir kimlikle eklemek** (`kimlik-2`); üzerine yazmak ayrı bir anahtar ve
+kullanıcının açması gerekiyor.
+
+**Neden iki adım**: `PROFILES.md` güvenlik notu, paylaşılan profillerin
+`suspend_process_list` gibi alanlar taşıdığını ve içe aktarma öncesi içeriğin
+gösterilmesi gerektiğini söylüyor. Tek adımlı bir "dosyayı seç, uygulandı"
+akışı, başkasının dosyasının senin makinende hangi uygulamaları donduracağını
+görmeden kabul etmek demekti.
+
+**Neden ezmiyor**: Bir profilin üzerine yazmak, geri alma defterinin
+kapsamadığı tek yıkıcı işlem olurdu — defter sistemdeki değişiklikleri geri
+alıyor, silinen bir dosyayı değil. Tasarım ilkesi 1 ("her şey geri
+alınabilir") burada ancak varsayılanı güvenli tarafa koyarak korunuyor.
+Üzerine yazma seçeneği duruyor, ama bilinçli bir tıklama istiyor.
+
+**Etki metinleri Rust tarafında** (`profile_engine::aktarim::etkiler`), karar
+#17 ile aynı gerekçe: sayısal vaat yasağı (`DESIGN_PRINCIPLES.md` madde 4) tek
+yerde test edilebiliyor (`etkilerde_sayisal_vaat_yok`).
+
+**Demoda kapalı** — `DISTRIBUTION.md` → Demo Kapsamı zaten "profil içe/dışa
+aktarma" diyordu; `Kisitlar::profil_aktarimi` bunu koda taşıyor. Dışa aktarma
+da kapsamda: demo ikilisi paylaşılabilir dosya üretmiyor.
+
+---
+
+## #24 — Mod değişimi bildirimi var, varsayılanı kapalı
+
+**Karar**: Oyun algılandığında ve oyundan çıkışta kısa bir masaüstü bildirimi
+gösteriliyor; ayar `settings::Ayarlar::mod_bildirimi` ve **varsayılanı
+kapalı**.
+
+**Neden var**: Program tepside çalışırken (otomatik başlatmanın normal hâli)
+ne olduğunu görmenin başka yolu yok. Tepsi menüsünden yapılan işlemler zaten
+bildirim gösteriyordu; mod değişimi göstermiyordu.
+
+**Neden varsayılan kapalı**: Alt+Tab yapan kullanıcı dakikada birkaç mod
+geçişi üretebiliyor. Kurulduğu anda bildirim yağdıran bir araç, ilk izlenimini
+gürültüyle veriyor — ve varsayılanların "en az müdahale" yönünde olması
+`settings.rs` modül belgesinin kuralı.
+
+**Bildirim olmayan işi bildirmiyor**: Oyundan çıkışta hiçbir şey geri
+alınmadıysa (profil hiç uygulanmamıştı) bildirim de çıkmıyor. Bunun için
+`Motor::mod_guncelle` artık geri alınan kayıt sayısını da döndürüyor
+(`ModDegisimi`): "3 değişiklik geri alındı" cümlesi, gerçekten sayılmış bir
+şeye dayanmak zorunda (tasarım ilkesi 2).
+
+---
+
+## #25 — Oyun kütüphanesi yerelden okunuyor, hiçbir API'ye gidilmiyor
+
+**Karar**: Kurulu oyunların adı, kapak görseli ve çalıştırılabilir dosyaları
+**diskten** okunuyor. IGDB, RAWG, SteamGridDB, Steam Web API — hiçbiri
+kullanılmıyor ve programda oyun kütüphanesi için tek bir ağ isteği yok.
+
+Kaynaklar:
+
+| Kaynak | Ne veriyor | Nereden |
+|---|---|---|
+| Steam | ad, appid, kurulum klasörü | `steamapps/appmanifest_*.acf` |
+| Steam | kapak/hero/logo görselleri | `appcache/librarycache/<appid>/` |
+| Epic | ad, kurulum, başlatma exe'si | `ProgramData\Epic\...\Manifests\*.item` |
+| Her ikisi | aday exe listesi | kurulum klasörü taraması |
+| Görselsizler | ikon | exe'nin kendi kaynağından (`PrivateExtractIconsW`) |
+
+**Neden API değil**: Sayılan servislerin hepsi anahtar istiyor. Muifly kapalı
+kaynaklı ama **dağıtılan bir ikili**: içine gömülen anahtar çıkarılabilir bir
+sırdır. Sonuç üç ayrı sorun olurdu — kotanın yakılması, servisin kullanım
+koşullarının çiğnenmesi, ve kullanıcının hangi oyunlara sahip olduğunun bir
+sunucuya bildirilmesi. Sonuncusu `commands::yapilmayanlar` içindeki "telemetri
+toplamaz" vaadiyle doğrudan çelişirdi.
+
+Kullanıcıya kendi anahtarını girdirmek de değerlendirildi ve elendi: hesap
+açıp anahtar yapıştırmayı isteyen bir akış, "exe adını elle yazma" sorununu
+çözmek için kurulan özelliğin kendisinden daha zahmetli.
+
+**Neden yerel yeterli**: Aranan üç şey zaten diskte duruyor. Steam istemcisi
+kapakları kendi önbelleğine indiriyor; Epic manifesti `LaunchExecutable`
+alanını doğrudan veriyor. Kalan boşluk (görseli olmayan oyunlar) exe ikonuyla
+kapanıyor. Bedeli: **anahtar yok, kota yok, çevrimdışı çalışıyor, gizlilik
+sorusu yok.**
+
+**Telif**: Kapak görselleri yayıncılara ait. Muifly onları kullanıcının kendi
+diskinden **yalnızca görüntülüyor** — kopyalamıyor, ikiliye gömmüyor, hiçbir
+yere göndermiyor. Dağıtılan pakette tek bir oyun görseli yok.
+
+**Bağımlılık eklenmedi**: VDF/ACF çözümleyicisi (`library::vdf`), PNG yazıcısı
+(`library::png`) ve base64 kodlayıcı elle yazıldı. Üçü de dar kapsamlı ve
+testli; bir kasa eklemek karar #21 gereği üçüncü taraf bildirimlerinin de
+yeniden üretilmesi demekti. Görseller arayüze `data:` adresi olarak gidiyor:
+`asset:` protokolünü açmak `capabilities/default.json`'a dosya sistemi izni
+eklemeyi gerektirirdi.
+
+**Arayüz dosya yolu göndermiyor**: Görsel ve taslak komutları oyunu `kimlik`
+ile buluyor, yol ile değil. Son taramanın sonucu `library::SON_TARAMA`
+önbelleğinde duruyor. Yol kabul eden bir komut, webview'e "istediğin dosyayı
+okut" yüzeyi açardı. Tek istisna `oyun_elle_ekle` ve oradaki yol da
+kullanıcının kendi açtığı dosya penceresinden geliyor.
+
+---
+
+## #26 — Katalog oyunun adını söylüyor, ayarını değil
+
+**Karar**: `src-tauri/katalog.json` ikiliye gömülü ve her girdisi yalnızca üç
+şey taşıyor: exe adı, oyunun okunabilir adı, rekabetçi olup olmadığı. Hazır
+öncelik sınıfı, güç planı, CPU affinitesi ya da dondurma listesi **yok**.
+
+**Neden yok**: Rakiplerin "oyuna özel optimizasyon veritabanı" pazarlaması
+büyük ölçüde ölçülmemiş tavsiyeden ibaret. "Cyberpunk'ta güç planını şuna al"
+demek için o karşılaştırmayı yapmış olmak gerekir; yapmadık. Tasarım ilkesi 4
+(`DESIGN_PRINCIPLES.md`) sayısal vaadi yasaklıyor ve ölçülmemiş bir per-oyun
+ayarı, sayı yazmasa da aynı türden bir vaat.
+
+`rekabetci` bayrağı istisna değil, tam tersi: bir şey **açmıyor**, kapatıyor.
+Şema rekabetçi profilde kare üretimini ve agresif ölçeklemeyi zorla kapatıyor
+(`profile_engine::schema`). Kapatan bir varsayılan için ölçüme ihtiyaç yok.
+
+**Katalog otomatik uygulanmıyor**: Ürettiği şey bir profil **taslağı**
+(`katalog::taslak`) ve taslak kullanıcıya gerekçeleriyle gösteriliyor
+(`aciklamalar`). Kaydetme ve uygulama her zamanki kapılardan geçiyor —
+karar #10 ve #23'ün aynı gerekçesi.
+
+**Elle bakımı yapılıyor**: `katalog.json` üretilmiş bir dosya DEĞİL
+(`ucuncu-taraf.json` ile karıştırılmamalı, karar #21). Yanlış ya da eskimiş
+bir satırın bedeli düşük: eşleşme olmaz, kullanıcı adı kendi yazar. Hiçbir
+satır tek başına sistemde bir değişikliğe yol açmıyor.
+
+**Neden güncelleme kanalı yok**: Katalogun GitHub'dan güncellenmesi
+değerlendirildi ve şimdilik yapılmadı — programa ilk ağ bağımlılığını, dosya
+imzalama sorusunu ve "indirilen içerik ne yapıyor" sorusunu birlikte
+getiriyordu. Katalog sürümle birlikte gidiyor.

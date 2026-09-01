@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Muifly — ne yaptığını gösteren oyun performans aracı</title>
+    <meta
+      name="description"
+      content="Windows için oyun performans aracı. Sistem optimizasyonu, ağ ölçümü ve şeffaf bir aktivite günlüğü. Her değişiklik tek tıkla geri alınabilir. Abonelik yok, telemetri yok."
+    />
+    <meta name="theme-color" content="#0f1115" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f1115'/%3E%3Cpath d='M5 23l8-8.5 5 5L27 8' stroke='%232dd4bf' stroke-width='3' fill='none' stroke-linejoin='round' stroke-linecap='round'/%3E%3Cpath d='M27 14V8h-6' stroke='%232dd4bf' stroke-width='3' fill='none' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Muifly" />
+    <meta
+      property="og:description"
+      content="Oyun performans aracı — ne yaptığını gösteren, her adımı geri alınabilen türden."
+    />
+
+    <style>
+      /* ----------------------------------------------------------------
+       * Yazı tipi bu depodan sunuluyor, bir font CDN'inden değil.
+       * Uygulama "senin başlatmadığın hiçbir ağ isteği yok" diyor;
+       * o uygulamayı anlatan sayfanın, ziyaretçinin adresini kendi
+       * başlığını çizdirmek için üçüncü bir tarafa vermesi tuhaf olurdu.
+       * ---------------------------------------------------------------- */
+      @font-face {
+        font-family: 'Outfit';
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+        src: url('./fonts/outfit-latin.woff2') format('woff2');
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+          U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+          U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: 'Outfit';
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+        src: url('./fonts/outfit-latin-ext.woff2') format('woff2');
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+          U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+          U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+
+      /* Uygulamanın kendi jetonları — src/styles.css ile aynı değerler. */
+      :root {
+        --bg: #0f1115;
+        --bg-panel: #181b22;
+        --bg-sunken: #0b0d11;
+        --border: #262b35;
+        --border-strong: #333a47;
+        --text: #e8eaed;
+        --text-muted: #8b93a3;
+        --accent: #2dd4bf;
+        --accent-strong: #5eead4;
+        --accent-soft: rgb(45 212 191 / 12%);
+        --accent-line: rgb(45 212 191 / 34%);
+        --on-accent: #04211d;
+        --warning: #fbbf24;
+
+        --radius: 12px;
+        --radius-lg: 16px;
+        --measure: 64ch;
+        color-scheme: dark;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .kapsayici {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* -------------------------------------------------------------- */
+
+      header {
+        padding: 96px 0 64px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .marka {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text);
+        margin-bottom: 28px;
+      }
+
+      .marka svg {
+        width: 24px;
+        height: 24px;
+        color: var(--accent);
+      }
+
+      h1 {
+        font-size: clamp(32px, 5.5vw, 52px);
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+        margin: 0 0 20px;
+        max-width: 18ch;
+      }
+
+      .ozet {
+        font-size: 19px;
+        color: var(--text-muted);
+        max-width: var(--measure);
+        margin: 0 0 32px;
+      }
+
+      .dugmeler {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .dugme {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 11px 20px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border-strong);
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 500;
+        transition:
+          border-color 140ms ease,
+          background-color 140ms ease;
+      }
+
+      .dugme:hover {
+        border-color: var(--accent-line);
+        background: var(--accent-soft);
+      }
+
+      .dugme.birincil {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--on-accent);
+        font-weight: 600;
+      }
+
+      .dugme.birincil:hover {
+        background: var(--accent-strong);
+        border-color: var(--accent-strong);
+      }
+
+      .dugme[aria-disabled='true'] {
+        opacity: 0.55;
+        pointer-events: none;
+      }
+
+      .fiyat-notu {
+        margin-top: 18px;
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+
+      /* -------------------------------------------------------------- */
+
+      section {
+        padding: 64px 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      h2 {
+        font-size: 27px;
+        letter-spacing: -0.015em;
+        margin: 0 0 12px;
+      }
+
+      .bolum-ozet {
+        color: var(--text-muted);
+        max-width: var(--measure);
+        margin: 0 0 32px;
+      }
+
+      .kartlar {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 16px;
+      }
+
+      .kart {
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 22px;
+      }
+
+      .kart h3 {
+        margin: 0 0 8px;
+        font-size: 17px;
+      }
+
+      .kart p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 15px;
+      }
+
+      .kart ul {
+        margin: 12px 0 0;
+        padding-left: 18px;
+        color: var(--text-muted);
+        font-size: 15px;
+      }
+
+      .kart li {
+        margin-bottom: 6px;
+      }
+
+      /* "Ne yapmaz" tablosu — sayfanın en dürüst bölümü, en görünür yerde. */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+      }
+
+      .tablo-sarici {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--bg-sunken);
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      td:first-child {
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      td:last-child {
+        color: var(--text-muted);
+      }
+
+      .serit {
+        display: flex;
+        gap: 14px;
+        padding: 18px 20px;
+        border: 1px solid var(--accent-line);
+        border-radius: var(--radius-lg);
+        background: var(--accent-soft);
+        font-size: 15px;
+        max-width: var(--measure);
+      }
+
+      .serit svg {
+        width: 20px;
+        height: 20px;
+        flex: 0 0 auto;
+        color: var(--accent);
+        margin-top: 2px;
+      }
+
+      .demo-liste {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+        margin-top: 8px;
+      }
+
+      .demo-liste ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        font-size: 15px;
+        color: var(--text-muted);
+      }
+
+      .demo-liste li {
+        padding: 6px 0;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+
+      .isaret {
+        color: var(--accent);
+        font-weight: 700;
+        flex: 0 0 auto;
+      }
+
+      .isaret.yok {
+        color: var(--text-muted);
+      }
+
+      footer {
+        padding: 48px 0 72px;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      footer a {
+        color: var(--accent);
+      }
+
+      .footer-satir {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        margin-bottom: 16px;
+      }
+
+      code {
+        font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+        font-size: 0.9em;
+        background: var(--bg-sunken);
+        padding: 1px 5px;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <div class="kapsayici">
+        <span class="marka">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17.5 9 11l4 4 8-8.5" />
+            <path d="M21 11V6.5H16.5" />
+          </svg>
+          Muifly
+        </span>
+
+        <h1>Ne yaptığını gösteren oyun performans aracı.</h1>
+
+        <p class="ozet">
+          Sistem optimizasyonu ve ağ ölçümü tek uygulamada. Yapılan her değişiklik
+          günlüğe yazılır ve tek tıkla geri alınır. Oyuna hiçbir şey enjekte
+          edilmez. Abonelik yok, reklam yok, telemetri yok.
+        </p>
+
+        <div class="dugmeler">
+          <a class="dugme birincil" href="#" aria-disabled="true">Steam'de yakında</a>
+          <a class="dugme" href="#" aria-disabled="true">itch.io'da yakında</a>
+          <a class="dugme" href="https://github.com/heraklessii/Muifly/releases">Demoyu indir</a>
+        </div>
+
+        <p class="fiyat-notu">
+          Tek seferlik satın alma. Windows 10 (1809+) ve Windows 11, x64.
+          Demo süresizdir — zaman sınırı, nag ekranı ya da kapanma sayacı yok.
+        </p>
+      </div>
+    </header>
+
+    <section>
+      <div class="kapsayici">
+        <h2>Üç şey yapar</h2>
+        <p class="bolum-ozet">
+          Oyuncular bugün bunlar için üç ayrı araca para veriyor. Muifly ikisini
+          birleştiriyor; üçüncüsü (görüntü ölçekleme) yol haritasında.
+        </p>
+
+        <div class="kartlar">
+          <div class="kart">
+            <h3>Sistem</h3>
+            <ul>
+              <li>Öndeki oyunu algılar, süreç önceliğini yükseltir</li>
+              <li>Seçtiğin arka plan uygulamalarını <strong>dondurur</strong> — kapatmaz</li>
+              <li>Güç planını değiştirir, oyun kapanınca geri alır</li>
+              <li>Hibrit CPU'larda performans çekirdeklerine sabitleyebilir</li>
+            </ul>
+          </div>
+
+          <div class="kart">
+            <h3>Ağ</h3>
+            <ul>
+              <li>DNS çözümleyicilerini gerçek sorgularla karşılaştırır</li>
+              <li>Gecikme, jitter ve paket kaybını sürekli ölçer</li>
+              <li>Yol testiyle gecikmenin nerede biriktiğini gösterir</li>
+              <li>Nagle birleştirmesi ve QoS ayarlarını yönetir</li>
+            </ul>
+          </div>
+
+          <div class="kart">
+            <h3>Şeffaflık</h3>
+            <ul>
+              <li>Her değişiklik: ne, ne zaman, hangi değerden hangi değere</li>
+              <li>Tek tıkla geri alma — her satır için ayrı ayrı</li>
+              <li>Öncesi ve sonrası ölçümler yan yana</li>
+              <li>Program çökerse bir sonraki açılışta otomatik temizlik</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="kapsayici">
+        <h2>Ne yapmaz</h2>
+        <p class="bolum-ozet">
+          Bunlar eksik özellik değil, bilinçli sınırlar. Bir performans aracının
+          yapmadıklarını söylemesi, yaptıklarını saymasından daha çok şey anlatır.
+        </p>
+
+        <div class="tablo-sarici">
+          <table>
+            <thead>
+              <tr>
+                <th>Yapmaz</th>
+                <th>Neden</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Oyuna kod enjekte etmez</td>
+                <td>
+                  DLL injection ve bellek hook'lama anti-cheat riski taşır.
+                  Yalnızca resmi Windows API'leri kullanılır. Yine de hiçbir
+                  üçüncü taraf anti-cheat sistemi için garanti verilemez — bunu
+                  net söylemeyi tercih ediyoruz.
+                </td>
+              </tr>
+              <tr>
+                <td>Trafiği tünellemez</td>
+                <td>
+                  VPN tüneli çoğu zaman gecikmeyi artırır, abonelik modeline
+                  zorlar ve trafiğini görebileceğimiz bir konuma geçmemizi
+                  gerektirir. Bağlantın olduğu gibi kalıyor.
+                </td>
+              </tr>
+              <tr>
+                <td>DNS'i kendiliğinden değiştirmez</td>
+                <td>
+                  Adaptör DNS'ini bir programın değiştirmesi, yanlış gittiğinde
+                  seni internetsiz bırakır. Ölçüp gösteriyoruz; karar sende.
+                </td>
+              </tr>
+              <tr>
+                <td>Süreçleri kapatmaz</td>
+                <td>
+                  Dondurma tersine çevrilebilir. Discord dondurulduğunda sohbetin
+                  kapanmaz — oyundan çıkınca kaldığı yerden devam eder.
+                </td>
+              </tr>
+              <tr>
+                <td>Bellek "temizlemez"</td>
+                <td>
+                  Standby list temizlemenin ölçülebilir bir faydası
+                  gösterilemiyor; temizleme anında kısa bir yavaşlama üretiyor.
+                </td>
+              </tr>
+              <tr>
+                <td>Telemetri toplamaz</td>
+                <td>
+                  Kullanım istatistiği, çökme raporu, analytics — hiçbiri
+                  gönderilmiyor. Ağa yalnızca senin başlattığın ölçümler için
+                  çıkılır ve her çıkış günlüğe yazılır.
+                </td>
+              </tr>
+              <tr>
+                <td>Sayısal vaat vermez</td>
+                <td>
+                  "Ping'i 20 ms düşürür" gibi bir iddia dürüst olamaz: gecikme
+                  büyük ölçüde servis sağlayıcına ve mesafeye bağlı. Gördüğün her
+                  sayı senin makinende ölçülür.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="kapsayici">
+        <h2>Demo</h2>
+        <p class="bolum-ozet">
+          Bu kategoride en büyük satın alma engeli "acaba placebo mu" şüphesi.
+          Demo, ürünün gerçekten çalıştığını kendi makinende görmen için var —
+          kısıtlanmış değil, dar ama eksiksiz.
+        </p>
+
+        <div class="demo-liste">
+          <div class="kart">
+            <h3>Demoda var</h3>
+            <ul>
+              <li><span class="isaret">+</span> System Boost'un tamamı</li>
+              <li><span class="isaret">+</span> Öncesi/sonrası ölçüm ve karşılaştırma</li>
+              <li><span class="isaret">+</span> Şeffaflık günlüğü, tam haliyle</li>
+              <li><span class="isaret">+</span> Geri alma mekanizmasının tamamı</li>
+              <li><span class="isaret">+</span> Bir oyun profili</li>
+            </ul>
+          </div>
+          <div class="kart">
+            <h3>Tam sürümde</h3>
+            <ul>
+              <li><span class="isaret yok">−</span> Network Boost (DNS, yol testi, QoS, TCP)</li>
+              <li><span class="isaret yok">−</span> Sınırsız profil, içe/dışa aktarma</li>
+              <li><span class="isaret yok">−</span> Sistem açılışı modu</li>
+              <li><span class="isaret yok">−</span> Görüntü ölçekleme (yol haritasında)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="kapsayici">
+        <h2>Kaynak kod</h2>
+        <div class="serit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v5M12 8h.01" />
+          </svg>
+          <div>
+            <p style="margin: 0 0 10px">
+              <strong>Muifly kapalı kaynaklı ve ücretli bir üründür.</strong> Bu
+              depo tanıtım sayfası, demo dağıtımı ve hata takibi içindir.
+            </p>
+            <p style="margin: 0">
+              Ürünün şeffaflık vaadi kaynak koduyla değil, <em>çalışırken ne
+              yaptığını göstermesiyle</em> ilgili: hangi süreç durduruldu, hangi
+              ayar hangi değerden hangi değere geçti, ne zaman geri alındı.
+              Profil dosyaların ise okunabilir JSON olarak
+              <code>%APPDATA%\Muifly\profiller</code> altında durur, sana aittir
+              ve serbestçe paylaşılabilir.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div class="kapsayici">
+        <div class="footer-satir">
+          <a href="https://github.com/heraklessii/Muifly/releases">Demo</a>
+          <a href="https://github.com/heraklessii/Muifly/issues">Hata bildir</a>
+          <a href="https://github.com/heraklessii/Muifly/blob/main/LICENSE.md">Kullanım koşulları</a>
+        </div>
+        <p style="margin: 0">
+          Muifly · Mui yazılım ailesi (Muitoon, Muita, Muiget, Muivly).
+          © 2026 · Tüm hakları saklıdır.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

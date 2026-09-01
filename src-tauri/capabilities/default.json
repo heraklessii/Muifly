@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Muifly ana penceresinin izinleri. Liste bilinçli olarak dar: arayüzün gerçekten kullandığı yetenekler dışında hiçbir şey açık değil. Pano, dosya sistemi ve kabuk erişimi YOK.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "opener:allow-open-url",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
+  ]
+}

@@ -1,0 +1,51 @@
+# Derleme ve test.
+#
+# Yalnizca Windows: urun Windows'a ozel (docs/decisions.md #2) ve sistem
+# cagrilarinin cogu baska bir hedefte anlamli sekilde test edilemiyor.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Bagimliliklar
+        run: npm ci
+
+      - name: Arayuz derlemesi
+        run: npm run build
+
+      - name: Arayuz testleri
+        run: npm test
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Rust testleri
+        working-directory: src-tauri
+        run: cargo test --all-features
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Bicim
+        working-directory: src-tauri
+        run: cargo fmt --check
