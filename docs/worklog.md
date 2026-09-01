@@ -796,3 +796,22 @@ Bir oyunu tanımamak, yanlış oyunu tanımaktan iyi.
 
 Faz 2 kod tarafı bitti, Faz 3 faz disiplini gereği kapalı. `tasks.md` →
 Sıradaki'nin tamamı hâlâ elle deneme; ilerleme oradan gelecek.
+
+### Oturumun sonunda: commit, sürüm 0.2.0, iç kilometre taşı
+
+Faz 2'nin tamamı (kare ölçümü, ETW, yükseltilmiş yardımcı) ve Faz 5
+fizibilite sondaları o ana kadar **commit edilmemişti**; ~700 satırlık bitmiş
+iş çalışma ağacında duruyordu. Üç commit'e ayrıldı: Faz 2 + fizibilite, bu
+oturumun bakımı, sürüm yükseltmesi. `origin/main` (`Muifly-dev`, private)
+güncel.
+
+Sürüm 0.1.0 → **0.2.0** (`package.json`, `tauri.conf.json`, `Cargo.toml`
+birlikte — tag ile ikilinin bildirdiği sürüm ayrışmasın diye). `v0.2.0`
+tag'i ve dev deposunda bir release notu var.
+
+**Bu bir yayın değil ve öyle okunmamalı.** Release notunun ilk satırı da
+bunu söylüyor: ikili dosya eklenmedi, demo hâlâ M3'ü (kod imzalama), 1.0
+M4'ü bekliyor. Public dağıtım `heraklessii/Muifly` üzerinden yapılacak;
+imzasız bir kurulumu oraya koymak, aynı gün siteye yazdığımız "Demo yakında"
+düzeltmesini geçersiz kılar ve performans aracı kategorisinde SmartScreen
+uyarısı doğrudan "virüs mü" algısı yaratır (`RISKS.md`).
