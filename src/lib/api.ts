@@ -16,10 +16,12 @@ import type {
   DnsSonucu,
   Durum,
   Karsilastirma,
+  KareOlcumDurumu,
   Kayit,
   KatalogGirdisi,
   Kisitlar,
   Onizleme,
+  OlcumRaporu,
   Ornek,
   Oyun,
   Ozet,
@@ -50,6 +52,16 @@ export const gunlugu_temizle = () => invoke<void>('gunlugu_temizle');
 export const ornekler = () => invoke<Ornek[]>('ornekler');
 export const ozet = () => invoke<Ozet>('ozet');
 export const karsilastirma = () => invoke<Karsilastirma | null>('karsilastirma');
+
+/**
+ * Kare ölçümü. Hedefi backend seçiyor: arayüz PID taşımıyor.
+ *
+ * Sebep, karar #25'in gerekçesinden başka somut bir şey de içeriyor —
+ * kullanıcı düğmeye bastığı anda öndeki pencere Muifly'ın kendisi olur.
+ * Motorun mod durumu oyunu alt-tab tamponuyla hatırlıyor.
+ */
+export const kareOlcumDurumu = () => invoke<KareOlcumDurumu>('kare_olcum_durumu');
+export const oyunuOlc = (saniye: number) => invoke<OlcumRaporu>('oyunu_olc', { saniye });
 
 export const bekleyenGeriAlmalar = () => invoke<Kayit[]>('bekleyen_geri_almalar');
 export const geriAl = (id: number) => invoke<void>('geri_al', { id });

@@ -25,6 +25,7 @@ import {
   IconUyari,
   IconYukari,
 } from './Icons';
+import { KareOlcumu } from './KareOlcumu';
 import { MetrikGrafik } from './MetrikGrafik';
 import { Sparkline } from './Sparkline';
 
@@ -39,6 +40,8 @@ interface Props {
   onHepsiniGeriAl: () => void;
   /** Günlük sekmesine geçiş: "ayrıntılar günlükte" bir yönlendirme olmalı. */
   onGunluge: () => void;
+  /** Uzun süren işlemleri sarmalayan yardımcı (meşgul durumu + hata bildirimi). */
+  onIslem: (calis: () => Promise<void>) => void;
   mesgul: boolean;
 }
 
@@ -164,6 +167,7 @@ export function DurumPaneli({
   onOturumuKapat,
   onHepsiniGeriAl,
   onGunluge,
+  onIslem,
   mesgul,
 }: Props) {
   const oyunda = durum.mod.mod !== 'bosta' && durum.mod.mod !== 'sistemAcilisi';
@@ -270,13 +274,16 @@ export function DurumPaneli({
             birim="%"
             not="cevapsız ölçüm oranı"
           />
-          {!durum.fpsOlcumu && (
-            <Olcum etiket="FPS" deger={BOS} not="henüz ölçülmüyor (karar #14)" />
-          )}
+          {/* Kare ölçümü buradaki sürekli akışın parçası DEĞİL: yükseltilmiş
+              yetki istiyor ve arka planda çalışamaz (karar #27). Kendi
+              paneli, kendi düğmesi var. */}
         </div>
 
         <MetrikGrafik ornekler={ornekler} aralikSn={durum.ayarlar.olcumAraligiSn} />
       </div>
+
+      {/* --- Kare ölçümü -------------------------------------------------- */}
+      <KareOlcumu oyunVar={oyunda} mesgul={mesgul} onIslem={onIslem} />
 
       {/* --- Öncesi / sonrası -------------------------------------------- */}
       {karsilastirma && (

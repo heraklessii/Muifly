@@ -102,7 +102,10 @@ Bir modülü değiştirmeden önce buraya bak.
 | QoS | `network_boost/qos.rs` | ✅ DSCP 46 ilkesi. Yalnızca `Muifly-` ön ekli ilkelere dokunuyor (karar #13) |
 | Şeffaflık günlüğü | `monitor/log.rs` | ✅ 500 satırlık halka tampon. Geri alınan satır silinmiyor, düğmesi düşüyor |
 | Ölçüm | `monitor/metrics.rs` | ✅ CPU/bellek/gecikme örnekleme, jitter (ardışık fark), kayıp oranı |
-| FPS | — | ⬜ Ertelendi (karar #14). Sahte değer gösterilmiyor |
+| Kare süresi istatistiği | `monitor/frames.rs` | ✅ Saf: ortalama, en kötü %1, kare jitter. Windows API yok, doğrudan test ediliyor |
+| Kare ölçümü (ETW) | `monitor/etw.rs` | ✅ Oturum + tüketici; sağlayıcılar çekirdek tarafında PID süzgeciyle açılıyor. Gerçek makinede doğrulandı (karar #27) |
+| Ölçümü başlatma | `monitor/olcum.rs` + `bin/muifly-olcum.rs` | ✅ Ayrı ve kısa ömürlü yükseltilmiş yardımcı. Ana uygulama yükselmiyor; UAC yalnızca kullanıcı ölçümü başlatınca |
+| Kare ölçümü arayüzü | `components/KareOlcumu.tsx` | ✅ İki adımlı: önce yetkinin nedeni, sonra UAC. Hedefi motor seçiyor, arayüz PID taşımıyor. Beş testle korunuyor |
 | Profil şeması | `profile_engine/schema.rs` | ✅ Doğrulama + güvenli hale getirme; düzeltmeler kullanıcıya gösteriliyor |
 | Profil deposu | `profile_engine/store.rs` | ✅ Ayrı JSON dosyaları (karar #9), yol kaçışı engelli |
 | Profil aktarımı | `profile_engine/aktarim.rs` | ✅ İki adımlı içe aktarma: önizleme diske yazmıyor, çakışmada ezmiyor (karar #23). Demoda kapalı |

@@ -35,7 +35,6 @@ pub struct Durum {
     /// Dondurma özelliği bu makinede kullanılabiliyor mu?
     pub dondurma_destegi: bool,
     pub yonetici: bool,
-    pub fps_olcumu: bool,
     pub cpu_hibrit: bool,
     pub mantiksal_cekirdek: u32,
     /// Aktif güç planının görünen adı.
@@ -469,7 +468,6 @@ impl Motor {
                 .count(),
             dondurma_destegi: system_boost::suspend::destekleniyor(),
             yonetici: network_boost::tcp::yonetici_mi(),
-            fps_olcumu: monitor::fps_destegi_var(),
             cpu_hibrit: topoloji.as_ref().map(|t| t.hibrit).unwrap_or(false),
             mantiksal_cekirdek: topoloji.map(|t| t.mantiksal_cekirdek).unwrap_or(0),
             guc_plani: system_boost::power::aktif_plan().ok().map(|(_, ad)| ad),

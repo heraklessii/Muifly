@@ -545,3 +545,197 @@ izin listesinden geliyor.
   testleri, Rust testleri, clippy, biçim — hepsi geçti.
 
 **Açık kalan iki bakım maddesi**, `tasks.md`'de.
+
+---
+
+## Oturum 8 — 1 Eylül 2026 · Faz 2'nin son parçası: kare ölçümü
+
+**İstek**: "Diğer fazlara başla." Faz 3/4 faz disiplinine takılıyor (Faz 1
+sahada doğrulanmadı, kod işi değil), Faz 5'in önkoşulu Faz 3. Faz sırasını
+esnetmeden ilerlenebilecek tek yer Faz 2'nin açık kalan parçasıydı: ETW
+tabanlı kare ölçümü (karar #14). Ayrıca Faz 3'ün kabul kriteri "gecikme
+artışı ölçülmüş" zaten bu altyapıya bağlı.
+
+### Önce ölçüldü, sonra yazıldı
+
+Atılacak bir sonda (`arac/etw-sonda/`) ilk soruyu kapattı:
+
+```
+StartTraceW -> 5 (ERROR_ACCESS_DENIED)
+```
+
+Yükseltilmemiş, `Performance Log Users` üyesi olmayan bir hesapta gerçek
+zamanlı ETW oturumu **açılamıyor**. Oturumu tüketmek de aynı yetkiyi
+istiyor, yani "başkası açsın biz dinleyelim" diye bir kaçış yok.
+
+Bu, tasarım ilkesi 5 ile doğrudan çakışıyor: arka plan izlemesi yükseltilmiş
+çalışmaz. Sonuç, özelliğin ölmesi değil şeklinin değişmesi — kare ölçümü
+sürekli değil, **kullanıcının başlattığı süreli bir pencere**. Karar #27.
+
+### Eklenenler
+
+- `monitor/frames.rs` — saf istatistik, Windows API yok: kare süresi
+  dönüşümü, ortalama, **en kötü %1**, kare jitter'ı. 13 test.
+- `monitor/etw.rs` — ETW oturum denetleyicisi + tüketici. `Drop` oturumu
+  kapatıyor, sabit oturum adı çökme sonrası kalıntıyı bulmayı sağlıyor,
+  sağlayıcılar çekirdek tarafında **PID süzgeciyle** açılıyor.
+
+### Bir tanım düzeltildi
+
+"En kötü %1" ilk yazımda nearest-rank 99. yüzdelikti. Yazılan test bunun
+tam 100 karelik bir pencerede tek takılmayı **ıskaladığını** gösterdi
+(99. sıra = sondan ikinci kare). Aracın en çok işe yarayacağı durumda sessiz
+kalması demekti. Tanım "en kötü %1 karenin ortalaması" olarak düzeltildi;
+regresyon testi kondu.
+
+### Açık kalan tek soru
+
+Yükseltilmiş bir oturumda DXGI/D3D9 sağlayıcıları gerçekten başka bir
+sürecin Present olaylarını veriyor mu? Sonda hazır, yönetici terminalinde
+çalıştırılmayı bekliyor — `tasks.md` → Sıradaki 5.
+
+### Sayılar
+
+- Rust: 246 test (önceki 230), clippy `-D warnings` temiz, `cargo fmt`
+- Arayüz: 41 test, değişmedi (kare ölçümü henüz arayüze bağlanmadı)
+- Yeni bağımlılık: **sıfır** (mevcut `windows` kasasına üç özellik eklendi)
+
+### Kararlar
+
+- **#27** — Kare ölçümü yükseltilmiş yetki istiyor; sürekli değil, süreli
+- **#14 revize edildi** — ETW yolu araştırıldı ve kısıtıyla açıldı
+
+### Aynı oturum — Faz 5 fizibilitesi, soru 1 (OCR)
+
+ETW'nin yükseltilmiş sondası kullanıcıyı beklerken, ona bağlı olmayan iş
+yapıldı: `ROADMAP.md` → Faz 5'in şart koştuğu iki sorudan birincisi.
+
+`Windows.Media.Ocr` bu makinede **kurulu** ve `en-US` + `tr` paketleri hazır
+— indirilecek model yok, Windows'un kendi bileşeni. Ölçüm için 10 örneklik
+sentetik bir külliyat üretildi (`arac/ocr-sonda/`): kontur, gölge, düşük
+kontrast, küçük punto, süslü serif, harf aralıklı menü, stilize başlık, çok
+satırlı diyalog ve tam 1080p kare.
+
+Sonuç: 6/10 birebir, karakter benzerliği **%98,3**, bölge başına **14-19 ms**
+(tam kare 74 ms). Karar #28.
+
+**Ölçüm aracının kendi iki hatası bulundu ve düzeltildi** — ikisi de OCR'ı
+olduğundan kötü gösteriyordu: doğru metin dosyalarındaki BOM ilk kelimeye
+yapışıyordu, ve kelime karşılaştırması konumsaldı (tek birleşme sonrasını
+topyekûn yanlış sayıyordu). Bir fizibilite denemesinde metriğe önce
+güvenmemek gerekiyor.
+
+**Açık bırakılan**: soru 2 (yerel EN→TR çeviri kalitesi) bir model seçimi
+gerektiriyor ve bu seçim projenin ilk Rust dışı bağımlılığı olma ihtimalini
+taşıyor. Kullanıcıya sorulacak.
+
+### Aynı oturum — Faz 5 fizibilitesi, soru 2 (çeviri)
+
+Model: `onnx-community/opus-mt-tc-big-en-tr`, ONNX Runtime + `ort`, greedy
+çözümleme. Sonda `arac/ceviri-sonda/`.
+
+**Sonuç: koşullu evet** (karar #29). Düz oyun diyaloğunda çıktı gerçekten
+kullanılabilir. int8 kalitesi fp32 ile eşdeğer ve iki kat hızlı — yani
+indirme 1,1 GB değil ~512 MB, cümle başına ortalama 140 ms.
+
+Üç zaaf adlandırıldı: TAMAMI BÜYÜK HARF menü metni (ucuz bir küçültmeyle
+**tamamen** çözülüyor — ölçüldü), oyun sözlüğü ("Longsword" → "Uzunsöz"),
+ve en tehlikelisi sessiz cümle atlama + bozuk girdide akıcı uydurma. Sonuncu,
+`ROADMAP.md`'ye iki bağlayıcı ürün gereği olarak yazıldı.
+
+**İki saat yiyen ders**: sondanın ilk çalıştırmaları akıcı ama anlamsız
+Türkçe üretti ve bu kolayca "model yetersiz" diye okunabilirdi — fizibilite
+o noktada yanlış kapanırdı. İki hata da araçtaydı: deponun `tokenizer.json`'u
+modelin kelime dağarcığıyla **aynı id uzayında değil** (`▁The` → tokenizer'da
+23901, modelde 50392), ve `Precompiled` normalleştiricinin eşlemesi boş.
+Belirti sinsiydi: çökme yok, NaN yok, tensör istatistikleri sağlıklı. fp32
+referansını indirip aynı çıktıyı görmek nicelemeyi şüpheli olmaktan çıkardı
+ve asıl hataya yöneltti.
+
+Bu oturumda üçüncü kez aynı şey oldu: OCR sondasında iki, burada iki ölçüm
+hatası. Kural olarak yazmaya değer — **fizibilitede ilk kötü sonucu ölçülen
+şeye yorma, önce ölçeni doğrula.**
+
+### Kararlar (Faz 5 fizibilitesi)
+
+- **#28** — OCR yeterli, sınırları adlı adınca (sentetik külliyat)
+- **#29** — Çeviri yeterli, üç adlı zaafla; int8 fp32 kadar iyi
+
+### Aynı oturum — ETW doğrulandı, ölçüm mimarisi kuruldu
+
+Yükseltilmiş sonda yönetici terminalinde koştu ve karar #27'nin açık kalan
+sorusunu kapattı: `StartTraceW → 0`, iki sağlayıcı da açıldı, **başka
+süreçlerin** Present olayları geldi (`wallpaper64.exe` 122 sunum / 15 FPS,
+`WindowsTerminal.exe` 24 / 1,9 FPS, `claude.exe` 20 / 10,3 FPS).
+
+Yan bulgu koda döndü: masaüstü uygulamaları yalnızca yeniden çizerken sunum
+yapıyor, yani oyun dışı bir süreçte "FPS" anlamsız. Ürün zaten sağlayıcıları
+çekirdek tarafında PID süzgeciyle açıyor; bulgu o tercihi doğruladı.
+
+### Eklenenler
+
+- `monitor/olcum.rs` — istek/sonuç tipleri, komut satırının iki uçta aynı
+  yerden üretilip çözülmesi, `ShellExecuteEx "runas"` ile yükseltme, geçici
+  özet dosyasının **her durumda** silinmesi
+- `src/bin/muifly-olcum.rs` — yükseltilmiş yardımcı. Tek işi ölçüp yazmak;
+  sistemde hiçbir şey değiştirmiyor, o yüzden deftere yazacak bir şeyi yok
+- `commands::kare_olcum_durumu` — arayüz UAC istemi çıkmadan ÖNCE nedenini
+  gösterebilsin diye; açıklama metni Rust tarafında (karar #17)
+- `commands::kare_olc` — motor kilidini ölçüm boyunca almıyor
+- `arac/olcum-yardimcisi-hazirla.mjs` — sidecar üreteci
+
+### Paketleme boşluğu kapatıldı
+
+`cargo build` yardımcıyı üretiyor ama `tauri build` yalnızca ana ikiliyi
+paketliyor. Fark edilmeseydi özellik yayın sürümünde sessizce ölürdü ve bunu
+ilk kullanıcı görürdü. `bundle.externalBin` + üreteç betiği ile bağlandı.
+`ROADMAP.md` M3'e not düşüldü: **iki ikili de imzalanmalı**, çünkü imzasız
+yardımcı SmartScreen uyarısını tam da UAC anında geri getirir.
+
+### Sayılar
+
+- Rust: 256 test (oturum başında 230), clippy `-D warnings` temiz
+- Arayüz: 41 test, değişmedi — kare ölçümü ekranı henüz yok
+
+### Kalan
+
+Arayüz ekranı ve gerçek bir oyunda doğrulama; `tasks.md` → Sıradaki 5.
+
+### Aynı oturum — kare ölçümü arayüzü: Faz 2 uçtan uca kapandı
+
+`components/KareOlcumu.tsx`. Panelin asıl işi bir sayı göstermek değil,
+**yetkiyi istemeden önce nedenini söylemek** (tasarım ilkesi 5). Açıklama
+metni Rust'tan geliyor (karar #17) ve UAC istemi çıkmadan ekranda duruyor.
+
+İki tasarım kararı kodda:
+
+- **Arayüz PID taşımıyor.** Komut `oyunu_olc(saniye)`; hedefi motorun mod
+  durumu seçiyor. Karar #25'in "webview adres taşımasın" gerekçesinin yanında
+  daha somut bir sebep var: kullanıcı düğmeye bastığı anda **öndeki pencere
+  Muifly'ın kendisi olur**. Öndeki pencereye bakan bir ölçüm her seferinde
+  yanlış süreci ölçerdi.
+- **Yardımcı ikili yoksa panel hiç çizilmiyor.** Çalışmayacak bir düğme
+  göstermek, "neden çalışmıyor" sorusunu kullanıcıya bırakmak olurdu.
+
+Beş arayüz testi eklendi; dördü doğrudan bir ilkenin karşılığı (yetkinin
+nedeni istemden önce, oyun yokken düğme kapalı ve sebebi yazılı, sonuç
+"ölçüldü" diye sunuluyor, özet çıkmazsa sıfır uydurulmuyor).
+
+**Ölü kod temizlendi**: `monitor::fps_destegi_var()` ve `Durum.fps_olcumu`
+kaldırıldı. `false` dönmesini düzeltmek yerine kaldırmak doğruydu — "destek
+var mı" artık evet/hayır bir soru değil; `kare_olcum_durumu` yardımcının
+varlığını, yetkinin gerektiğini ve nedenini birlikte söylüyor. Karar #27
+güncellendi.
+
+### Sayılar
+
+- Rust: 256 test, clippy `-D warnings` temiz, `cargo fmt` temiz, demo bayrağı
+  da yeşil
+- Arayüz: 46 test (oturum başında 41), `tsc` temiz, 268 KB JS (gzip 81 KB)
+
+### Faz 2 durumu
+
+Kod tarafı bitti. Kalanların hepsi elle deneme: gerçek bir oyunda ölçümün
+oyunun kendi sayacıyla karşılaştırılması, UAC akışının bir kez görülmesi ve
+paketlenmiş kurulumda yardımcının ana ikilinin yanına düştüğünün
+doğrulanması. `tasks.md` → Sıradaki 5.

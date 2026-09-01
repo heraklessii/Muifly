@@ -41,6 +41,14 @@ pub enum Error {
     #[error("ağ ölçümü başarısız: {0}")]
     Network(String),
 
+    /// Kare ölçümü yapılamadı.
+    ///
+    /// Metin `monitor::olcum::OlcumHatasi`'ndan geliyor ve zaten kullanıcıya
+    /// gösterilecek bir Türkçe cümle — başına "hata:" gibi bir ek konmuyor,
+    /// çünkü varyantların biri (UAC reddi) hata bile değil.
+    #[error("{0}")]
+    Olcum(String),
+
     #[error("dosya hatası: {0}")]
     Io(#[from] std::io::Error),
 

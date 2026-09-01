@@ -10,6 +10,7 @@ use tauri::{Emitter, State};
 use crate::error::Result;
 use crate::ledger::Kayit;
 use crate::library;
+use crate::monitor::olcum::{self, KareOlcumDurumu};
 use crate::monitor::{Karsilastirma, Ornek, Ozet, Satir};
 use crate::network_boost::{self, DnsSonucu, TcpDurumu, YolSonucu};
 use crate::profile_engine::{self, Profil};
@@ -433,6 +434,105 @@ pub async fn yol_testi(hedef: String) -> Result<YolSonucu> {
     })
     .await
     .map_err(|e| crate::error::Error::Network(e.to_string()))?
+}
+
+// ---------------------------------------------------------------------------
+// Kare ölçümü
+// ---------------------------------------------------------------------------
+
+/// Kare ölçümünün bu makinede yapılıp yapılamayacağı ve neyin gerektiği.
+///
+/// Arayüz bunu ölçümü başlatmadan ÖNCE okuyor: kullanıcı UAC istemiyle
+/// karşılaşmadan önce neden istendiğini görmeli (tasarım ilkesi 5).
+#[tauri::command]
+pub fn kare_olcum_durumu() -> KareOlcumDurumu {
+    KareOlcumDurumu {
+        kullanilabilir: olcum::yardimci_yolu().is_ok(),
+        yetki_gerekiyor: true,
+        en_kisa_saniye: olcum::EN_KISA_SANIYE,
+        en_uzun_saniye: olcum::EN_UZUN_SANIYE,
+        aciklama: "Kare süresi ölçümü Windows'un olay izleme (ETW) altyapısını \
+                   kullanıyor ve bu altyapı yönetici yetkisi istiyor. Muifly'ın \
+                   kendisi yükseltilmiş çalışmıyor: ölçüm, yalnızca okuma yapan \
+                   ayrı ve kısa ömürlü bir yardımcı süreçte yapılıyor. Ölçüm \
+                   boyunca sistemde hiçbir şey değişmiyor."
+            .into(),
+    }
+}
+
+/// Motorun **algıladığı oyunu** belirtilen süre boyunca ölçer.
+///
+/// Arayüz PID taşımıyor, taşıyamaz da: hedefi motor seçiyor. İki sebep var.
+/// Birincisi karar #25'in gerekçesiyle aynı — webview'e "istediğin süreci
+/// ölç" yüzeyi açmamak. İkincisi daha somut: kullanıcı ölçüm düğmesine
+/// bastığı anda **öndeki pencere Muifly'ın kendisi olur**, yani öndeki
+/// pencereye bakan bir ölçüm her seferinde yanlış süreci ölçerdi. Motorun
+/// mod durumu oyunu alt-tab tamponuyla birlikte hatırlıyor.
+///
+/// UAC istemi burada çıkıyor. Kullanıcı reddederse bu bir hata değil:
+/// günlüğe yazılıyor ve hiçbir şey değişmiyor.
+#[tauri::command]
+pub async fn oyunu_olc(
+    motor: MotorState<'_>,
+    saniye: Option<u64>,
+) -> Result<crate::monitor::olcum::OlcumRaporu> {
+    let (pid, surec) = {
+        let m = motor.lock();
+        match (m.mod_.oyun_pid(), m.mod_.surec()) {
+            (Some(p), Some(s)) => (p, s.to_string()),
+            _ => {
+                return Err(crate::error::Error::Olcum(
+                    "ölçüm için algılanmış bir oyun yok — oyunu açıp bir kez öne \
+                     getir, sonra buraya dön"
+                        .into(),
+                ))
+            }
+        }
+    };
+
+    let saniye = saniye
+        .unwrap_or(20)
+        .clamp(olcum::EN_KISA_SANIYE, olcum::EN_UZUN_SANIYE);
+
+    // Ölçüm bloke edici ve saniyeler sürüyor; motor kilidi bu sırada
+    // ALINMIYOR ki arayüzün durum sorgusu donmasın.
+    let sonuc = tauri::async_runtime::spawn_blocking(move || olcum::yukselterek_olc(pid, saniye))
+        .await
+        .map_err(|e| crate::error::Error::Olcum(e.to_string()))?;
+
+    let mut m = motor.lock();
+    match &sonuc {
+        Ok(s) => {
+            let mesaj = match &s.ozet {
+                Some(o) => format!(
+                    "Kare ölçümü ({surec}, {saniye} sn): {} sunum, ortalama {:.1} kare/sn, \
+                     en kötü %1 {:.1} ms. Bu senin makinende bu oturumda ölçülen değer.",
+                    o.kare_sayisi, o.ort_fps, o.p1_kotu_ms
+                ),
+                None => format!(
+                    "Kare ölçümü ({surec}): {} sunum toplandı, özet çıkarmaya yetmedi.",
+                    s.kare_sayisi
+                ),
+            };
+            m.gunluk.bilgi(crate::monitor::Kategori::Olcum, mesaj);
+        }
+        Err(h) => {
+            m.gunluk.bilgi(
+                crate::monitor::Kategori::Olcum,
+                format!("Kare ölçümü ({surec}): {h}"),
+            );
+        }
+    }
+    drop(m);
+
+    sonuc
+        .map(|s| olcum::OlcumRaporu {
+            surec,
+            pid,
+            saniye,
+            sonuc: s,
+        })
+        .map_err(|h| crate::error::Error::Olcum(h.to_string()))
 }
 
 #[tauri::command]

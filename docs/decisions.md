@@ -218,6 +218,11 @@ PresentMon'un kullandığı yaklaşım. Hook'lu alternatif tasarım ilkesi 3'e
 takılıyor. ETW yolu araştırılana kadar boş bırakmak, tahmini bir sayı
 göstermekten dürüst.
 
+> **Revize edildi (karar #27).** ETW yolu araştırıldı ve açıldı, ama ölçülen
+> bir kısıtla: gerçek zamanlı ETW oturumu yükseltilmiş yetki istiyor. Ölçüm
+> bu yüzden sürekli değil, kullanıcının başlattığı süreli bir pencere.
+> "Sahte değer gösterilmiyor" ilkesi aynen duruyor.
+
 ---
 
 ## #15 — Öncesi/sonrası tek bir "iyileşme oranı" üretmiyor
@@ -560,3 +565,208 @@ satır tek başına sistemde bir değişikliğe yol açmıyor.
 değerlendirildi ve şimdilik yapılmadı — programa ilk ağ bağımlılığını, dosya
 imzalama sorusunu ve "indirilen içerik ne yapıyor" sorusunu birlikte
 getiriyordu. Katalog sürümle birlikte gidiyor.
+
+---
+
+## #27 — Kare ölçümü yükseltilmiş yetki istiyor; bu yüzden sürekli değil, süreli
+
+**Ölçülen kısıt**: Gerçek zamanlı bir ETW oturumu açmak (`StartTraceW`)
+yükseltilmemiş bir süreçte **`ERROR_ACCESS_DENIED` (5)** dönüyor. Bu
+varsayılmadı, bu makinede atılacak bir sondayla ölçüldü: yönetici olmayan ve
+`Performance Log Users` üyesi olmayan bir kullanıcı hesabında oturum
+açılamıyor. Oturumu **tüketmek** de (`OpenTraceW` / `ProcessTrace`) aynı
+yetkiyi istiyor, yani "oturumu başkası açsın biz sadece dinleyelim" diye bir
+kaçış yok.
+
+**Neden bu bir tasarım sorusu**: Tasarım ilkesi 5 arka plan izlemesinin
+yükseltilmiş çalışmasını yasaklıyor. Kare ölçümünü sürekli açık tutmak,
+programın tamamının sürekli yönetici koşması demekti — aracın en temel
+duruşundan vazgeçmek.
+
+**Karar**: Kare ölçümü arka plan döngüsünün parçası **değil**. Kullanıcının
+başlattığı, başladığını ve bittiğini gördüğü, kendi kendine kapanan bir
+ölçüm penceresi olarak kurgulanıyor. `monitor::etw::Olcum` bu yüzden kendi
+başına UAC istemiyor ve kendini otomatik başlatmıyor; yetki yoksa
+`Engel::YetkiYok` dönüyor ve ne yapılacağına çağıran karar veriyor.
+
+**Elenen alternatifler**:
+
+- **Programı baştan yönetici çalıştırmak.** İlke 5'in doğrudan ihlali. Ayrıca
+  yükseltilmiş bir süreçte açılan pencereye sürükle-bırak çalışmıyor ve
+  webview yüzeyi yönetici bağlamına taşınıyordu.
+- **Kullanıcıyı `Performance Log Users` grubuna eklemek.** Bir kez admin
+  isteyip sonra hiç istememesi cazip, ama bu kalıcı bir güvenlik ayarı
+  değişikliği: kullanıcıya sistem genelinde izleme yetkisi veriyor ve
+  programın kaldırılmasıyla geri gitmiyor. "Geri alınabilirlik" ilkesinin
+  defterle çözdüğü problemi, defterin kapsayamayacağı bir yere taşırdı.
+- **Kalıcı bir Windows servisi** (PresentMon'un yaptığı). Kurulumda bir kez
+  admin, sonrasında UAC yok. Bedeli sürekli yükseltilmiş bir yüzey, kurulum/
+  kaldırma yükü ve kod imzalama zorunluluğunun büyümesi. "Admin yetkisi
+  minimum" duruşuyla çelişiyor.
+- **Hook'la ölçmek.** Tasarım ilkesi 3. Tartışılmadı bile.
+
+**`fps_destegi_var()` kaldırıldı**, `false` dönmesi düzeltilmedi. Sebep:
+"destek var mı" artık evet/hayır bir soru değil. Yerine `kare_olcum_durumu`
+komutu geçti — yardımcının yanımızda olup olmadığını, yetkinin gerektiğini
+ve **neden gerektiğini** birlikte söylüyor. Arayüzün söylemesi gereken şey
+"ölçemiyoruz" değil, "ölçmek için şunu yapman gerekiyor" ve niçin.
+`Durum.fps_olcumu` alanı da bu yüzden düştü.
+
+### Yükseltilmiş sondanın sonucu (ölçüldü)
+
+Yönetici terminalinde koşturulan sonda üç şeyi birden doğruladı:
+
+```
+[1] StartTraceW -> 0
+[2] EnableTraceEx2(DXGI) -> 0
+[2] EnableTraceEx2(D3D9) -> 0
+
+surec                        present   ort FPS    ort ms  %1 kotu ms
+wallpaper64.exe                  122      15.0     66.65       71.96
+WindowsTerminal.exe               24       1.9    526.01     1348.22
+claude.exe                        20      10.3     96.76      658.28
+```
+
+Yani: oturum yükseltilmişken açılıyor, sağlayıcılar **başka süreçlerin**
+Present olaylarını veriyor, ve aralıklardan anlamlı kare süresi çıkıyor.
+Hook yok, injection yok — tasarım ilkesi 3 korunuyor.
+
+**Yan bulgu, ürünü ilgilendiriyor**: masaüstü uygulamaları yalnızca yeniden
+çizerken sunum yapıyor (`WindowsTerminal.exe` 1,9 "FPS"). Oyun dışı bir
+süreçte "FPS" diye bir sayı göstermek anlamsız olurdu. Ürün kodu bu yüzden
+sağlayıcıları çekirdek tarafında **PID süzgeciyle** açıyor
+(`EVENT_FILTER_TYPE_PID`) ve ölçüm her zaman belirli bir oyuna bağlı.
+
+**Hâlâ ölçülmedi**: gerçek bir oyunda, oyunun kendi FPS sayacıyla
+karşılaştırma. Sonda çalıştırılırken açık bir oyun yoktu. Bu, faz kapısı
+değil doğrulama işi; `tasks.md`'de duruyor.
+
+**Karar #14 revize edildi**: "ETW yolu araştırılana kadar boş bırakmak"
+maddesi kapandı; yol araştırıldı ve yukarıdaki kısıtla açık.
+
+---
+
+## #28 — Faz 5 fizibilitesi, soru 1: OCR yeterli, ama sınırları adlı adınca
+
+**Soru** (`ROADMAP.md` → Faz 5): `Windows.Media.Ocr` hedeflenen oyunların
+yazı tiplerini gerçekten okuyor mu?
+
+**Cevap: evet, koşullu evet.** Ölçüm `arac/ocr-sonda/` ile yapıldı; oyun
+metninin bilinen zorluklarını taklit eden 10 örnekte:
+
+- 6/10 örnek **birebir** okundu
+- karakter düzeyinde ortalama benzerlik **%98,3**
+- kelime düzeyinde 99 kelimede 9 hata
+- süre: bölge boyutundaki bir şeritte **14-19 ms**, tam 1920×1080 karede
+  **74 ms** (ilk çağrı motor ısınmasıyla ~140 ms)
+
+Süre tarafı rahat: karar #22 çeviriyi tuşa basınca ve seçili bir alanda
+yapıyor, sürekli değil. "Çeviri isteği oyunun akışını kesmiyor" kabul
+kriteri bu ölçümlerle karşılanabilir görünüyor.
+
+**Hata sınıfları** — hepsi tanınabilir, ikisi ciddi:
+
+- **Harf aralıklı büyük harf menü metni kelime sınırını kaybediyor**:
+  `QUIT TO DESKTOP` → `QUITTODESKTOP`. Çeviri açısından en zararlı hata,
+  çünkü sessizce yanlış değil, tanınmaz bir girdi üretiyor.
+- **Kalabalık zemin üstünde konturlu metinde noktalama/glif karışması**:
+  `collapsed.` → `collapsed]`, `We need` → `We.peed`.
+- Stilize başlıkta uydurma sondaki tire, tam karede satır başında
+  `I have` → `alhave`.
+
+**Külliyat sentetik ve bu bir sınır**: Bu makinede hiç gerçek oyun ekran
+görüntüsü yoktu. Örnekler kontur, gölge, düşük kontrast, küçük punto, süslü
+font ve kalabalık zemini taklit ediyor; **taklit edemedikleri** oyunun kendi
+ölçekleme boru hattı, sıkıştırma gürültüsü, hareket bulanıklığı ve oyuna
+özel bitmap fontlar. Rakamlar "en iyi durumda şu kadar" diye okunmalı.
+Faz 5 açılırsa gerçek ekran görüntüleriyle tekrar ölçülmeli.
+
+**Ürün gereği çıktı — dil paketi çalışma zamanında kontrol edilecek**:
+`OcrEngine::AvailableRecognizerLanguages` bu makinede `en-US` ve `tr`
+verdi, ama bu Windows'un kurulu dil paketlerine bağlı ve garanti değil.
+Kaynak dilin OCR paketi yoksa özellik sessizce yanlış çalışmamalı; ne
+eksik olduğunu ve nasıl kurulacağını söylemeli.
+
+**Karar #1 ile tutarlılık**: OCR tarafı için ikiliye gömülecek ya da
+indirilecek bir model **yok** — Windows'un kendi bileşeni. Model sorusu
+yalnızca çeviri tarafında duruyor (soru 2, henüz açık).
+
+---
+
+## #29 — Faz 5 fizibilitesi, soru 2: çeviri yeterli, üç adlı zaafla
+
+**Soru** (`ROADMAP.md` → Faz 5): Yerel EN→TR çeviri kalitesi gerçek oyun
+diyaloğunda kabul edilebilir mi?
+
+**Cevap: evet, koşullu evet.** Ölçüm `arac/ceviri-sonda/` ile yapıldı;
+model `onnx-community/opus-mt-tc-big-en-tr`, ONNX Runtime üzerinde greedy
+çözümleme (KV önbelleği yok, yani süreler kötümser).
+
+Düz oyun diyaloğunda çıktı gerçekten kullanılabilir:
+
+- "Press F to pick up the ancient key." → "Eski anahtarı almak için F tuşuna
+  basın."
+- "My father left this blade to me, and now I leave it to you." → "Babam bu
+  bıçağı bana bıraktı ve şimdi ben de sana bırakıyorum."
+- "We have been walking for three days without water. If the well is dry, we
+  turn back at dawn." → "Üç gündür su olmadan yürüyoruz. Eğer kuyu kurursa
+  şafak vakti geri dönüyoruz."
+
+**Niceleme kaliteyi bozmuyor, hızlandırıyor**: int8 çıktısı fp32 ile
+pratikte aynı, süre yarısı (cümle başına 78-270 ms yerine 151-506 ms).
+Yani indirme fp32'nin ~1,1 GB'ı değil, **~512 MB** (encoder 129 MB +
+decoder 377 MB + sözlük/tokenizer ~7 MB). Karar #1 modeli ikiliye gömmüyor,
+isteğe bağlı indiriyor — bu boyut o kararla tutarlı ama küçük değil ve
+mağaza sayfasında açıkça yazılmalı.
+
+### Üç zaaf
+
+**1. TAMAMI BÜYÜK HARF girdi çöküyor — ama ucuz bir ön işleme çözüyor.**
+
+| girdi | çıktı |
+|---|---|
+| `MISSION FAILED - RETURN TO CHECKPOINT` | "MİSYONU KAYBETTİ - TÜKETMEYE DÖNÜŞ" |
+| `Mission failed - return to checkpoint` | "Görev başarısız - kontrol noktasına geri dön" |
+
+Model düz metinle eğitilmiş; büyük harf dağılım dışında kalıyor. Menü ve
+başlık metinleri oyunlarda çoğunlukla büyük harf, yani bu nadir bir durum
+değil — ama çevirmeden önce büyük harf tespiti + küçültme sorunu **tamamen**
+kapatıyor. Faz 5 açılırsa bu bir zorunluluk, seçenek değil.
+
+**2. Oyun sözlüğü yanlış.** "Longsword" → "Uzunsöz", "party" → "Partiniz",
+"blade" → "bıçak", "innkeeper" → "handacı". Genel amaçlı bir çeviri modeli
+oyun terimlerini bilmiyor.
+
+Bu, karar #22'nin tasarımını **çürütmüyor, doğruluyor**: orada zaten model
+ince ayarı değil, oyuna özel terim sözlüğü + çeviri belleği öngörülmüştü.
+Ölçüm o kararın hangi somut boşluğu doldurduğunu gösteriyor.
+
+**3. En tehlikelisi: sessiz atlama ve kendinden emin uydurma.**
+
+- "Keep your guard up. This one bites back." → "Bu seferki ısırıyor."
+  Birinci cümle **tamamen düştü**. Hata mesajı yok, kısalma uyarısı yok.
+- OCR'ın bozduğu girdi (`The bridge collapsed] We.peed another way across
+  the river.`) → "Nehrin diğer tarafına doğru gittik." Akıcı, doğru
+  görünen, anlamı bambaşka bir cümle.
+
+Bu ikisi bozuk görünmüyor, bu yüzden tehlikeli. OCR hatası (karar #28) ile
+birleşince kullanıcı yanlış bir çeviriye güvenebilir. **Ürün gereği**:
+çeviri çıktısı her zaman kaynak metinle birlikte gösterilmeli ve arayüz
+bunun makine çevirisi olduğunu saklamamalı. Kaynağı gizleyen bir overlay
+tasarımı bu ölçümden sonra tercih edilemez.
+
+### Süre
+
+int8'de cümle başına 78-270 ms, ortalama 140 ms — hem de KV önbelleği
+olmadan. Karar #22 çeviriyi tuşa basınca yapıyor, sürekli değil; "çeviri
+isteği oyunun akışını kesmiyor" kabul kriteri karşılanabilir görünüyor.
+
+### Not: ilk kötü sonucu modele yorma
+
+Sondanın ilk çalıştırmaları akıcı ama anlamsız Türkçe üretti ve bu kolayca
+"model yetersiz" diye okunabilirdi. İki hata da araçtaydı: deponun
+`tokenizer.json`'unun id uzayı modelin kelime dağarcığıyla aynı değil
+(`▁The` → tokenizer'da 23901, modelde 50392), ve `Precompiled`
+normalleştiricinin eşlemesi boş. Ayrıntı `arac/ceviri-sonda/README.md` ve
+`src/sozluk.rs`'te. Belirti sinsiydi: çökme yok, NaN yok, tensör
+istatistikleri sağlıklı.

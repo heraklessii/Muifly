@@ -228,7 +228,6 @@ export interface Durum {
   kaliciDegisiklik: number;
   dondurmaDestegi: boolean;
   yonetici: boolean;
-  fpsOlcumu: boolean;
   cpuHibrit: boolean;
   mantiksalCekirdek: number;
   gucPlani: string | null;
@@ -239,6 +238,46 @@ export interface UygulamaSonucu {
   uygulanan: string[];
   atlanan: string[];
   hatalar: string[];
+}
+
+/**
+ * Kare ölçümünün bu makinede yapılabilirliği — `monitor::olcum`.
+ *
+ * `aciklama` backend'den geliyor (karar #17) ve UAC istemi ÇIKMADAN ÖNCE
+ * gösteriliyor: kullanıcı neden yetki istendiğini istemden önce okumalı.
+ */
+export interface KareOlcumDurumu {
+  kullanilabilir: boolean;
+  yetkiGerekiyor: boolean;
+  enKisaSaniye: number;
+  enUzunSaniye: number;
+  aciklama: string;
+}
+
+/** Bir ölçüm penceresinin kare özeti — `monitor::frames::KareOzeti`. */
+export interface KareOzeti {
+  kareSayisi: number;
+  sureS: number;
+  ortFps: number;
+  ortMs: number;
+  /** En kötü %1 karenin ortalama süresi. */
+  p1KotuMs: number;
+  p1KotuFps: number;
+  /** Ardışık kare süreleri arasındaki ortalama mutlak fark. */
+  kareJitterMs: number;
+}
+
+/** Özet `null` olabilir: oturum açıldı ama özet çıkaracak kadar kare gelmedi. */
+export interface KareSonucu {
+  ozet: KareOzeti | null;
+  kareSayisi: number;
+}
+
+export interface OlcumRaporu {
+  surec: string;
+  pid: number;
+  saniye: number;
+  sonuc: KareSonucu;
 }
 
 /**

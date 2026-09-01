@@ -39,6 +39,9 @@
       "nsis": {
         "installMode": "currentUser"
       }
-    }
+    },
+    "externalBin": [
+      "binaries/muifly-olcum"
+    ]
   }
 }

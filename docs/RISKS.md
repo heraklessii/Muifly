@@ -33,6 +33,9 @@
   - PresentMon'un kullandığı ETW (Event Tracing for Windows) tabanlı, hook'suz FPS
     ölçüm yöntemini araştır — bu, process'e dokunmadan sistem event'lerinden veri
     okur, daha güvenli bir alternatif.
+    **Araştırıldı (karar #27)**: yol açık ama bedeli var — gerçek zamanlı ETW
+    oturumu yükseltilmiş yetki istiyor (`ERROR_ACCESS_DENIED`, ölçüldü). Bu
+    yüzden ölçüm sürekli değil, kullanıcının başlattığı süreli bir pencere.
   - Overlay'i oyun içine değil, ayrı bir her-zaman-üstte pencere/widget olarak sun.
   - Bu karar netleşmeden overlay implementasyonuna başlanmamalı.
 - **Kabul edilen sonuç** (karar #22): Ayrı üst pencere seçildi. Bunun bedeli,

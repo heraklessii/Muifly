@@ -46,16 +46,36 @@ ekran `npm run tauri dev` ile açılmış bir pencerede bir kez denenmedi:
 - [ ] `.exe dosyası seç` penceresi süzgeci ve iptali
 - [ ] Kapağı olmayan oyunlarda ikon mu, baş harf mi çıkıyor
 
+### 5. Kare ölçümünün gerçek oyunda doğrulanması
+
+Kod bitti — ETW oturumu, yükseltilmiş yardımcı (`muifly-olcum.exe`),
+komutlar, sidecar paketlemesi ve arayüz ekranı. Kalanların hepsi **elle
+deneme**, kod işi değil:
+
+- [ ] **Gerçek bir oyunda doğrulama.** Sonda çalıştığında açık oyun yoktu.
+      Ölçülen değer oyunun kendi FPS sayacıyla karşılaştırılmalı; tam ekran
+      (exclusive) ve kenarlıksız ayrı ayrı denenmeli.
+- [ ] **UAC akışının elle denenmesi.** Reddetme yolu ("hiçbir şey
+      değişmedi") ve zaman aşımı yolu testlerle korunuyor ama gerçek bir
+      istemle bir kez görülmedi.
+- [ ] **Paketlenmiş kurulumda yardımcının yanına düştüğünün doğrulanması.**
+      `bundle.externalBin` bağlandı ama `tauri build` ile bir kez
+      denenmedi; `olcum::yardimci_yolu` ana ikilinin yanına bakıyor.
+- [ ] **Yardımcının imzalanması** — M3'ün kapsamı büyüdü, `ROADMAP.md`'de
+      not düşüldü.
+
 ## Değerlendirilecek
 
-- **ETW tabanlı FPS ölçümü** (karar #14). Faz 2'nin son büyük parçası.
-  PresentMon'un yaklaşımı araştırılmalı; hook gerektirmiyorsa tasarım ilkesi
-  3'e uygun.
-- **Ekran çevirisi (Faz 5)** — karar #22, `ROADMAP.md` → Faz 5. Kapsam ve
-  sınırlar yazıldı, kod yazılmadı. Başlamadan önce iki fizibilite sorusu
-  cevaplanmalı (OCR gerçek oyun yazı tiplerini okuyor mu, yerel EN→TR kalitesi
-  yeterli mi) ve Faz 1 sahada doğrulanmış olmalı. "Muifly modülü mü ayrı ürün
-  mü" sorusu bilinçli olarak açık bırakıldı.
+- **Ekran çevirisi (Faz 5)** — karar #22, `ROADMAP.md` → Faz 5. **İki
+  fizibilite sorusu da cevaplandı ve ikisi de olumlu** (karar #28 OCR,
+  karar #29 çeviri); faz teknik olarak açılabilir. Açılmadan önce hâlâ Faz 1'in
+  saha doğrulaması ve Faz 3'ün yakalama katmanı gerekiyor. Kod yazılmadı.
+  "Muifly modülü mü ayrı ürün mü" sorusu bilinçli olarak açık bırakıldı;
+  fizibilite bu soruya bir veri ekledi: ~512 MB model indirmesi, bir oyun
+  optimizasyon aracının içinde ayrıca gerekçe isteyecek bir ağırlık.
+- **OCR'ın gerçek ekran görüntüleriyle tekrar ölçülmesi.** Karar #28'in
+  külliyatı sentetik; bu makinede hiç oyun ekran görüntüsü yoktu. Faz 5
+  açılırsa ilk iş bu.
 - **Tarayıcıda arayüz önizlemesi.** Oturum 5'te arayüzü gözle doğrulamak için
   geçici bir sahte backend yazıldı (`window.__TAURI_INTERNALS__.invoke`
   taklidi) ve iş bitince silindi. Kalıcı hale getirilirse `npm run dev` Rust

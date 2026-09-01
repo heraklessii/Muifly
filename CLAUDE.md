@@ -98,9 +98,15 @@ cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
 
 ```bash
 node arac/ucuncu-taraf-uret.mjs               # üçüncü taraf bildirimleri
+node arac/olcum-yardimcisi-hazirla.mjs        # ölçüm yardımcısı — `tauri build` ÖNCESİ
 node arac/vitrin-hazirla.mjs ../Muifly-vitrin  # public depo içeriği (kaynak kod HARİÇ)
 npx tauri icon src-tauri/icons/kaynak.svg     # ikon seti
 ```
+
+> İkinci komut `src-tauri/binaries/` altına sidecar üretiyor ve **çalıştırılmazsa
+> `tauri build` kırılır**. Kare ölçümü ayrı bir yükseltilmiş ikilide yapılıyor
+> (karar #27); o ikili kurulumla birlikte gitmezse özellik yayın sürümünde
+> sessizce ölür. Kod imzalama yapılırken **bu ikili de imzalanmalı**.
 
 > Birinci ve üçüncü komut ÜRETİLEN dosyalar yazıyor, elle düzenlenmez.
 > Bağımlılık eklendiğinde ya da yükseltildiğinde birincisi çalıştırılmalı;
@@ -135,7 +141,10 @@ Muifly/
 │   └── tasks.md             ✅ yapılacaklar
 ├── arac/                    ✅ geliştirme betikleri
 │   ├── ucuncu-taraf-uret.mjs   ✅ ÜRETEÇ — bağımlılık değişince çalıştır
-│   └── vitrin-hazirla.mjs      ✅ public depo içeriği (izin listeli)
+│   ├── vitrin-hazirla.mjs      ✅ public depo içeriği (izin listeli)
+│   ├── etw-sonda/             ✅ ATILACAK fizibilite denemesi (karar #27)
+│   ├── ocr-sonda/             ✅ ATILACAK fizibilite denemesi (karar #28)
+│   └── ceviri-sonda/          ✅ ATILACAK fizibilite denemesi (karar #29)
 ├── site/                    ✅ GitHub Pages tanıtım sayfası
 ├── src/                     ✅ React arayüzü
 │   ├── App.tsx              ✅ kabuk: kenar çubuğu, başlık çubuğu, beş ekran
@@ -160,7 +169,8 @@ Muifly/
         ├── ucuncu_taraf.rs  ✅ gömülü lisans bildirimleri (EULA md. 8)
         ├── error.rs         ✅ tek hata tipi
         ├── winutil.rs       ✅ HANDLE RAII sarmalayıcı
-        ├── monitor/         ✅ log.rs (şeffaflık günlüğü), metrics.rs (jitter/özet)
+        ├── monitor/         ✅ log.rs (günlük), metrics.rs (jitter/özet),
+        │                       frames.rs (kare istatistiği), etw.rs (karar #27)
         ├── system_boost/    ✅ detect, priority, suspend, power, startup
         ├── network_boost/   ✅ dns, latency, tcp, qos
         ├── profile_engine/  ✅ schema, store, aktarım (içe/dışa), mod seçimi, katalog
@@ -171,11 +181,16 @@ Muifly/
 ## Faz Durumu
 
 - **Faz 1** (sistem) — ✅ kod tamam, ⬜ saha testi bekliyor (5-10 oyun)
-- **Faz 2** (network) — ✅ 4/5 (DNS otomatik uygulama bilinçli olarak yok, karar #6)
+- **Faz 2** (network + kare ölçümü) — ✅ kod tamam (DNS otomatik uygulama
+  bilinçli olarak yok, karar #6). Kare ölçümü uçtan uca bağlandı: ETW
+  oturumu, yükseltilmiş yardımcı ikili, arayüz (kararlar #14, #27).
+  ⬜ Gerçek bir oyunda doğrulama bekliyor — `tasks.md` → Sıradaki 5
 - **Faz 3** (spatial upscaling) — ⬜ Faz 1-2 sahada doğrulanmadan başlanmıyor
 - **Faz 4** (ML frame generation) — ⬜ ayrı fizibilite gerekiyor
-- **Faz 5** (ekran çevirisi) — ⬜ kapsamı yazıldı, kodu yok. Faz 3'ün yakalama
-  katmanından önce başlamaz; iki fizibilite sorusu önkoşul (karar #22)
+- **Faz 5** (ekran çevirisi) — ⬜ kodu yok, ama **iki fizibilite sorusu da
+  cevaplandı ve olumlu**: OCR (karar #28) ve çeviri (karar #29). Yine de Faz
+  3'ün yakalama katmanından önce başlamaz. Fizibiliteden iki bağlayıcı ürün
+  gereği çıktı — `ROADMAP.md` → Faz 5
 
 ## Claude Code için notlar
 

@@ -33,6 +33,16 @@ vi.mock('./lib/api', () => ({
   ornekler: vi.fn(async () => []),
   ozet: vi.fn(),
   karsilastirma: vi.fn(async () => null),
+  // Kare ölçümü paneli açılışta bunu okuyor; yardımcı yokmuş gibi davranıp
+  // panel çizilmiyor — App testlerinin konusu değil.
+  kareOlcumDurumu: vi.fn(async () => ({
+    kullanilabilir: false,
+    yetkiGerekiyor: true,
+    enKisaSaniye: 5,
+    enUzunSaniye: 120,
+    aciklama: '',
+  })),
+  oyunuOlc: vi.fn(),
   profiller: vi.fn(async () => []),
   bekleyenGeriAlmalar: vi.fn(async () => []),
   profilKaydet: vi.fn(async () => []),

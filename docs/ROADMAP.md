@@ -80,11 +80,24 @@ erken başlanırsa aynı iş ikinci kez yazılır. Faz 1'in saha doğrulaması d
 
 **Kabul kriterlerinden önce cevaplanacak iki soru** (fizibilite, ayrı ve
 atılacak bir denemeyle):
-- `Windows.Media.Ocr` hedeflenen oyunların yazı tiplerini gerçekten okuyor mu?
-- Yerel EN→TR çeviri kalitesi gerçek oyun diyaloğunda kabul edilebilir mi?
+- ✅ `Windows.Media.Ocr` hedeflenen oyunların yazı tiplerini gerçekten okuyor
+  mu? — **Cevaplandı, koşullu evet** (karar #28). Sentetik külliyatta karakter
+  benzerliği %98,3, bölge başına 14-19 ms. Sınırları ve iki ciddi hata sınıfı
+  kararda yazılı; gerçek ekran görüntüleriyle tekrar ölçülmesi gerekiyor.
+- ✅ Yerel EN→TR çeviri kalitesi gerçek oyun diyaloğunda kabul edilebilir mi?
+  — **Cevaplandı, koşullu evet** (karar #29). Düz diyalogda çıktı
+  kullanılabilir, int8'de cümle başına ortalama 140 ms, indirme ~512 MB. Üç
+  zaaf adlı adınca kararda: büyük harf menü metni (ucuz ön işlemeyle
+  çözülüyor), oyun sözlüğü (karar #22'nin terim sözlüğünü doğruluyor) ve
+  sessiz cümle atlama / bozuk girdide kendinden emin uydurma.
 
-İkisinden biri olumsuzsa faz açılmadan kapanır. Özelliğin kaderi bu iki soruda;
-geri kalan mühendislik bilinen türden.
+**İki soru da olumlu: faz açılabilir.** Açılma önkoşulları değişmedi — Faz 1'in
+saha doğrulaması ve Faz 3'ün yakalama katmanı hâlâ önde.
+
+**Fizibiliteden gelen iki bağlayıcı ürün gereği**:
+- Çeviriden önce TAMAMI BÜYÜK HARF metin küçültülecek (karar #29, zaaf 1).
+- Çeviri **her zaman kaynak metinle birlikte** gösterilecek; kaynağı gizleyen
+  bir overlay tasarımı tercih edilemez (karar #29, zaaf 3).
 
 **Kabul kriterleri**:
 - Çeviri isteği oyunun akışını kesmiyor (duraklamış diyalog kutusu senaryosu)
@@ -115,6 +128,11 @@ ilerler; ikincisi ilkini beklerse yayın tarihi kayar.
 | **M3 — Demo** | Faz 1 + kod imzalama | Demo kapsamı `DISTRIBUTION.md`'de. Hem Steam demo hem GitHub Releases'te imzalı kurulum |
 | **M4 — 1.0 yayını** | Faz 1 + Faz 2 stabil | Steam + itch.io eşzamanlı. Faz 3 yokken de bağımsız bir değer önerisi var |
 | **M5 — Scaling güncellemesi** | Faz 3 | Ücretsiz güncelleme, fiyat artışı yapılabilir (mevcut sahipler etkilenmez) |
+
+**M3'ün kapsamı büyüdü**: kare ölçümü ayrı bir yükseltilmiş yardımcı ikilide
+yapılıyor (karar #27) ve o ikili kurulumla birlikte gidiyor. İmzasız bir
+yardımcı, ana ikili imzalı olsa bile SmartScreen uyarısını geri getirir —
+üstelik tam da UAC istenen anda. **İki ikili de imzalanmalı.**
 
 **Kod imzalama sertifikası M3'ün önkoşuludur.** İmzasız bir kurulum dosyasında
 SmartScreen uyarısı çıkıyor; performans aracı kategorisinde bu uyarı doğrudan

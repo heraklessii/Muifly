@@ -131,6 +131,8 @@ pub fn run() {
             commands::taninan_surecler,
             commands::dns_karsilastir,
             commands::yol_testi,
+            commands::kare_olcum_durumu,
+            commands::oyunu_olc,
             commands::tcp_durumu,
             commands::tcp_uygula,
             commands::qos_ilkeleri,

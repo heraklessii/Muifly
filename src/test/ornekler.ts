@@ -30,7 +30,6 @@ export function durum(kismi: Partial<Durum> = {}): Durum {
     kaliciDegisiklik: 0,
     dondurmaDestegi: true,
     yonetici: false,
-    fpsOlcumu: false,
     cpuHibrit: false,
     mantiksalCekirdek: 8,
     gucPlani: 'Dengeli',

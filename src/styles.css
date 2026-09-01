@@ -2478,3 +2478,19 @@ svg {
     padding-right: var(--space-4);
   }
 }
+
+/* Kare ölçümü: süre girişi panel başlığındaki eylem alanında duruyor.
+   Genişlik dar tutuldu — üç haneli bir saniye değerinden fazlası yok
+   (`monitor::olcum::EN_UZUN_SANIYE`). */
+.olcum-sure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-sm);
+  color: var(--text-2);
+}
+
+.olcum-sure .text-input {
+  width: 4.5rem;
+  text-align: right;
+}

@@ -410,6 +410,7 @@ export default function App() {
               karsilastirma={karsilastirma}
               yapilmayanlar={yapilmayanlar}
               mesgul={mesgul}
+              onIslem={islem}
               onUygula={() =>
                 islem(async () => {
                   const s = await api.ondekineUygula();
