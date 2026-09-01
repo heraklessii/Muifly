@@ -58,13 +58,14 @@ Bunlar eksik özellik değil, bilinçli sınırlar:
 
 - **Steam** — *(mağaza sayfası hazırlanıyor)*
 - **itch.io** — *(hazırlanıyor)*
-- **Demo** — bu deponun [Releases](../../releases) bölümünden
+- **Demo** — *(hazırlanıyor; yayımlandığında bu deponun
+  [Releases](../../releases) bölümünde olacak)*
 
 Sistem gereksinimi: Windows 10 sürüm 1809 veya üzeri, x64.
 
-Demo süresizdir; zaman sınırı, nag ekranı veya kapanma sayacı içermez. Sınır
-özellik seviyesindedir: System Boost'un tamamı ve öncesi/sonrası ölçüm demoda
-vardır, Network Boost ve çoklu profil tam sürümdedir.
+Demo süresiz olacak; zaman sınırı, nag ekranı veya kapanma sayacı içermeyecek. Sınır
+özellik seviyesinde: System Boost'un tamamı ve öncesi/sonrası ölçüm demoda
+olacak, Network Boost ve çoklu profil tam sürümde.
 
 ## Sık sorulanlar
 

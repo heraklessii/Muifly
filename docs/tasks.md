@@ -82,9 +82,13 @@ deneme**, kod işi değil:
   derlemeden çalışan bir arayüz verir; bedeli, komut yüzeyiyle senkron
   tutulması gereken ikinci bir dosya. Arayüzde çok çalışılacaksa değer,
   yoksa borç.
-- **Katalogun büyütülmesi.** Şu an 53 oyun (`src-tauri/katalog.json`).
-  Kapsam arttıkça değeri artıyor ve riski yok: eşleşmeyen satır sessizce
-  atlanıyor. Hazır ayar EKLENMEMELİ — karar #26.
+- **Katalogun büyütülmesi.** Şu an 142 oyun (`src-tauri/katalog.json`).
+  Kapsam arttıkça değeri artıyor ve riski düşük: eşleşmeyen satır sessizce
+  atlanıyor. Hazır ayar EKLENMEMELİ — karar #26. Yeni satır eklerken tek
+  gerçek tehlike **fazla genel bir exe adı** (`game.exe`, `launcher.exe`):
+  alakasız bir süreci oyun diye etiketler. `cok_genel_exe_adi_yok` testi
+  bilinen genel adları tutuyor ama liste kapsamlı değil — eklerken exe adının
+  o oyuna özel olduğundan emin ol.
 - **Xbox / Microsoft Store oyunları.** Paketli uygulamalar `WindowsApps`
   altında ve ACL korumalı; manifest okumak Steam/Epic kadar basit değil.
   Şimdilik çıkış yolu `.exe dosyası seç`.
@@ -97,9 +101,10 @@ deneme**, kod işi değil:
   `upload-artifact@v4` Node 20 hedefliyor; runner onları zorla Node 24'te
   koşturuyor ve her çalışmada uyarı basıyor. Şimdilik çalışıyor; v5
   sürümleri çıktıkça yükseltilecek.
-- **Site'taki "Demoyu indir" düğmesi boş Releases'e gidiyor.** Demo
-  ikilisi M3'ü (kod imzalama) bekliyor. Ya demo yayınlanacak ya düğme
-  "yakında" diline çevrilecek — diğer iki düğme zaten öyle.
+- **Site'taki demo düğmesi "Demo yakında" oldu** (1 Eylül 2026). Demo
+  ikilisi M3'ü (kod imzalama) beklediği için düğme boş bir Releases
+  sayfasına gidiyordu. Demo yayımlandığında düğme ile README ve site'taki
+  gelecek zamanlı cümleler geri çevrilmeli.
 
 ## Ertelendi (gerekçesiyle)
 

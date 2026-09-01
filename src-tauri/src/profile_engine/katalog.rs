@@ -211,6 +211,37 @@ mod testler {
     }
 
     #[test]
+    fn cok_genel_exe_adi_yok() {
+        // Katalog büyüdükçe asıl tehlike yanlış bir satır değil, FAZLA GENEL
+        // bir satır: "game.exe" gibi bir ad alakasız bir süreci oyun diye
+        // etiketler ve kullanıcıya hiç kurmadığı bir oyunun adı gösterilir.
+        // Eşleşme yalnızca dosya adıyla yapıldığı için (bkz. `ara`) tek
+        // koruma bu liste.
+        let cok_genel = [
+            "game.exe",
+            "launcher.exe",
+            "client.exe",
+            "start.exe",
+            "main.exe",
+            "app.exe",
+            "player.exe",
+            "java.exe",
+            "javaw.exe",
+            "shootergame.exe",
+            "unrealgame.exe",
+            "game-win64-shipping.exe",
+            "client-win64-shipping.exe",
+        ];
+        for g in girdiler() {
+            assert!(
+                !cok_genel.contains(&g.exe.as_str()),
+                "'{}' başka programlarla çakışacak kadar genel bir ad",
+                g.exe
+            );
+        }
+    }
+
+    #[test]
     fn katalog_notlarinda_sayisal_vaat_yok() {
         // Tasarım ilkesi 4'ün katalog tarafındaki karşılığı — `tcp.rs`
         // içindeki testin aynısı. Katalog büyüdükçe asıl koruma bu olacak.

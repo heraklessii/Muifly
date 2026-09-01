@@ -164,6 +164,7 @@ yalnızca kodu değil:
 | `lisans metni olmayan bileşeni listeden gizlemiyor` (arayüz) | Liste temiz görünsün diye eksiltilmez (karar #21) |
 | `taslak_hicbir_sureci_dondurmuyor` | Katalog dondurma listesi ya da güç planı önermez (karar #26) |
 | `katalog_notlarinda_sayisal_vaat_yok` | Katalog notlarına sayısal iddia sızmaz (ilke 4) |
+| `cok_genel_exe_adi_yok` | Katalog `game.exe` gibi genel bir adla alakasız süreci oyun sanmaz |
 | `oyun seçmek profil kaydetmiyor, gerekçeleriyle onay soruyor` (arayüz) | Kütüphaneden gelen profil onaysız kaydedilmez (karar #23, #26) |
 | `görsel yalnızca görseli olan oyun için isteniyor` (arayüz) | Izgara açılışta tüm görselleri birden çekmez |
 

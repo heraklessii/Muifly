@@ -739,3 +739,60 @@ Kod tarafı bitti. Kalanların hepsi elle deneme: gerçek bir oyunda ölçümün
 oyunun kendi sayacıyla karşılaştırılması, UAC akışının bir kez görülmesi ve
 paketlenmiş kurulumda yardımcının ana ikilinin yanına düştüğünün
 doğrulanması. `tasks.md` → Sıradaki 5.
+
+## Oturum 9 — 1 Eylül 2026 · Bakım: dürüst indirme düğmesi, katalog büyütme
+
+Oturum başında `tasks.md` → Sıradaki'nin **beş maddesinin de elle deneme**
+olduğu görüldü (gerçek oyunda doğrulama, kod imzalama, demo ikilisinin gözden
+geçirilmesi). Kod işi kalmamıştı; iş "Değerlendirilecek" listesinden alındı.
+
+### Site ve README artık olmayan bir demoyu vaat etmiyor
+
+Ana sayfadaki üç düğmeden ikisi "yakında" derken üçüncüsü ("Demoyu indir")
+**boş bir Releases sayfasına** gidiyordu. Demo ikilisi M3'ü (kod imzalama)
+bekliyor; yani düğme çalışan bir bağlantı değil, karşılanmamış bir vaatti.
+
+Düğme "Demo yakında" oldu. Aynı düzeltme metinlere de uygulandı: hem site
+hem README demoyu şimdiki zamanda anlatıyordu ("Demo süresizdir") — okuyan
+kişi indirilebilir sanır. İkisi de gelecek zamana çevrildi. Alt bilgideki
+"Demo" bağlantısı "Sürümler" oldu: sayfa gerçekten sürümlerin sayfası,
+sadece henüz boş.
+
+Bu bir yazım tercihi değil, ilke 4'ün (sayısal/karşılanmamış vaat yok)
+pazarlama metnindeki karşılığı. Demo yayımlanınca üç yerin de geri
+çevrilmesi gerekiyor; `tasks.md`'ye o notla birlikte yazıldı.
+
+### Katalog 53 → 142 oyun
+
+Kapsam arttıkça kütüphane ekranında "bu exe hangi oyun" sorusunun cevabı
+daha sık biliniyor. Eklenenler mevcut ayrımı koruyor: rekabetçi olanlar
+`rekabetci: true` ile geliyor ve şema o profilde kare üretimini/agresif
+ölçeklemeyi zorla kapatıyor — yani katalog yine hiçbir şey **açmıyor**.
+Hazır öncelik/güç planı/dondurma listesi eklenmedi (karar #26).
+
+**Büyümenin getirdiği yeni risk adlandırıldı ve testle bağlandı.** Katalog
+küçükken tehlike yanlış satırdı ve bedeli düşüktü: eşleşme olmaz, kullanıcı
+adı kendi yazar. Katalog büyüdükçe asıl tehlike değişiyor — **fazla genel bir
+exe adı**. `game.exe`, `launcher.exe`, `client-win64-shipping.exe` gibi bir
+ad yazılsaydı, eşleşme yalnızca dosya adıyla yapıldığı için alakasız bir
+süreç oyun diye etiketlenir ve kullanıcıya hiç kurmadığı bir oyunun adı
+gösterilirdi. Bu, "eşleşme olmaz" durumundan farklı: sessiz değil, yanlış.
+
+`cok_genel_exe_adi_yok` bilinen genel adları tutuyor. Liste kapsamlı
+değil — bir testin yakalayabileceği kadarını yakalıyor, gerisi eklerken
+dikkat. Aynı gerekçeyle bu oturumda birkaç aday **bilerek eklenmedi**:
+`ShooterGame.exe` (ARK ve başka Unreal oyunları), `javaw.exe` (Minecraft
+Java ama aynı zamanda her Java programı), `Client-Win64-Shipping.exe`
+(Wuthering Waves ama Unreal'in varsayılan adı), `M1.exe`, `EoCApp.exe`.
+Bir oyunu tanımamak, yanlış oyunu tanımaktan iyi.
+
+### Sayılar
+
+- Rust: 257 test (oturum başında 256), clippy `-D warnings` temiz,
+  `cargo fmt` temiz, `--features demo` de yeşil
+- Arayüz: 46 test, değişmedi
+
+### Kalan
+
+Faz 2 kod tarafı bitti, Faz 3 faz disiplini gereği kapalı. `tasks.md` →
+Sıradaki'nin tamamı hâlâ elle deneme; ilerleme oradan gelecek.
