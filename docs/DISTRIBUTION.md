@@ -42,7 +42,17 @@ kelimeleri Muifly için **hiçbir yerde kullanılmaz**. Kullanılacak dil:
 
 ### GitHub reposunun kapsamı (net sınır)
 
-Public repo (`Muifly-site` benzeri) **sadece** şunları içerir:
+İki depo var ve adları sabit:
+
+| Depo | Görünürlük | İçerik |
+|---|---|---|
+| `heraklessii/Muifly` | **public** | Vitrin: tanıtım sayfası, README, EULA, Releases (demo), Issues |
+| `heraklessii/Muifly-dev` | **private** | Geliştirme: kaynak, belgeler, araçlar, CI |
+
+Site içindeki bağlantılar (`site/index.html` → Releases, Issues, EULA)
+public depoyu gösteriyor; bu yüzden public deponun adı `Muifly`.
+
+Public repo **sadece** şunları içerir:
 
 - `site/` — GitHub Pages tanıtım sayfası (bu depodaki `site/` klasörü)
 - `README.md` — ürün tanıtımı, mağaza linkleri, demo indirme linki
@@ -56,6 +66,18 @@ belgeler), profil üretim araçları, imzalama anahtarları.
 Bu ayrım fiziksel olarak korunur: geliştirme deposu ayrı ve private'tır.
 Yayın süreci, private depodan public depoya **derlenmiş çıktı ve site
 klasörünü kopyalamaktır**, kaynak kodu değil.
+
+Kopyalama elle yapılmıyor — `arac/vitrin-hazirla.mjs` bir **izin listesine**
+göre kopyalıyor ve hedefte kaynak kod bulursa duruyor:
+
+```bash
+node arac/vitrin-hazirla.mjs ../Muifly-vitrin
+```
+
+Betik git komutu çalıştırmıyor: dosyaları hazırlıyor, `git push` insana
+kalıyor. Kaynak kodun public depoya sızması geri alınamaz bir olay (git
+geçmişi ve GitHub önbelleği kalır), o yüzden iki kapı da kapalı — izin
+listesi ve çıkıştaki yasaklı yol kontrolü.
 
 ## Demo Kapsamı
 

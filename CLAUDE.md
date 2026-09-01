@@ -98,12 +98,15 @@ cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
 
 ```bash
 node arac/ucuncu-taraf-uret.mjs               # üçüncü taraf bildirimleri
+node arac/vitrin-hazirla.mjs ../Muifly-vitrin  # public depo içeriği (kaynak kod HARİÇ)
 npx tauri icon src-tauri/icons/kaynak.svg     # ikon seti
 ```
 
-> İkisi de ÜRETİLEN dosyalar yazıyor, elle düzenlenmez. Bağımlılık eklendiğinde
-> ya da yükseltildiğinde birincisi çalıştırılmalı; unutulursa
-> `ucuncu_taraf::testler` CI'da kırmızıya döner (karar #21).
+> Birinci ve üçüncü komut ÜRETİLEN dosyalar yazıyor, elle düzenlenmez.
+> Bağımlılık eklendiğinde ya da yükseltildiğinde birincisi çalıştırılmalı;
+> unutulursa `ucuncu_taraf::testler` CI'da kırmızıya döner (karar #21).
+> İkincisi yalnızca yayın günü çalışır ve public depoya **kaynak kod
+> kopyalamaz** — izin listeli (`docs/DISTRIBUTION.md`).
 
 > Arayüzü denerken: `cargo run` ile açılan debug binary arayüzü `dist/` yerine
 > `devUrl`den (localhost:1420) yüklüyor. Vite çalışmıyorken pencere boş kalır.
@@ -130,7 +133,9 @@ Muifly/
 │   ├── decisions.md         ✅ ADR tarzı kararlar (kod buraya numarayla atıf yapıyor)
 │   ├── worklog.md           ✅ oturum günlüğü
 │   └── tasks.md             ✅ yapılacaklar
-├── arac/                    ✅ geliştirme betikleri (ucuncu-taraf-uret.mjs)
+├── arac/                    ✅ geliştirme betikleri
+│   ├── ucuncu-taraf-uret.mjs   ✅ ÜRETEÇ — bağımlılık değişince çalıştır
+│   └── vitrin-hazirla.mjs      ✅ public depo içeriği (izin listeli)
 ├── site/                    ✅ GitHub Pages tanıtım sayfası
 ├── src/                     ✅ React arayüzü
 │   ├── App.tsx              ✅ kabuk: kenar çubuğu, başlık çubuğu, beş ekran
