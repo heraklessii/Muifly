@@ -519,3 +519,29 @@ doğrulandı (saydamlık, kanal sırası, satır yönü doğru).
 
 - **#25** — Oyun kütüphanesi yerelden okunuyor, hiçbir API'ye gidilmiyor
 - **#26** — Katalog oyunun adını söylüyor, ayarını değil
+
+### GitHub kurulumu (aynı oturum)
+
+Klasör bu noktaya kadar sürüm kontrolü altında değildi. Kurulan düzen
+`DISTRIBUTION.md`'nin tarif ettiği ayrım:
+
+| Depo | Görünürlük | İçerik | Durum |
+|---|---|---|---|
+| `heraklessii/Muifly-dev` | private | kaynak, belgeler, araçlar | CI yeşil |
+| `heraklessii/Muifly` | public | site, README, EULA | Pages canlı |
+
+Public deponun ağacı push sonrası **uzaktan** doğrulandı: `src/`,
+`src-tauri/`, `docs/`, `arac/` ve `CLAUDE.md` yok. Sekiz dosya var, hepsi
+izin listesinden geliyor.
+
+- `heraklessii.github.io/Muifly` yayında. Pages "GitHub Actions" kaynağıyla
+  açıldı; `pages.yml` ilk denemede kırmızı dönmüştü çünkü Pages henüz
+  açılmamıştı (`configure-pages` "Get Pages site failed" veriyor).
+- Sayfadaki **"Demoyu indir" düğmesi şu an boş bir Releases sayfasına
+  gidiyor** — demo ikilisi M3'ü (kod imzalama) bekliyor. Bilinerek böyle
+  bırakıldı; "Steam'de yakında" ve "itch.io'da yakında" düğmeleri zaten
+  doğru dili kullanıyor.
+- CI (`ci.yml`) Windows runner'da tam koştu: arayüz derlemesi, arayüz
+  testleri, Rust testleri, clippy, biçim — hepsi geçti.
+
+**Açık kalan iki bakım maddesi**, `tasks.md`'de.

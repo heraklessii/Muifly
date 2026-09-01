@@ -72,6 +72,15 @@ ekran `npm run tauri dev` ile açılmış bir pencerede bir kez denenmedi:
   gerçek bir dosya seçme penceresiyle bir kez denenmedi (dosya süzgeci, iptal,
   yazma izni olmayan klasör).
 
+- **GitHub Actions Node 20 uyarısı.** `actions/checkout@v4`,
+  `setup-node@v4`, `configure-pages@v5`, `deploy-pages@v4` ve
+  `upload-artifact@v4` Node 20 hedefliyor; runner onları zorla Node 24'te
+  koşturuyor ve her çalışmada uyarı basıyor. Şimdilik çalışıyor; v5
+  sürümleri çıktıkça yükseltilecek.
+- **Site'taki "Demoyu indir" düğmesi boş Releases'e gidiyor.** Demo
+  ikilisi M3'ü (kod imzalama) bekliyor. Ya demo yayınlanacak ya düğme
+  "yakında" diline çevrilecek — diğer iki düğme zaten öyle.
+
 ## Ertelendi (gerekçesiyle)
 
 - **Servis geciktirme** — karar #12
@@ -114,6 +123,9 @@ ekran `npm run tauri dev` ile açılmış bir pencerede bir kez denenmedi:
       karar #24 (1 Eylül 2026)
 - [x] Günlükte arama + kaç satırın gösterildiğinin yazılması; profil
       listesinde arama; profil satırında "Ne yapacak?" özeti
+      (1 Eylül 2026)
+- [x] GitHub: private geliştirme deposu (`Muifly-dev`) + public vitrin
+      (`Muifly`), izin listeli `arac/vitrin-hazirla.mjs`, Pages canlı
       (1 Eylül 2026)
 - [x] Oyun kütüphanesi: Steam/Epic manifestleri, kapak görselleri, exe
       adayları, gömülü katalog, kütüphane diyaloğu — kararlar #25 ve #26
