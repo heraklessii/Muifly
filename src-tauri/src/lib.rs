@@ -10,6 +10,7 @@
 //!    ├── system_boost     öncelik, affinite, dondurma, güç planı, açılış
 //!    ├── network_boost    DNS ölçümü, gecikme/jitter, TCP, QoS
 //!    ├── monitor          şeffaflık günlüğü + ölçüm
+//!    ├── scaling          ekran yakalama + ölçekleme + sunum (Faz 3)
 //!    ├── ledger           geri alma defteri (veri)
 //!    └── revert           geri alma uygulayıcısı
 //! ```
@@ -17,6 +18,7 @@
 //! Değişmez kural: sistemde bir şey değiştiren her yol, `state::Motor`
 //! üzerinden geçiyor ve deftere + günlüğe yazıyor.
 
+pub mod ceviri;
 pub mod commands;
 pub mod error;
 pub mod ledger;
@@ -26,6 +28,7 @@ pub mod network_boost;
 pub mod profile_engine;
 pub mod registry;
 pub mod revert;
+pub mod scaling;
 pub mod settings;
 pub mod state;
 pub mod surum;
@@ -104,6 +107,10 @@ pub fn run() {
             commands::durum,
             commands::gunluk,
             commands::gunlugu_temizle,
+            commands::gecmis,
+            commands::gecmis_ozeti,
+            commands::gecmisi_temizle,
+            commands::gecmis_disa_aktar,
             commands::ornekler,
             commands::ozet,
             commands::karsilastirma,
@@ -143,6 +150,13 @@ pub fn run() {
             commands::otomatik_baslatma_ayarla,
             commands::otomatik_baslatma_komutu,
             commands::yapilmayanlar,
+            commands::olcekleme_ekranlari,
+            commands::olcekleme_algoritmalari,
+            commands::olcekleme_durumu,
+            commands::olcekleme_baslat,
+            commands::olcekleme_durdur,
+            commands::olcekleme_algoritma,
+            commands::olcekleme_denemesi,
         ])
         .build(tauri::generate_context!())
         .expect("Muifly başlatılamadı")

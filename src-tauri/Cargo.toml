@@ -45,6 +45,13 @@ parking_lot = "0.12"
 # soyutlama katmani yazmak bos emek olurdu (bkz. docs/decisions.md #2).
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
+  # WinRT tarafi: yalnizca OCR dil paketi sorgusu icin (ceviri::ocr_dil).
+  # Karar #28: OCR icin ikiliye gomulen ya da indirilen model YOK, bunlar
+  # Windows'un kendi bilesenlerinin baglanmasi.
+  "Foundation",
+  "Globalization",
+  "Media_Ocr",
+
   "Win32_Foundation",
   "Win32_Security",
   "Win32_System_Threading",
@@ -62,6 +69,16 @@ windows = { version = "0.62", features = [
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Shell",
   "Win32_Graphics_Gdi",
+
+  # Faz 3 (scaling): Desktop Duplication ile yakalama, D3D11 ile olcekleme
+  # ve sunum. Fxc, golgelendiricinin calisma zamaninda derlenmesi icin
+  # (karar #32). Yeni bir bagimlilik degil, ayni crate'in ozellikleri:
+  # Cargo.lock degismiyor, ucuncu-taraf-uret.mjs gerekmiyor.
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Direct3D_Fxc",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
   "Win32_NetworkManagement_IpHelper",
   "Win32_Networking_WinSock",
 ] }

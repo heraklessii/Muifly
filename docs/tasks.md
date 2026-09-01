@@ -64,18 +64,89 @@ deneme**, kod işi değil:
 - [ ] **Yardımcının imzalanması** — M3'ün kapsamı büyüdü, `ROADMAP.md`'de
       not düşüldü.
 
+### 6. Oturum geçmişinin elle denenmesi
+
+Kod ve testler tamam (karar #31); ekran gerçek bir pencerede bir kez
+görülmedi ve asıl sınavı zamanla ortaya çıkanlar:
+
+- [ ] Sekme `npm run tauri dev` ile açılmış bir pencerede bir kez gezildi mi
+- [ ] Bir oyun açılıp kapandığında kayıt gerçekten düşüyor mu, süre doğru mu
+- [ ] Kapasite (200) dolduğunda en eski kayıt düşüyor mu — dosyayı elle
+      şişirerek denenebilir
+- [ ] Dışa aktarma penceresi ve yazılan dosyanın okunabilirliği
+- [ ] Ayar kapatılınca yeni kayıt yazılmıyor, var olanlar duruyor mu
+
+### 7. Ölçeklemenin gerçek bir oyunda denenmesi (Faz 3)
+
+Kod, testler ve arayüz tamam (karar #32). Boru hattı bu makinede bir kez
+uçtan uca koştu (`cargo test gercek_ekranda_bir_tur -- --ignored
+--nocapture`): yakalama açıldı, gölgelendirici derlendi, kareler çizildi.
+Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
+
+- [x] Pencere açılıyor, gölgelendirici derleniyor, kare ölçülüyor
+      (`gercek_ekranda_bir_tur`)
+- [ ] **Görüntü doğru mu.** `npm run tauri dev` → Ölçekleme sekmesi →
+      "Yakalamayı dene" → "Başlat". Düşük çözünürlüklü, **pencereli** bir
+      oyun/uygulama açıkken denenmeli: ölçeklenmiş görüntü ekranı kaplamalı
+      ve kaynağından büyük görünmeli.
+- [ ] **Kendini yakalama gerçekten kesildi mi.** `WDA_EXCLUDEFROMCAPTURE`
+      bu makinede hata vermedi ama etkisi gözle doğrulanmadı: ekranda
+      birbirinin içine giren bir tünel görünüyorsa çalışmıyor demektir.
+- [ ] **Odak ve tıklama geçişi.** Ölçekleme açıkken öndeki pencere hâlâ oyun
+      mu (`WS_EX_NOACTIVATE`), tıklamalar oyuna gidiyor mu
+      (`WS_EX_TRANSPARENT`), Alt+Tab listesinde bizim pencere görünüyor mu
+      (görünmemeli).
+- [ ] **Dört algoritmanın görsel karşılaştırması.** Aynı sahnede sırayla
+      denenip ekran görüntüsü alınmalı. CPU referansıyla aynı çıktıyı
+      verdikleri **varsayım**; sabit testleri satır satır eşitliği
+      kanıtlamıyor (karar #32).
+- [ ] **Münhasır tam ekran yolu.** Oyun exclusive tam ekrandayken hata
+      metni gerçekten çıkıyor mu ve kenarlıksız moda geçince düzeliyor mu.
+- [ ] **Ekran modu değişimi.** Oyun açılırken çözünürlük değişiyor;
+      `ErisimKesildi` sonrası yeniden açma yolu bir kez görülmedi.
+- [ ] **Çok ekranlı kurulum.** İkinci ekran seçilince pencere doğru ekranda
+      mı açılıyor (masaüstü kökeni (0,0) değil).
+- [ ] **Ölçülen gecikmenin makul olup olmadığı.** "Sunum" satırı dikey
+      eşitleme beklemesini içeriyor; sayı ekran yenileme aralığına
+      yakınsa beklenen, çok üstündeyse bakılmalı.
+- [ ] **Oyun kapanınca pencere kapanıyor mu.** `oturumu_kapat` ölçeklemeyi
+      durduruyor; ekranda kalan siyah bir pencere en görünür hata olurdu.
+
 ## Değerlendirilecek
 
-- **Ekran çevirisi (Faz 5)** — karar #22, `ROADMAP.md` → Faz 5. **İki
-  fizibilite sorusu da cevaplandı ve ikisi de olumlu** (karar #28 OCR,
-  karar #29 çeviri); faz teknik olarak açılabilir. Açılmadan önce hâlâ Faz 1'in
-  saha doğrulaması ve Faz 3'ün yakalama katmanı gerekiyor. Kod yazılmadı.
+- **Ölçekleme demo ikilisinde açık kalsın mı?** Şu an açık: `surum.rs`'teki
+  kısıtlar listesine eklenmedi, çünkü demo kapsamı bir ürün kararı ve
+  `DISTRIBUTION.md`'de yazılı. Soru gerçek: ölçekleme, ürünün üç ana
+  modülünden biri ve demoda tam açık olması "eksiksiz ama dar" dengesini
+  değiştirebilir. Karar verilirse hem `surum.rs`'e hem `DISTRIBUTION.md`'ye
+  hem de o kararı koruyan bir teste yazılmalı.
+- **Ölçeklemenin profil dosyasından otomatik açılması denenmedi.**
+  `scaling.enabled: true` olan bir profil uygulandığında ölçekleme
+  başlıyor (`state::profil_uygula` 7. adım) ve bu yol testlerle değil
+  yalnızca kodla duruyor: gerçek bir profille bir kez koşturulmalı.
+- **İkinci GPU'ya boşaltma (iGPU offload).** `MODULES.md`'de "nice to have"
+  olarak duruyor. Yakalama artık ekranı süren adaptörü buluyor; ölçeklemeyi
+  başka bir adaptöre taşımak ayrı bir paylaşımlı doku işi ve ölçülmeden
+  girilmemeli.
+- **Ekran çevirisi (Faz 5)** — karar #22, #30, `ROADMAP.md` → Faz 5.
+  **Yakalamadan bağımsız katman yazıldı** (`src-tauri/src/ceviri/`: `onisleme`,
+  `sozluk`, `bellek`, `ocr_dil`). Kalan her şey — yakalama, overlay,
+  `RegisterHotKey`, model indirme ve çıkarım, arayüz — hâlâ Faz 3'ün
+  yakalama katmanının ve Faz 1'in saha doğrulamasının arkasında.
   "Muifly modülü mü ayrı ürün mü" sorusu bilinçli olarak açık bırakıldı;
   fizibilite bu soruya bir veri ekledi: ~512 MB model indirmesi, bir oyun
   optimizasyon aracının içinde ayrıca gerekçe isteyecek bir ağırlık.
+- **`sozluk`'ün işaretinin modelden sağ çıktığının ÖLÇÜLMESİ.** Terim koruma
+  `[[0]]` biçiminde bir işaret koyuyor ve bu işaretin SentencePiece
+  tokenizer'ından ve greedy çözümlemeden bozulmadan geçeceği bir varsayım,
+  ölçüm değil (karar #30). Model bağlandığında **ilk** sınanacak şey bu.
+  `geri_koy` kaybı zaten raporluyor; ölçüm, kaybın ne sıklıkta olduğunu
+  söyleyecek. Bozulursa yedek yol: çeviri sonrası terim zorlaması.
 - **OCR'ın gerçek ekran görüntüleriyle tekrar ölçülmesi.** Karar #28'in
-  külliyatı sentetik; bu makinede hiç oyun ekran görüntüsü yoktu. Faz 5
-  açılırsa ilk iş bu.
+  külliyatı sentetik; bu makinede hiç oyun ekran görüntüsü yoktu. Faz 5'in
+  yakalama tarafı açılırsa ilk iş bu. `onisleme`'nin sezgisel uyarıları
+  (bitişik kelime, noktalama şüphesi) da o külliyatta yanlış alarm oranıyla
+  birlikte ölçülmeli — eşikler şu an sentetik örneklere göre seçildi.
 - **Tarayıcıda arayüz önizlemesi.** Oturum 5'te arayüzü gözle doğrulamak için
   geçici bir sahte backend yazıldı (`window.__TAURI_INTERNALS__.invoke`
   taklidi) ve iş bitince silindi. Kalıcı hale getirilirse `npm run dev` Rust

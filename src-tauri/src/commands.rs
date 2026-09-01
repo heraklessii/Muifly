@@ -11,7 +11,7 @@ use crate::error::Result;
 use crate::ledger::Kayit;
 use crate::library;
 use crate::monitor::olcum::{self, KareOlcumDurumu};
-use crate::monitor::{Karsilastirma, Ornek, Ozet, Satir};
+use crate::monitor::{GecmisOzeti, Karsilastirma, Ornek, OturumKaydi, Ozet, Satir};
 use crate::network_boost::{self, DnsSonucu, TcpDurumu, YolSonucu};
 use crate::profile_engine::{self, Profil};
 use crate::settings::Ayarlar;
@@ -77,6 +77,46 @@ pub fn gunluk(motor: MotorState<'_>, adet: Option<usize>) -> Vec<Satir> {
 #[tauri::command]
 pub fn gunlugu_temizle(motor: MotorState<'_>) {
     motor.lock().gunluk.temizle();
+}
+
+// ---------------------------------------------------------------------------
+// Oturum geçmişi
+// ---------------------------------------------------------------------------
+
+/// Diskteki oturum kayıtları, yeniden eskiye.
+#[tauri::command]
+pub fn gecmis(motor: MotorState<'_>) -> Vec<OturumKaydi> {
+    motor.lock().gecmis.liste().to_vec()
+}
+
+#[tauri::command]
+pub fn gecmis_ozeti(motor: MotorState<'_>) -> GecmisOzeti {
+    motor.lock().gecmis_ozeti()
+}
+
+/// Geçmişi siler — dosya dahil.
+#[tauri::command]
+pub fn gecmisi_temizle(motor: MotorState<'_>) {
+    motor.lock().gecmisi_temizle();
+}
+
+/// Geçmişi düz metin rapor olarak kullanıcının seçtiği dosyaya yazar.
+///
+/// Yol arayüzden geliyor ve **kullanıcının kendi seçtiği** kaydetme
+/// penceresinden çıkıyor; program kendi başına bir yere dosya bırakmıyor.
+/// Rapor hiçbir yere gönderilmiyor: bu bir dosya yazma işlemi, bir paylaşım
+/// değil.
+#[tauri::command]
+pub fn gecmis_disa_aktar(motor: MotorState<'_>, yol: String) -> Result<()> {
+    let m = motor.lock();
+    let metin = crate::monitor::gecmis::rapor_metni(m.gecmis.liste());
+    drop(m);
+    std::fs::write(&yol, metin)?;
+    motor.lock().gunluk.bilgi(
+        crate::monitor::Kategori::Uygulama,
+        format!("oturum geçmişi dosyaya yazıldı: {yol}"),
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -515,6 +555,12 @@ pub async fn oyunu_olc(
                 ),
             };
             m.gunluk.bilgi(crate::monitor::Kategori::Olcum, mesaj);
+            // Sürmekte olan bir oturum varsa ölçüm onun geçmiş kaydına da
+            // giriyor: "o akşam ne ölçmüştüm" sorusunun cevabı, program
+            // kapandıktan sonra da dursun.
+            if let Some(o) = s.ozet {
+                m.kare_olcumu_kaydet(o);
+            }
         }
         Err(h) => {
             m.gunluk.bilgi(
@@ -703,8 +749,79 @@ pub fn yapilmayanlar() -> Vec<(String, String)> {
             "Kullanım istatistiği, çökme raporu ya da analytics gönderilmiyor. Ağa yalnızca senin başlattığın ölçümler için çıkılıyor.".into(),
         ),
         (
+            "Ölçekleme için oyuna dokunmaz".into(),
+            "Görüntü, Windows'un masaüstü çoğaltma arayüzünden okunuyor. Oyunun belleğine yazılmıyor, çağrıları yönlendirilmiyor, süreci açılmıyor.".into(),
+        ),
+        (
+            "Ölçeklemenin bedelini gizlemez".into(),
+            "Ölçekleme her kareye gecikme ekler. Eklenen süre ölçülüp ekranda gösteriliyor; rekabetçi modda ölçekleme hiç açılmıyor.".into(),
+        ),
+        (
             "Sayısal vaat vermez".into(),
             "'Ping'i şu kadar düşürür' denmiyor. Gösterilen her sayı senin makinende ölçülmüş veri.".into(),
         ),
     ]
+}
+
+// ---------------------------------------------------------------------------
+// Ölçekleme (Faz 3)
+// ---------------------------------------------------------------------------
+
+/// Yakalanabilecek ekranların listesi.
+#[tauri::command]
+pub fn olcekleme_ekranlari() -> Result<Vec<crate::scaling::Ekran>> {
+    crate::scaling::yakalama::ekranlar().map_err(|e| crate::error::Error::Olcum(e.to_string()))
+}
+
+/// Algoritmalar ve açıklamaları.
+#[tauri::command]
+pub fn olcekleme_algoritmalari() -> Vec<crate::scaling::AlgoritmaBilgisi> {
+    crate::scaling::algoritmalar()
+}
+
+#[tauri::command]
+pub fn olcekleme_durumu(motor: MotorState<'_>) -> crate::scaling::OlceklemeDurumu {
+    motor.lock().olcekleme_durumu()
+}
+
+/// Ölçeklemeyi başlatır.
+///
+/// Yakalama açılışı saniyenin altında ama bloke edici; kilit çağrı boyunca
+/// tutuluyor çünkü aynı anda ikinci bir başlatma isteği gelirse iki pencere
+/// açılırdı.
+#[tauri::command]
+pub fn olcekleme_baslat(motor: MotorState<'_>, algoritma: String) -> Result<()> {
+    let algo = crate::scaling::Algoritma::coz(&algoritma).ok_or_else(|| {
+        crate::error::Error::ProfileInvalid(format!("bilinmeyen algoritma: {algoritma}"))
+    })?;
+    motor.lock().olceklemeyi_baslat(algo)
+}
+
+#[tauri::command]
+pub fn olcekleme_durdur(motor: MotorState<'_>) {
+    motor.lock().olceklemeyi_durdur("kullanıcı durdurdu");
+}
+
+/// Çalışırken algoritma değiştirir.
+#[tauri::command]
+pub fn olcekleme_algoritma(motor: MotorState<'_>, algoritma: String) -> Result<()> {
+    let algo = crate::scaling::Algoritma::coz(&algoritma).ok_or_else(|| {
+        crate::error::Error::ProfileInvalid(format!("bilinmeyen algoritma: {algoritma}"))
+    })?;
+    motor.lock().olcekleme_algoritmasi(algo);
+    Ok(())
+}
+
+/// Ölçeklemeyi açmadan yakalamanın çalışıp çalışmadığını dener.
+///
+/// Ayrı bir iş parçacığında: yarım saniyeye kadar sürüyor ve o sırada
+/// arayüzün durum sorgusu bloke olmamalı. Motor kilidi yalnızca ekran
+/// numarasını okumak için alınıyor.
+#[tauri::command]
+pub async fn olcekleme_denemesi(motor: MotorState<'_>) -> Result<crate::scaling::YakalamaDenemesi> {
+    let ekran = motor.lock().ayarlar.olcekleme_ekrani;
+    tauri::async_runtime::spawn_blocking(move || crate::scaling::deneme(ekran))
+        .await
+        .map_err(|e| crate::error::Error::Olcum(e.to_string()))?
+        .map_err(|e| crate::error::Error::Olcum(e.to_string()))
 }

@@ -7,7 +7,17 @@
  */
 
 import { bosProfil, TAM_SURUM } from '../lib/types';
-import type { Durum, Kayit, Kisitlar, Onizleme, Ozet, Profil, Satir } from '../lib/types';
+import type {
+  Durum,
+  GecmisOzeti,
+  Kayit,
+  Kisitlar,
+  Onizleme,
+  OturumKaydi,
+  Ozet,
+  Profil,
+  Satir,
+} from '../lib/types';
 
 export const AYARLAR = {
   otomatikUygula: false,
@@ -19,6 +29,8 @@ export const AYARLAR = {
   modBildirimi: false,
   tepsiyeKucult: true,
   tema: 'dark' as const,
+  gecmisTut: true,
+  olceklemeEkrani: 0,
 };
 
 export function durum(kismi: Partial<Durum> = {}): Durum {
@@ -93,6 +105,36 @@ export function onizleme(kismi: Partial<Onizleme> = {}): Onizleme {
     kimlikCakismasi: false,
     cakisanProfiller: [],
     bosKimlik: 'cs2',
+    ...kismi,
+  };
+}
+
+export function oturumKaydi(kismi: Partial<OturumKaydi> = {}): OturumKaydi {
+  const baslangic = Date.UTC(2026, 8, 1, 20, 0, 0);
+  return {
+    id: baslangic,
+    baslangic,
+    bitis: baslangic + 45 * 60 * 1000,
+    surec: 'cs2.exe',
+    oyunAdi: 'Counter-Strike 2',
+    profilAdi: null,
+    modAdi: 'Rekabetçi Mod',
+    uygulanan: ['cs2.exe önceliği yüksek yapıldı'],
+    geriAlinan: 1,
+    onceki: null,
+    sonraki: null,
+    kare: null,
+    ...kismi,
+  };
+}
+
+export function gecmisOzeti(kismi: Partial<GecmisOzeti> = {}): GecmisOzeti {
+  return {
+    oturumSayisi: 1,
+    toplamSureSn: 2700,
+    toplamDegisiklik: 1,
+    olculenOturum: 0,
+    enCok: { ad: 'Counter-Strike 2', sureSn: 2700, oturum: 1 },
     ...kismi,
   };
 }

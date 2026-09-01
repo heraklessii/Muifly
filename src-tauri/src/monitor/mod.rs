@@ -5,11 +5,13 @@
 
 pub mod etw;
 pub mod frames;
+pub mod gecmis;
 pub mod log;
 pub mod metrics;
 pub mod olcum;
 
 pub use frames::{KareOzeti, KareTamponu};
+pub use gecmis::{Gecmis, GecmisOzeti, OturumKaydi};
 pub use log::{Duzey, Gunluk, Kategori, Satir};
 pub use metrics::{Karsilastirma, Ornek, Ornekleyici, Ozet, Tampon};
 

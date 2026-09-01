@@ -70,6 +70,25 @@ export const IconGunluk = ({ className }: P) => (
   </svg>
 );
 
+/** Geçmiş: saat kadranı + geri dönen ok. */
+export const IconGecmis = ({ className }: P) => (
+  <svg {...ortak} className={className}>
+    <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1" />
+    <path d="M3.2 4.6v4h4" />
+    <path d="M12 7.8V12l3 1.8" />
+  </svg>
+);
+
+/** Ölçekleme: küçük bir kareden büyüyen çerçeve. */
+export const IconOlcekleme = ({ className }: P) => (
+  <svg {...ortak} className={className}>
+    <rect x="3" y="3" width="8" height="8" rx="1.5" />
+    <path d="M13 13h8v8h-8z" opacity="0.45" />
+    <path d="M11.5 11.5 20 20" />
+    <path d="M20 15.5V20h-4.5" />
+  </svg>
+);
+
 export const IconAyarlar = ({ className }: P) => (
   <svg {...ortak} className={className}>
     <circle cx="12" cy="12" r="3.2" />

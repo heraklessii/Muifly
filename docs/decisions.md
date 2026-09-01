@@ -770,3 +770,266 @@ Sondanın ilk çalıştırmaları akıcı ama anlamsız Türkçe üretti ve bu k
 normalleştiricinin eşlemesi boş. Ayrıntı `arac/ceviri-sonda/README.md` ve
 `src/sozluk.rs`'te. Belirti sinsiydi: çökme yok, NaN yok, tensör
 istatistikleri sağlıklı.
+
+---
+
+## #30 — Faz 5 kısmen açıldı: yakalamaya dokunmayan katman önce yazıldı
+
+**Karar**: Faz 5'in **yalnızca ekran yakalamadan bağımsız** parçası yazıldı
+(`src-tauri/src/ceviri/`). Yakalama, overlay, kısayol ve çeviri modelinin
+kendisi hâlâ yazılmadı ve Faz 3'ün arkasında bekliyor.
+
+**Faz disiplini bozulmadı, ayrıştırıldı.** Karar #22 ve `ROADMAP.md` Faz 5'i
+Faz 3'ün arkasına koyarken tek bir somut gerekçe veriyor: *"yakalama katmanı
+Faz 3'te geliyor; daha önce başlanırsa aynı iş ikinci kez yazılır."* Bu
+gerekçe Faz 5'in tamamı için değil, yakalamaya dokunan parçası için geçerli.
+Uygulanan ayrım testi tek soru:
+
+> Faz 3'ün yakalama katmanı geldiğinde bu kod yeniden yazılır mı?
+
+Cevap "hayır" olan dört parça yazıldı:
+
+| Parça | Ne yapıyor | Hangi karara dayanıyor |
+|---|---|---|
+| `onisleme` | BÜYÜK HARF metni cümle düzenine indirir; OCR'ın bozduğundan şüphelenilen yerleri işaretler | #29 zaaf 1 (zorunluluk), #28 hata sınıfları |
+| `sozluk` | Terimleri çeviriden önce korur, sonra karşılığını koyar | #22, #29 zaaf 2 |
+| `bellek` | Oyun başına JSON: birebir eşleşme önbelleği + terim sözlüğü | #22 |
+| `ocr_dil` | Kaynak dilin OCR paketi kurulu mu, değilse nasıl kurulur | #28 ürün gereği |
+
+Cevap "evet" olan hiçbir şey yazılmadı: ekran yakalama, overlay penceresi,
+`RegisterHotKey`, model indirme ve çıkarım.
+
+**Motor'a bilerek bağlanmadı.** Karar #22'nin açık sorusu — "Muifly modülü mü,
+ayrı bir Mui ürünü mü" — Faz 3'ten sonra bakılacak. Modülün `state::Motor`'la
+hiçbir bağı yok, iki cevabın da bedeli düşük kalsın diye. CLAUDE.md'nin
+değişmez kuralı burada tetiklenmiyor: modül sistemde hiçbir şey değiştirmiyor,
+`monitor` gibi yalnızca okuyor ve kendi dosyasına yazıyor — geri alınacak bir
+değişiklik üretmediği için deftere yazacak bir şeyi de yok.
+
+**Arayüz eklenmedi, bilerek.** Çeviri yapamayan bir özelliğin ekranını
+koymak, oturum 9'da site'ta düzeltilen hatanın aynısı olurdu: karşılanmamış
+bir vaat (ilke 4). Ekran, özellik gerçekten çevirmeye başladığında gelir.
+
+**Ölçülmemiş bir varsayım kodda adlı adınca duruyor.** `sozluk` terimleri
+`[[0]]` biçiminde bir işaretle koruyor ve bu işaretin SentencePiece
+tokenizer'ından ve greedy çözümlemeden sağ çıkacağı **varsayım**, ölçüm
+değil — model bağlandığında ilk sınanacak şey bu. Bu yüzden `geri_koy`
+kaybolan işaretleri döndürüyor ve arayüz onları göstermek zorunda: kaybı
+sessizce yutan bir tasarım, karar #29'un üçüncü zaafını (sessiz cümle atlama)
+bir kez daha üretirdi. Yan faydası, kaybolan işaretin o zaaf için ucuz bir
+tespit aracı olması — model bir cümleyi düşürdüyse o cümledeki işaret de
+düşer.
+
+**OCR dil sorgusu ikiliye bir bayt eklemedi.** `windows` crate'ine üç WinRT
+özelliği (`Foundation`, `Globalization`, `Media_Ocr`) eklendi ve `Cargo.lock`
+**değişmedi** — yeni bağımlılık yok, dolayısıyla `ucuncu-taraf-uret.mjs`
+çalıştırmak da gerekmedi. Karar #28'in "OCR tarafında model yok" tespitiyle
+tutarlı.
+
+---
+
+## #31 — Oturum geçmişi diske yazılıyor, varsayılanı açık; ama iddia taşımıyor
+
+**Karar**: Biten her oyun oturumu `oturum-gecmisi.json`'a yazılıyor
+(`monitor::gecmis`), arayüzde kendi sekmesinde gösteriliyor, düz metin rapor
+olarak dışa aktarılabiliyor. Ayar **varsayılan açık**; tek düğmeyle
+silinebiliyor.
+
+**Neden var.** Şeffaflık günlüğü (`monitor::log`) yalnızca bellekte duruyor ve
+programla birlikte ölüyor. Muifly'ın normal kullanımı ise tepside beklemek:
+kullanıcı akşam oynuyor, sabah makineyi yeniden başlatıyor ve "dün gece ne
+yapıldı" sorusunun cevabı hiçbir yerde kalmıyor. Tasarım ilkesi 2 ("ne
+değişti, kullanıcıya gösterilir") program kapandığında kaybolan bir kayıtla
+yarım tutuluyordu.
+
+**Varsayılanın açık olması, "en az müdahale" kuralının istisnası değil,
+uzantısı.** O kural sistemde bir şey değiştiren ayarlar için: geçmiş
+sistemde hiçbir şey değiştirmiyor, kendi veri klasöründeki kendi dosyasına
+yazıyor. Kapalı gelseydi kullanıcı dün geceyi ancak **önceden** açmayı akıl
+etmişse görebilirdi — yani özelliğin işe yaradığı tek an, hep kaçırılan an
+olurdu. `settings::testler::varsayilan_gecmis_acik` bu duruşu tutuyor.
+
+**Telemetri değil, ve bu ayrım koda bakılarak doğrulanabilir.** Dosya
+kullanıcının kendi veri klasöründe; hiçbir yere gönderilmiyor, hiçbir yerden
+okunmuyor. Dışa aktarma bile bir paylaşım değil bir dosya yazma işlemi: yol
+kullanıcının kendi seçtiği kaydetme penceresinden geliyor, program kendi
+başına bir yere dosya bırakmıyor.
+
+**Kayıt ölçüm taşır, iddia taşımaz.** Karar #15 canlı karşılaştırmada tek bir
+"şu kadar iyileşti" oranı üretmeyi reddediyor; geçmişte bu daha da bağlayıcı,
+çünkü oranı okuyacak bağlam (o an oyunda ne olduğu) artık ekranda değil.
+Öncesi ve sonrası iki ayrı özet olarak duruyor, aralarında yön işareti bile
+yok. Rapor metninde de tek bir yorum cümlesi yok ve
+`raporda_iyilesme_iddiasi_yok` testi bunu koruyor — ilke 4'ün
+`network_boost::tcp`'deki karşılığının aynısı.
+
+**Oturum = Muifly'ın sistemde bir şey tuttuğu süre, oyunun açık kalma süresi
+DEĞİL.** İkisi ayrışabiliyor (kullanıcı oyunun ortasında elle geri alabilir)
+ve kayıt hangisini anlattığını bilmek zorunda. Aynı oyun için profil ikinci
+kez uygulanırsa oturum **sıfırlanmıyor**; sıfırlansaydı tek bir oyun akşamı,
+kullanıcının düğmeye kaç kez bastığı kadar parçaya bölünürdü. Başka bir
+sürece geçilirse önceki oturum önce kapanıyor: iki oyunun değişiklikleri tek
+kayda karışmamalı.
+
+**Kapasite 200 ve sınır var.** Yıllarca tepside duran bir araçta sınırsız bir
+dosya sessizce büyür. 200 oturum, günde bir oyun oynayan biri için yarım
+yıldan uzun bir geçmiş ve birkaç yüz kilobayt.
+
+**Bozuk dosyada `Defter::yukle` ile aynı davranış**: hata dönmüyor, dosya
+`.bozuk` uzantısıyla kenara alınıyor, program açılıyor. Bir geçmiş dosyası
+yüzünden programın hiç açılmaması kaybın kendisinden kötü olurdu. (Çeviri
+belleği bilerek bunun tersini yapıyor — gerekçe karar #30'da: orada kaybolan
+şey kullanıcının elle yaptığı düzeltmeler.)
+
+**Ayar kapalıyken liste boş DEĞİL, sebebi yazılı.** Boş bir liste "hiç
+oynamadın" diye okunurdu; ekran kapalı olduğunu söylüyor ve açacak yeri
+gösteriyor.
+
+---
+
+## #32 — Ölçekleme GPU'da yapılıyor; CPU uygulaması yalnızca referans ve test
+
+**Ölçülen kısıt**: 1080p→1440p tek bir kareyi CPU'da ölçeklemek, release
+derlemesinde bu makinede:
+
+| Algoritma | Süre (ms/kare) |
+|---|---|
+| Tam sayı katı | 11.9 |
+| Bilinear | 270.2 |
+| Lanczos (a=3) | 207.9 |
+| xBR | 1293.5 |
+
+60 FPS'in kare bütçesi **16.67 ms**. Aradeğerleme yapan üç yol bütçenin
+12-78 katı. Tam sayı katı ucuz görünüyor ama aynı işi yapmıyor: bu ölçek
+oranında kat 1'e düşüyor, yani ölçekleme değil kopyalama ölçülmüş oluyor —
+ve o bile bütçenin **dörtte üçünü** oyundan çalıyor.
+
+Bu varsayılmadı, ölçüldü ve ölçüm tekrarlanabilir bırakıldı: `cargo test
+--release cpu_yolunun_maliyeti -- --ignored --nocapture`. Sayılar makineye
+bağlı; büyüklük mertebesi değil.
+
+**Karar**: Gerçek zamanlı yol D3D11 piksel gölgelendiricileri
+(`scaling/olcekleme.hlsl`). Yakalanan doku hiç CPU'ya inmiyor: Desktop
+Duplication'ın verdiği doku, yakalamayla **aynı cihaz** üzerinde
+gölgelendiriciye giriyor ve doğrudan sunum zincirine çiziliyor. İki ayrı
+D3D11 cihazı kullanmak her karede paylaşımlı doku aktarımı demekti.
+
+`scaling/algoritma.rs`'teki CPU uygulaması **çalışma zamanında
+kullanılmıyor**. İki işi var: gölgelendiricinin ne üretmesi gerektiğinin
+tanımı olmak, ve Faz 3'ün birinci kabul kriterini (görüntü kalitesinin
+karşılaştırmalı olarak doğrulanması) test edilebilir kılmak. Kalite
+testleri sentetik görüntülerle ölçüyor: yumuşak geçişte Lanczos'un
+bilinear'dan daha az hata yapması (PSNR), sert köşegen kenarda xBR'nin
+bilinear'dan daha az ara ton üretmesi, tam sayı katının hiç yeni renk
+üretmemesi.
+
+**Kabul edilen borç**: aynı matematik iki yerde duruyor ve ikisi
+birbirinden sessizce ayrılabilir. Tutulan yer sabitler:
+`golgelendirici_sabitleri_referansla_ayni` ve
+`golgelendiricide_yuv_agirliklari_referansla_ayni` testleri, HLSL metnindeki
+sayıların Rust sabitleriyle aynı kaldığını doğruluyor. **Satır satır
+eşitliği kanıtlamıyorlar** — kanıtlayacak tek şey gerçek bir ekranda görsel
+karşılaştırma ve o iş `tasks.md`'de elle doğrulama olarak duruyor.
+
+**Bilinen ve bilinçli fark**: xBR'de CPU referansı önce sabit iki kat üretip
+kalanı Lanczos'a bırakıyor; gölgelendirici kuralı doğrudan hedef
+çözünürlükte değerlendiriyor. Tam iki katta ikisi aynı sonucu veriyor.
+Ayrıca buradaki xBR, ailenin kenar yönlü karşılaştırma kuralının bir
+uygulaması; üst kaynakla piksel-birebir aynılık **iddia edilmiyor**.
+
+**Ölçeklemenin bedeli ölçülüyor ve gösteriliyor.** `scaling/gecikme.rs`
+boru hattının kare başına eklediği süreyi tutuyor ve arayüz bunu bir
+kazanç gibi değil bir bedel gibi yazıyor. Özet yapısında "kazanç",
+"iyileşme" ya da "oran" adında bir alan yok ve `ozette_iyilesme_alani_yok`
+testi bunu koruyor — karar #15'in bu modüldeki karşılığı. "Sunum" satırının
+dikey eşitleme beklemesini de içerdiği ekranda yazılı; yazılmasaydı o sayı
+maliyet sanılırdı.
+
+**Rekabetçi modda ölçekleme kısıtlı değil, kapalı.** Rekabetçi mod
+gecikmeyi en aza indirmek için var; ölçekleme her karede ölçülebilir bir
+gecikme ekliyor. İkisini aynı anda açık tutmak, kullanıcının seçtiği şeyin
+tersini yapmak olurdu. Üç yerde kapalı: profil dosyası doğrulaması
+(`schema::dogrula`), profil uygulama yolu (`state`), ve mod geçişi — açıkken
+rekabetçi moda geçilirse ölçekleme duruyor. `scaling::testler::
+rekabetci_modda_kapali` ve `rekabetci_profilde_olcekleme_zorla_kapaniyor`
+bu duruşu tutuyor.
+
+**Deftere yazılmıyor, günlüğe yazılıyor.** `CLAUDE.md`'nin değişmez kuralı
+"sistemde bir şey değiştiren her yol deftere + günlüğe yazar" diyor.
+Ölçekleme deftere yazmıyor çünkü sistemde geri alınacak bir iz bırakmıyor:
+açılan tek şey, sürecin ömrüyle sınırlı bir pencere. Program çökerse pencere
+de gider; registry'de kayıt, diskte dosya, bir sonraki açılışta temizlenecek
+kalıntı yok. Günlüğe ise başlangıcı, algoritması ve **durma sebebi** yazılıyor.
+
+**İlk çalıştırmada bulunan iki kusur** — ikisi de modülü işlevsiz bırakıyordu
+ve gerçek bir ekranda koşturulmadan görülemezdi:
+
+1. **Masaüstünün tamamı ölçekleniyordu.** Desktop Duplication ekranın
+   tamamını veriyor; onu kendi boyutunda yeniden çizmek hiçbir şeyi
+   büyütmüyor. Ölçeklenmesi gereken şey **oyun penceresinin istemci alanı**.
+   Kırpma gölgelendiricide yapılıyor (`kaynak_ofset` / `kaynak_boyut`
+   sabitleri), ayrı bir doku kopyasıyla değil: fazladan bir kopya her karede
+   bir GPU turu daha demekti. `GetClientRect` kullanılıyor, `GetWindowRect`
+   değil — pencereli bir oyunda başlık çubuğunu da büyütmek istemiyoruz.
+   Hedef pencere her karede öndeki pencereden okunuyor ve **kendi
+   süreçlerimiz eleniyor**: kullanıcı "Başlat"a Muifly penceresinden basıyor,
+   elenmese program kendi arayüzünü büyütürdü.
+2. **Sunum penceresi kendini yakalıyordu.** Çoğaltma bileşiklenmiş
+   masaüstünü veriyor ve üstte duran pencere de onun parçası: kendi
+   çıktımızı yakalayıp yeniden çizince ekranda birbirinin içine giren bir
+   tünel oluşuyor. `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` ile
+   pencere yakalamanın dışına alınıyor. Bu çağrı Windows 10 sürüm 2004 ile
+   geldi; daha eskisinde başarısız oluyor ve **hata yutulmuyor**: durum
+   yapısındaki `uyari` alanıyla arayüze çıkıyor ve kullanıcı gördüğü
+   bozukluğun sebebini okuyor. Hatadan ayrı bir alan, çünkü ölçekleme
+   çalışmaya devam ediyor.
+
+Bu iki kusur, birim testlerinin bu modülde neyi **gösteremediğinin** somut
+örneği: algoritmanın matematiği ve sabitlerin tutarlılığı testliydi, ama
+"ekranda doğru şey görünüyor mu" sorusunun cevabı ancak `cargo test
+gercek_ekranda_bir_tur -- --ignored` ile çıktı.
+
+**Elenen alternatifler**:
+
+- **CPU'da ölçekleyip GDI ile çizmek.** Yukarıdaki tablo. Ayrıca her karede
+  bir CPU→GPU→CPU turu, ölçmeye çalıştığımız gecikmenin kendisini büyütürdü.
+- **Katmanlı pencere (`WS_EX_LAYERED`).** DXGI'nin çevirme (flip) modeliyle
+  çalışmıyor; çevirme modeli olmadan sunumda fazladan bir kopya oluşuyor.
+- **Önceden derlenmiş gölgelendirici bayt kodu.** Sürücü ve özellik
+  seviyesine bağlı; `D3DCompile` ile çalışma zamanında derlemek, ikiliye
+  gömülü tek bir HLSL metniyle her makinede aynı kaynağı kullanmayı
+  sağlıyor.
+- **`Windows.Graphics.Capture` ile pencere yakalama.** Doğru cevap
+  olabilirdi: belirli bir pencerenin içeriğini, üstü örtülü olsa bile
+  veriyor. Seçilmedi çünkü WinRT birlikte çalışma katmanı (interop) ayrı bir
+  iş ve Desktop Duplication + yakalamadan gizleme aynı sonucu veriyor.
+  Kalan fark: başka bir pencere oyunun üstüne gelirse o da yakalanıyor.
+  Bilinen sınır; gerçek kullanımda rahatsız ederse `tasks.md`'ye geçmeli.
+- **Oranı bozup ekranı doldurmak.** En/boy oranı her zaman korunuyor.
+  Görüntüyü yatay esnetmek, kullanıcının istemediği ama fark etmesi de zaman
+  alan bir bozulma.
+
+---
+
+## #33 — Faz 3'e, Faz 1 sahada doğrulanmadan başlandı
+
+**Kural neydi**: `CLAUDE.md` ve `ROADMAP.md`, Faz 1'in kabul kriteri olan
+5-10 oyunluk manuel test yapılmadan Faz 3'e geçilmemesini söylüyor. Gerekçe
+sağlamdı: doğrulanmamış bir temelin üstüne kat çıkmak, bir sorun çıktığında
+hangi katta olduğunu bilinemez hale getirir.
+
+**Ne oldu**: Faz 3, proje sahibinin açık isteğiyle, Faz 1 saha testi hâlâ
+yapılmamışken yazıldı. Karar sahibinin; burada kayıt altına alınmasının
+sebebi, ileride "bu neden atlandı" sorusunun cevapsız kalmaması.
+
+**Taşınan risk**: Faz 1 ve Faz 2'nin bekleyen elle doğrulamaları duruyor
+(`tasks.md` → Sıradaki 1-5) ve şimdi Faz 3'ün doğrulaması da onların
+üstüne bindi. Gerçek bir oyunda bir sorun görüldüğünde, önceliklendirmeden
+mi yakalamadan mı sunumdan mı geldiğini ayırmak, her katman ayrı ayrı
+doğrulanmış olsaydı olacağından daha zor.
+
+**Riski azaltan iki şey**: Ölçekleme modülü diğer fazlardan **bağımsız**
+çalışıyor — profil uygulanmadan da açılabiliyor, kendi ekranını, kendi
+ölçümünü ve kendi durma sebebini gösteriyor. İkincisi, sistemde kalıcı iz
+bırakmıyor (karar #32), yani bir hata durumunda temizlenmesi gereken bir
+şey de bırakmıyor.

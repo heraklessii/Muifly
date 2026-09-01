@@ -46,8 +46,19 @@ log event'i olarak bildirilir (şeffaflık ilkesi, bkz. `DESIGN_PRINCIPLES.md`).
 Notlar:
 - `suspend_process_list`: kullanıcı tarafından düzenlenebilir, varsayılan boş liste
   ile başlar (güvenli varsayılan).
+- `scaling.algorithm`: `"tam_sayi"` | `"bilinear"` | `"lanczos"` | `"xbr"` ya da
+  `null` (varsayılan: tam sayı katı — kaynakta olmayan renk üretmeyen tek yol).
+  Tanınmayan bir ad `dogrula` içinde düşürülüyor ve kullanıcıya söyleniyor;
+  sessizce başka bir algoritma çalıştırmak, seçtiğini sandığından başkasını
+  vermek olurdu.
 - `competitive: true` olan profillerde `scaling.frame_generation` zorla `false`
   olmalı — UI seviyesinde de engellenmeli, sadece config'e güvenilmemeli.
+- `competitive: true` olan profillerde `scaling.enabled` de zorla `false`:
+  ölçekleme her karede ölçülebilir bir gecikme ekliyor, rekabetçi mod tam
+  olarak o gecikmeyi en aza indirmek için var (karar #32). Kısıtlı değil,
+  kapalı.
+- `scaling.frame_generation` Faz 4 gelene kadar her koşulda `false`'a
+  çekiliyor ve bu bir düzeltme olarak kullanıcıya gösteriliyor.
 - `shared`: ileride community profil paylaşımı için ayrılmış alan, Faz 1 kapsamında
   kullanılmıyor.
 

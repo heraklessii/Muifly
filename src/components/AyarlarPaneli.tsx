@@ -235,6 +235,17 @@ export function AyarlarPaneli({
             onDegistir={() => onDegistir({ ...ayarlar, tepsiyeKucult: !ayarlar.tepsiyeKucult })}
           />
 
+          {/* Varsayılanı AÇIK olan tek "kayıt tutma" ayarı. Gerekçesi
+              açıklamada yazıyor: günlük programla birlikte kayboluyor ve
+              kapalı bir geçmiş, kullanıcıya ancak önceden açmayı akıl
+              ettiyse bir şey söylerdi (`monitor::gecmis`). */}
+          <Anahtar
+            ad="Oturum geçmişini kaydet"
+            aciklama="Biten oyun oturumları Geçmiş ekranında birikir. Kayıtlar yalnızca bu bilgisayarda durur, hiçbir yere gönderilmez ve Geçmiş ekranından tek düğmeyle silinir. Varsayılan açık: aktivite günlüğü program kapanınca kayboluyor, geçmiş onun kalıcı yarısı."
+            acik={ayarlar.gecmisTut}
+            onDegistir={() => onDegistir({ ...ayarlar, gecmisTut: !ayarlar.gecmisTut })}
+          />
+
           <div className="field row">
             <div>
               <div className="satir__ad">Tema</div>

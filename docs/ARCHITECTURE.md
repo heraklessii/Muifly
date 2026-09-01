@@ -68,6 +68,9 @@ gösterilir. Bu, `DESIGN_PRINCIPLES.md`'deki "injection yok" ilkesiyle uyumludur
 
 Detaylı modül arayüzleri ve fonksiyon imzaları: `MODULES.md`
 
+> Bu bölüm **ön tasarım**. Gerçekleşmiş hali aşağıda: "Ölçekleme boru hattı
+> (Faz 3 — uygulanmış)".
+
 ---
 
 # Uygulanmış Akış (1 Eylül 2026)
@@ -140,3 +143,35 @@ Motor `parking_lot::Mutex` içinde (karar #18). Komutlar kilidi alıp hemen
 bırakıyor; uzun süren ağ işleri (DNS karşılaştırması, yol testi) kilidi hiç
 almıyor ve `spawn_blocking` üzerinde koşuyor — o sırada arayüzün durum
 sorgusu bloke olmuyor.
+
+## Ölçekleme boru hattı (Faz 3 — uygulanmış)
+
+Yukarıdaki "ön tasarım" bölümünün gerçekleşmiş hali. Karar #32.
+
+```text
+Desktop Duplication ──► ID3D11Texture2D ──► piksel gölgelendirici ──► sunum zinciri
+   (IDXGIOutputDuplication)   (kendi kopyamız)   (olcekleme.hlsl)     (üstteki pencere)
+                     hepsi TEK D3D11 cihazında; kare CPU'ya inmiyor
+```
+
+**Kendi iş parçacığında.** D3D11 nesneleri, çoğaltma ve pencere aynı iş
+parçacığında oluşturuluyor, kullanılıyor ve yok ediliyor. Pencere mesaj
+kuyruğu zaten onu yaratan iş parçacığına bağlı; nesneleri paylaşmaya
+çalışmak, kazanılacak bir şey olmadan bir sürü kilit demek olurdu.
+
+Motor'la paylaşım üç küçük parçadan ibaret: durum yapısı (`Mutex`), durdurma
+bayrağı (`AtomicBool`) ve seçili algoritma (`AtomicU8`). Algoritmanın atomik
+olması, çalışırken değiştirilebilmesi için: yeniden başlatmak ekranın bir
+anlığına kararması demek olurdu.
+
+**Açılış hatası çağırana dönüyor.** `Olcekleyici::baslat` iş parçacığını
+başlatıp açılış cevabını bir kanaldan bekliyor (5 sn). Yakalama açılamıyorsa
+(en sık sebep: oyunun münhasır tam ekranda olması) kullanıcı bunu düğmeye
+bastığı anda görüyor, arka planda sessizce çalışmayan bir özellik olarak
+değil.
+
+**Bu yol deftere yazmıyor.** Sistemde kalıcı bir iz yok; geri alınacak şey
+sürecin ömrüyle sınırlı bir pencere. Günlüğe başlangıç, algoritma ve **durma
+sebebi** yazılıyor. Oyun kapandığında (`oturumu_kapat`), rekabetçi moda
+geçildiğinde (`mod_guncelle`) ve "her şeyi geri al" düğmesinde ölçekleme
+duruyor.

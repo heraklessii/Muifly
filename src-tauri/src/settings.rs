@@ -64,6 +64,27 @@ pub struct Ayarlar {
     /// Arayüz teması: `"dark"` | `"light"`.
     #[serde(default = "varsayilan_tema")]
     pub tema: String,
+
+    /// Biten oyun oturumlarını diske kaydet (`monitor::gecmis`).
+    ///
+    /// **Varsayılan açık** — ve bu, "varsayılanların hepsi en az müdahale"
+    /// kuralının istisnası değil, uzantısı. Geçmiş sistemde hiçbir şey
+    /// değiştirmiyor; şeffaflık günlüğünün program kapandığında kaybolan
+    /// yarısını tutuyor (tasarım ilkesi 2). Kapalı gelseydi, kullanıcı dün
+    /// gece ne olduğunu ancak önceden açmayı akıl etmişse görebilirdi.
+    ///
+    /// Dosya hiçbir yere gönderilmiyor ve tek düğmeyle siliniyor.
+    #[serde(default = "varsayilan_true")]
+    pub gecmis_tut: bool,
+
+    /// Ölçeklemenin yakalayıp göstereceği ekran (`scaling::yakalama::Ekran`
+    /// listesindeki sıra).
+    ///
+    /// Makineye özel bir seçim, bu yüzden profilde değil ayarlarda: aynı
+    /// profil başka bir bilgisayarda başka bir ekran dizilimiyle
+    /// karşılaşabilir.
+    #[serde(default)]
+    pub olcekleme_ekrani: usize,
 }
 
 fn varsayilan_gecikme() -> u32 {
@@ -94,6 +115,8 @@ impl Default for Ayarlar {
             mod_bildirimi: false,
             tepsiye_kucult: varsayilan_true(),
             tema: varsayilan_tema(),
+            gecmis_tut: varsayilan_true(),
+            olcekleme_ekrani: 0,
         }
     }
 }
@@ -155,6 +178,19 @@ pub fn defter_yolu() -> PathBuf {
 
 pub fn profil_dizini() -> PathBuf {
     veri_dizini().join("profiller")
+}
+
+pub fn gecmis_yolu() -> PathBuf {
+    veri_dizini().join("oturum-gecmisi.json")
+}
+
+/// Çeviri belleklerinin klasörü — oyun başına bir JSON (karar #22).
+///
+/// Profillerle aynı mantık, ayrı klasör: ikisi de kullanıcının elle açıp
+/// okuyabileceği dosyalar ama farklı şeyler. Bir oyunun çeviri belleğini
+/// silmek, profilini silmek değildir.
+pub fn ceviri_dizini() -> PathBuf {
+    veri_dizini().join("ceviri")
 }
 
 #[cfg(test)]
@@ -247,5 +283,19 @@ mod testler {
         assert!(ayar_yolu().starts_with(&kok));
         assert!(defter_yolu().starts_with(&kok));
         assert!(profil_dizini().starts_with(&kok));
+        assert!(gecmis_yolu().starts_with(&kok));
+        // Çeviri klasörünün henüz çağıranı yok (`ceviri` modülü Motor’a
+        // bağlı değil, karar #30); yol yine de burada, çünkü kural klasörün
+        // kullanılması değil, veri kökünün dışına çıkılmaması.
+        assert!(ceviri_dizini().starts_with(&kok));
+        assert_ne!(ceviri_dizini(), profil_dizini());
+    }
+
+    #[test]
+    fn varsayilan_gecmis_acik() {
+        // Şeffaflık günlüğü program kapanınca kayboluyor; geçmiş onun
+        // kalıcı yarısı (`monitor::gecmis`). Kapalı gelen bir geçmiş,
+        // kullanıcıya ancak önceden açmayı akıl ettiyse bir şey söylerdi.
+        assert!(Ayarlar::default().gecmis_tut);
     }
 }

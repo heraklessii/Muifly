@@ -35,12 +35,32 @@ export function saat(zamanMs: number): string {
   });
 }
 
+/**
+ * Saniyeyi okunur süreye çevirir.
+ *
+ * Saat eşiğinde saniye düşüyor: "2 sa 14 dk 37 sn" okunmuyor ve bir oyun
+ * oturumunun uzunluğunda saniyenin bilgi değeri yok. Rust tarafındaki
+ * `monitor::gecmis::sure_metni` aynı eşikleri kullanıyor — rapor dosyası ile
+ * ekrandaki değer ayrışmasın.
+ */
 export function sure(saniye: number): string {
   if (!Number.isFinite(saniye) || saniye <= 0) return BOS;
   if (saniye < 60) return `${Math.round(saniye)} sn`;
   const dakika = Math.floor(saniye / 60);
+  if (dakika >= 60) return `${Math.floor(dakika / 60)} sa ${dakika % 60} dk`;
   const kalan = Math.round(saniye % 60);
   return kalan === 0 ? `${dakika} dk` : `${dakika} dk ${kalan} sn`;
+}
+
+/** Tarih + saat, yerel biçimde. Geçmiş listesinde kullanılıyor. */
+export function tarihSaat(zamanMs: number): string {
+  return new Date(zamanMs).toLocaleString('tr-TR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 /**

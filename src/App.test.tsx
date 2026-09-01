@@ -53,6 +53,31 @@ vi.mock('./lib/api', () => ({
   hepsiniGeriAl: vi.fn(),
   geriAl: vi.fn(async () => undefined),
   gunlugu_temizle: vi.fn(async () => undefined),
+  // Oturum geçmişi: açılışta okunuyor, bu testlerin konusu değil.
+  gecmis: vi.fn(async () => []),
+  gecmisOzeti: vi.fn(async () => null),
+  gecmisiTemizle: vi.fn(async () => undefined),
+  gecmisDisaAktar: vi.fn(async () => undefined),
+  metinDosyasiHedefi: vi.fn(async () => null),
+  // Ölçekleme: sekme açılınca okunuyor, bu testlerin konusu değil.
+  olceklemeAlgoritmalari: vi.fn(async () => []),
+  olceklemeEkranlari: vi.fn(async () => []),
+  olceklemeDurumu: vi.fn(async () => ({
+    calisiyor: false,
+    algoritma: null,
+    ekran: null,
+    kaynakGenislik: 0,
+    kaynakYukseklik: 0,
+    hedefGenislik: 0,
+    hedefYukseklik: 0,
+    gecikme: null,
+    sonEngel: null,
+    uyari: null,
+  })),
+  olceklemeBaslat: vi.fn(async () => undefined),
+  olceklemeDurdur: vi.fn(async () => undefined),
+  olceklemeAlgoritma: vi.fn(async () => undefined),
+  olceklemeDenemesi: vi.fn(),
   ayarlariYaz: vi.fn(async (a) => a),
   otomatikBaslatmaAyarla: vi.fn(async () => false),
   otomatikBaslatmaKomutu: vi.fn(async () => null),
@@ -128,8 +153,8 @@ describe('App — sürüm kısıtları', () => {
 describe('App — klavye kısayolları', () => {
   /**
    * Numaralar GÖRÜNEN sekmelere göre sayılıyor. Demoda ağ sekmesi hiç
-   * çizilmediği için Ctrl+3 oradaki üçüncü sekmeyi (Günlük) açmalı; sabit bir
-   * eşleme, kullanıcıyı var olmayan bir sekmeye götürürdü.
+   * çizilmediği için Ctrl+3 oradaki üçüncü sekmeyi (Ölçekleme) açmalı; sabit
+   * bir eşleme, kullanıcıyı var olmayan bir sekmeye götürürdü.
    */
   it('Ctrl+3 tam sürümde ağ sekmesini açıyor', async () => {
     const kullanici = userEvent.setup();
@@ -143,7 +168,7 @@ describe('App — klavye kısayolları', () => {
     });
   });
 
-  it('Ctrl+3 demo ikilisinde günlüğü açıyor', async () => {
+  it('Ctrl+3 demo ikilisinde bir sonraki sekmeyi açıyor', async () => {
     sahte.kisitlar.mockResolvedValue(KISITLAR_DEMO);
     const kullanici = userEvent.setup();
     await uygulamayiAc();
@@ -154,9 +179,24 @@ describe('App — klavye kısayolları', () => {
 
     await kullanici.keyboard('{Control>}3{/Control}');
 
+    // Ağ sekmesi yokken üçüncü sıra Ölçekleme'ye kayıyor: numaralar
+    // ekrandaki sıralamayı takip ediyor, sabit bir sekmeyi değil.
     await waitFor(() => {
-      const dugme = screen.getByRole('button', { name: /^günlük$/i });
+      const dugme = screen.getByRole('button', { name: /^ölçekleme$/i });
       expect(dugme.getAttribute('aria-current')).toBe('page');
+    });
+  });
+
+  /**
+   * Geçmiş sekmesi demoda da var: kayıtları göstermek bir ücretli özellik
+   * değil, şeffaflık ilkesinin gereği (`monitor::gecmis`).
+   */
+  it('Geçmiş sekmesi demo ikilisinde de görünüyor', async () => {
+    sahte.kisitlar.mockResolvedValue(KISITLAR_DEMO);
+    await uygulamayiAc();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^geçmiş$/i })).toBeTruthy();
     });
   });
 });

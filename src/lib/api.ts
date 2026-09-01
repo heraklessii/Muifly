@@ -12,17 +12,23 @@ import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialo
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 import type {
+  AlgoritmaAnahtari,
+  AlgoritmaBilgisi,
   Ayarlar,
   DnsSonucu,
   Durum,
+  Ekran,
+  GecmisOzeti,
   Karsilastirma,
   KareOlcumDurumu,
   Kayit,
   KatalogGirdisi,
   Kisitlar,
   Onizleme,
+  OlceklemeDurumu,
   OlcumRaporu,
   Ornek,
+  OturumKaydi,
   Oyun,
   Ozet,
   Profil,
@@ -33,6 +39,7 @@ import type {
   TcpDurumu,
   UcuncuTarafListesi,
   UygulamaSonucu,
+  YakalamaDenemesi,
   YolSonucu,
 } from './types';
 
@@ -48,6 +55,19 @@ export const durum = () => invoke<Durum>('durum');
 
 export const gunluk = (adet?: number) => invoke<Satir[]>('gunluk', { adet: adet ?? null });
 export const gunlugu_temizle = () => invoke<void>('gunlugu_temizle');
+
+/**
+ * Oturum geçmişi. Diskteki kayıtlar, yeniden eskiye.
+ *
+ * Ölçüm penceresi ve kare özeti kaydın içinde geliyor: arayüz geçmiş bir
+ * oturum için ikinci bir sorgu yapmıyor, çünkü o veri artık canlı değil.
+ */
+export const gecmis = () => invoke<OturumKaydi[]>('gecmis');
+export const gecmisOzeti = () => invoke<GecmisOzeti>('gecmis_ozeti');
+/** Geçmişi siler — dosya dahil. Geri alınamaz. */
+export const gecmisiTemizle = () => invoke<void>('gecmisi_temizle');
+/** Geçmişi düz metin rapor olarak verilen dosyaya yazar. */
+export const gecmisDisaAktar = (yol: string) => invoke<void>('gecmis_disa_aktar', { yol });
 
 export const ornekler = () => invoke<Ornek[]>('ornekler');
 export const ozet = () => invoke<Ozet>('ozet');
@@ -127,6 +147,21 @@ export const otomatikBaslatmaKomutu = () => invoke<string | null>('otomatik_basl
 
 export const yapilmayanlar = () => invoke<[string, string][]>('yapilmayanlar');
 
+// --- Ölçekleme (Faz 3) -----------------------------------------------------
+
+export const olceklemeEkranlari = () => invoke<Ekran[]>('olcekleme_ekranlari');
+export const olceklemeAlgoritmalari = () =>
+  invoke<AlgoritmaBilgisi[]>('olcekleme_algoritmalari');
+export const olceklemeDurumu = () => invoke<OlceklemeDurumu>('olcekleme_durumu');
+export const olceklemeBaslat = (algoritma: AlgoritmaAnahtari) =>
+  invoke<void>('olcekleme_baslat', { algoritma });
+export const olceklemeDurdur = () => invoke<void>('olcekleme_durdur');
+/** Çalışırken algoritma değiştirir; ekran kararmıyor. */
+export const olceklemeAlgoritma = (algoritma: AlgoritmaAnahtari) =>
+  invoke<void>('olcekleme_algoritma', { algoritma });
+/** Pencereyi açmadan yakalamanın çalışıp çalışmadığını dener. */
+export const olceklemeDenemesi = () => invoke<YakalamaDenemesi>('olcekleme_denemesi');
+
 /** Üçüncü taraf bileşenler — metinler hariç (EULA madde 8). */
 export const ucuncuTarafListesi = () => invoke<UcuncuTarafListesi>('ucuncu_taraf_listesi');
 /** Tek bir lisans metni. `no`, listedeki `metinNo` alanı. */
@@ -150,6 +185,7 @@ export const adresiAc = (url: string) => openUrl(url);
  */
 const PROFIL_SUZGECI = [{ name: 'Muifly profili', extensions: ['json'] }];
 const EXE_SUZGECI = [{ name: 'Program', extensions: ['exe'] }];
+const METIN_SUZGECI = [{ name: 'Metin dosyası', extensions: ['txt'] }];
 
 export async function profilDosyasiSec(): Promise<string | null> {
   const secilen = await openDialog({ multiple: false, filters: PROFIL_SUZGECI });
@@ -170,6 +206,16 @@ export async function exeDosyasiSec(): Promise<string | null> {
 
 export function profilDosyasiHedefi(onerilenAd: string): Promise<string | null> {
   return saveDialog({ defaultPath: onerilenAd, filters: PROFIL_SUZGECI });
+}
+
+/**
+ * Rapor dosyasının hedefi.
+ *
+ * Program kendi başına bir yere dosya bırakmıyor: yolu her zaman kullanıcı
+ * seçiyor. Kullanıcı iptal ederse `null` dönüyor ve hiçbir şey yazılmıyor.
+ */
+export function metinDosyasiHedefi(onerilenAd: string): Promise<string | null> {
+  return saveDialog({ defaultPath: onerilenAd, filters: METIN_SUZGECI });
 }
 
 /** Olay aboneliği. Dönen fonksiyon aboneliği bırakıyor. */

@@ -38,17 +38,23 @@ gerektirmiyor, mevcut Rust/Windows sistem deneyimiyle doğrudan örtüşüyor.
 - Sayısal vaat içeren hiçbir UI metni yok (bkz. `DESIGN_PRINCIPLES.md`)
 - Jitter/packet loss grafiği öncesi/sonrası karşılaştırma gösterebiliyor
 
-## Faz 3 — Spatial Upscaling (ML değil)
+## Faz 3 — Spatial Upscaling (ML değil) — 🟡 kod tamam, saha doğrulaması bekliyor
 
 **Kapsam**:
-- Desktop Duplication API ile ekran yakalama (pencereli/kenarlıksız mod)
-- Klasik upscaling algoritmaları: Lanczos, xBR, integer scaling
-- Rekabetçi Mod'da bu modülün otomatik kapalı/kısıtlı olması
+- ✅ Desktop Duplication API ile ekran yakalama (pencereli/kenarlıksız mod)
+- ✅ Klasik upscaling algoritmaları: Lanczos, xBR, integer scaling, bilinear
+- ✅ Rekabetçi Mod'da bu modülün otomatik **kapalı** olması
 
 **Kabul kriterleri**:
-- Görüntü kalitesi kabul edilebilir seviyede (görsel karşılaştırma testleri)
-- Gecikme artışı ölçülmüş ve kullanıcıya gösterilebilir durumda
-- Anti-cheat riski taşımıyor (sadece ekran okuma, injection yok)
+- 🟡 Görüntü kalitesi kabul edilebilir seviyede (görsel karşılaştırma testleri)
+  — sentetik görüntülerle ölçülüyor (`scaling::algoritma::testler`); gerçek
+  bir oyun karesiyle **gözle karşılaştırma yapılmadı**
+- ✅ Gecikme artışı ölçülmüş ve kullanıcıya gösterilebilir durumda
+  (`scaling::gecikme`, Ölçekleme sekmesi)
+- ✅ Anti-cheat riski taşımıyor (sadece ekran okuma, injection yok)
+
+**Not**: Bu faza, Faz 1'in saha doğrulaması yapılmadan başlandı — gerekçe ve
+taşınan risk `decisions.md` #33'te. Kalan işler `tasks.md` → Sıradaki 7.
 
 ## Faz 4 — ML Tabanlı Frame Generation (uzun vadeli)
 
@@ -74,9 +80,24 @@ gösteren modül. Sürekli/otomatik çeviri **yok** — gerekçe karar #22'de.
 Kullanıcının onayladığı/düzelttiği çeviri oyun başına bir JSON'da birikiyor,
 sonraki seferde aynen kullanılıyor. Karar #22.
 
-**Bu faz Faz 3'ten önce başlamaz.** Ekran yakalama katmanı orada geliyor; daha
-erken başlanırsa aynı iş ikinci kez yazılır. Faz 1'in saha doğrulaması da hâlâ
-önkoşul (faz disiplini).
+**Yakalamaya dokunan her şey Faz 3'ten önce başlamaz.** Ekran yakalama katmanı
+orada geliyor; daha erken başlanırsa aynı iş ikinci kez yazılır. Faz 1'in saha
+doğrulaması da hâlâ önkoşul (faz disiplini).
+
+**Yakalamadan bağımsız katman yazıldı** (karar #30, `src-tauri/src/ceviri/`).
+Uygulanan ayrım testi: *"Faz 3'in yakalama katmanı geldiğinde bu kod yeniden
+yazılır mı?"* — cevabı hayır olan dört parça yazıldı, evet olan hiçbir şey
+yazılmadı.
+
+- ✅ `onisleme` — BÜYÜK HARF küçültme (aşağıdaki bağlayıcı gereğin ilki) +
+  OCR hata sınıflarının işaretlenmesi
+- ✅ `sozluk` — terim koruma/geri koyma
+- ✅ `bellek` — oyun başına JSON: çeviri belleği + terim sözlüğü
+- ✅ `ocr_dil` — kaynak dilin OCR paketi kontrolü
+- ⬜ yakalama, overlay, `RegisterHotKey`, model indirme ve çıkarım — Faz 3'ün
+  arkasında
+- ⬜ arayüz — özellik gerçekten çevirmeye başlayınca (çalışmayan bir özelliğin
+  ekranı karşılanmamış vaattir, ilke 4)
 
 **Kabul kriterlerinden önce cevaplanacak iki soru** (fizibilite, ayrı ve
 atılacak bir denemeyle):
@@ -100,11 +121,13 @@ saha doğrulaması ve Faz 3'ün yakalama katmanı hâlâ önde.
   bir overlay tasarımı tercih edilemez (karar #29, zaaf 3).
 
 **Kabul kriterleri**:
-- Çeviri isteği oyunun akışını kesmiyor (duraklamış diyalog kutusu senaryosu)
-- Overlay'in exclusive fullscreen'de çalışmadığı kullanıcıya baştan söyleniyor
-- Model ikiliye gömülü değil, isteğe bağlı indiriliyor (karar #1 ile tutarlılık)
-- Çeviri belleği kullanıcı tarafından okunabiliyor, düzenlenebiliyor, silinebiliyor
-- Özellik sıfır geri bildirimle de tam çalışıyor
+- ⬜ Çeviri isteği oyunun akışını kesmiyor (duraklamış diyalog kutusu senaryosu)
+- ⬜ Overlay'in exclusive fullscreen'de çalışmadığı kullanıcıya baştan söyleniyor
+- ⬜ Model ikiliye gömülü değil, isteğe bağlı indiriliyor (karar #1 ile tutarlılık)
+- ✅ Çeviri belleği kullanıcı tarafından okunabiliyor, düzenlenebiliyor,
+  silinebiliyor — oyun başına bir JSON, `ceviri::bellek` (karar #30)
+- ✅ Özellik sıfır geri bildirimle de tam çalışıyor — makine çevirileri de
+  belleğe giriyor, yalnızca kökenleri farklı (`ceviri::bellek::Koken`)
 
 **Açık soru**: Muifly modülü mü, ayrı bir Mui ürünü mü? Karar #22'de iki tarafın
 gerekçeleri duruyor; Faz 3'ün yakalama katmanı gerçekleştikten sonra bakılacak.

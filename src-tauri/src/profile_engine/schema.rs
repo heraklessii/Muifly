@@ -83,11 +83,27 @@ pub struct AgBolumu {
 pub struct OlceklemeBolumu {
     #[serde(default)]
     pub enabled: bool,
-    /// Faz 3'te dolacak. Şimdilik her zaman `null`.
+    /// `"tam_sayi"` | `"bilinear"` | `"lanczos"` | `"xbr"`, ya da `null`
+    /// (varsayılan). Tanınmayan bir ad `dogrula` içinde düşürülüyor.
     #[serde(default)]
     pub algorithm: Option<String>,
+    /// Faz 4. `dogrula` şimdilik her koşulda kapatıyor.
     #[serde(default)]
     pub frame_generation: bool,
+}
+
+impl OlceklemeBolumu {
+    /// Profildeki algoritma; yoksa ya da tanınmıyorsa varsayılan.
+    ///
+    /// Varsayılan tam sayı katı: kaynakta olmayan renk üretmeyen tek yol.
+    /// Profilinde algoritma yazmayan bir kullanıcı, en az müdahale edeni
+    /// almalı.
+    pub fn algoritma(&self) -> crate::scaling::Algoritma {
+        self.algorithm
+            .as_deref()
+            .and_then(crate::scaling::Algoritma::coz)
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -223,18 +239,39 @@ impl Profil {
             .filter(|a| !a.is_empty())
             .collect();
 
-        // Rekabetçi mod kuralı: kare üretimi zorla kapalı.
-        // `docs/PROFILES.md`: "UI seviyesinde de engellenmeli, sadece config'e
-        // güvenilmemeli" — burası config tarafındaki kapı.
-        if self.competitive && self.scaling.frame_generation {
+        // Kare üretimi (Faz 4) henüz yok: profilde açık yazıyorsa
+        // kapatılıyor. Rekabetçi profilde ayrıca Faz 4 geldiğinde de kapalı
+        // kalacak (`docs/PROFILES.md`).
+        if self.scaling.frame_generation {
             self.scaling.frame_generation = false;
-            duzeltmeler.push("rekabetçi profilde kare üretimi kapatıldı (gecikme riski)".into());
+            duzeltmeler.push(if self.competitive {
+                "rekabetçi profilde kare üretimi kapatıldı (gecikme riski)".into()
+            } else {
+                "kare üretimi henüz yok (Faz 4), ayar yok sayıldı".to_string()
+            });
         }
 
-        // Faz 3 gelmeden ölçekleme açılamaz.
-        if self.scaling.enabled || self.scaling.algorithm.is_some() {
-            self.scaling = OlceklemeBolumu::default();
-            duzeltmeler.push("ölçekleme henüz yok (Faz 3), ayar yok sayıldı".into());
+        // Rekabetçi mod kuralı: ölçekleme de kapalı.
+        //
+        // "UI seviyesinde de engellenmeli, sadece config'e güvenilmemeli"
+        // (`docs/PROFILES.md`) — burası config tarafındaki kapı. Ölçekleme
+        // her karede ölçülebilir bir gecikme ekliyor (`scaling::gecikme`) ve
+        // rekabetçi mod tam olarak o gecikmeyi en aza indirmek için var.
+        if self.competitive && self.scaling.enabled {
+            self.scaling.enabled = false;
+            duzeltmeler.push("rekabetçi profilde ölçekleme kapatıldı (gecikme ekliyor)".into());
+        }
+
+        // Algoritma adı tanınıyor mu? Elle düzenlenmiş bir dosyada yazım
+        // hatası olabilir; sessizce varsayılana düşmek, kullanıcının
+        // seçtiğini sandığı şeyden başkasını çalıştırmak olurdu.
+        if let Some(ad) = self.scaling.algorithm.clone() {
+            if crate::scaling::Algoritma::coz(&ad).is_none() {
+                self.scaling.algorithm = None;
+                duzeltmeler.push(format!(
+                    "'{ad}' diye bir ölçekleme algoritması yok, varsayılana dönüldü"
+                ));
+            }
         }
 
         Ok((self, duzeltmeler))
@@ -312,14 +349,54 @@ mod testler {
     }
 
     #[test]
-    fn olcekleme_ayarlari_faz3e_kadar_yok_sayiliyor() {
+    fn olcekleme_ayari_korunuyor() {
+        // Faz 3 geldi: geçerli bir ölçekleme ayarı artık siliniyor değil,
+        // olduğu gibi uygulanıyor.
         let mut p = temel();
         p.scaling.enabled = true;
         p.scaling.algorithm = Some("lanczos".into());
         let (p, duzeltmeler) = p.dogrula().unwrap();
-        assert!(!p.scaling.enabled);
+        assert!(p.scaling.enabled);
+        assert_eq!(p.scaling.algorithm.as_deref(), Some("lanczos"));
+        assert!(duzeltmeler.is_empty(), "{duzeltmeler:?}");
+        assert_eq!(p.scaling.algoritma(), crate::scaling::Algoritma::Lanczos);
+    }
+
+    #[test]
+    fn bilinmeyen_algoritma_varsayilana_dusuyor() {
+        // Elle düzenlenmiş dosyada yazım hatası: sessizce başka bir şey
+        // çalıştırmak yerine söyleniyor.
+        let mut p = temel();
+        p.scaling.enabled = true;
+        p.scaling.algorithm = Some("lanzcos".into());
+        let (p, duzeltmeler) = p.dogrula().unwrap();
         assert_eq!(p.scaling.algorithm, None);
-        assert!(duzeltmeler.iter().any(|d| d.contains("Faz 3")));
+        assert_eq!(p.scaling.algoritma(), crate::scaling::Algoritma::default());
+        assert!(duzeltmeler.iter().any(|d| d.contains("lanzcos")));
+    }
+
+    #[test]
+    fn rekabetci_profilde_olcekleme_zorla_kapaniyor() {
+        // Ürün duruşu: rekabetçi modda ölçekleme kısıtlı değil, kapalı.
+        // Gerekçe `scaling` modül belgesinde; burası dosya tarafındaki kapı.
+        let mut p = temel();
+        p.competitive = true;
+        p.scaling.enabled = true;
+        p.scaling.algorithm = Some("xbr".into());
+        let (p, duzeltmeler) = p.dogrula().unwrap();
+        assert!(!p.scaling.enabled);
+        assert!(duzeltmeler
+            .iter()
+            .any(|d| d.contains("ölçekleme kapatıldı")));
+    }
+
+    #[test]
+    fn kare_uretimi_faz4e_kadar_kapali() {
+        let mut p = temel();
+        p.scaling.frame_generation = true;
+        let (p, duzeltmeler) = p.dogrula().unwrap();
+        assert!(!p.scaling.frame_generation);
+        assert!(duzeltmeler.iter().any(|d| d.contains("Faz 4")));
     }
 
     #[test]

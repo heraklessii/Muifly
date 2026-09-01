@@ -2,7 +2,7 @@
  * Uygulama kabuğu: kenar çubuğu, başlık çubuğu, içerik, durum çubuğu.
  *
  * Durum tek yerde tutuluyor ve panellere prop olarak iniyor. Bir durum
- * kütüphanesi eklenmedi: beş ekran ve tek bir veri kaynağı için ekstra bir
+ * kütüphanesi eklenmedi: altı ekran ve tek bir veri kaynağı için ekstra bir
  * soyutlama katmanı, okumayı kolaylaştırmıyor.
  *
  * Backend'den gelen olaylar (`muifly://durum`, `muifly://gunluk`,
@@ -25,20 +25,24 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AgPaneli } from './components/AgPaneli';
 import { AyarlarPaneli } from './components/AyarlarPaneli';
 import { DurumPaneli } from './components/DurumPaneli';
+import { GecmisPaneli } from './components/GecmisPaneli';
 import { GunlukPaneli } from './components/GunlukPaneli';
 import {
   IconAg,
   IconAy,
   IconAyarlar,
   IconDurum,
+  IconGecmis,
   IconGunes,
   IconGunluk,
   IconMuifly,
+  IconOlcekleme,
   IconProfil,
   IconUyari,
 } from './components/Icons';
 import { IceAktarmaDiyalogu } from './components/IceAktarmaDiyalogu';
 import { KutuphaneDiyalogu } from './components/KutuphaneDiyalogu';
+import { OlceklemePaneli } from './components/OlceklemePaneli';
 import { ProfilDiyalogu } from './components/ProfilDiyalogu';
 import { ProfilPaneli } from './components/ProfilPaneli';
 import { Sparkline } from './components/Sparkline';
@@ -49,18 +53,27 @@ import { modRengi, modSureci, TAM_SURUM } from './lib/types';
 import type {
   Ayarlar,
   Durum,
+  GecmisOzeti,
   Karsilastirma,
   Kayit,
   Kisitlar,
   Onizleme,
   Ornek,
+  OturumKaydi,
   Ozet,
   Profil,
   Satir,
   UygulamaSonucu,
 } from './lib/types';
 
-type Sekme = 'durum' | 'profiller' | 'ag' | 'gunluk' | 'ayarlar';
+type Sekme =
+  | 'durum'
+  | 'profiller'
+  | 'ag'
+  | 'olcekleme'
+  | 'gunluk'
+  | 'gecmis'
+  | 'ayarlar';
 
 /**
  * Sekme tanımı. `alt` başlık çubuğunda okunuyor: her ekran ne olduğunu bir
@@ -91,10 +104,22 @@ const SEKMELER: {
     Ikon: IconAg,
   },
   {
+    id: 'olcekleme',
+    ad: 'Ölçekleme',
+    alt: 'Ekranı okuyup büyütür. Oyuna dokunmaz; eklediği gecikme ölçülüp gösterilir.',
+    Ikon: IconOlcekleme,
+  },
+  {
     id: 'gunluk',
     ad: 'Günlük',
     alt: 'Muifly’ın sistemde yaptığı her şey, zaman damgası ve geri alma ile.',
     Ikon: IconGunluk,
+  },
+  {
+    id: 'gecmis',
+    ad: 'Geçmiş',
+    alt: 'Biten oyun oturumları. Bu bilgisayarda duruyor, hiçbir yere gönderilmiyor.',
+    Ikon: IconGecmis,
   },
   {
     id: 'ayarlar',
@@ -118,6 +143,8 @@ export default function App() {
   const [karsilastirma, setKarsilastirma] = useState<Karsilastirma | null>(null);
   const [profiller, setProfiller] = useState<Profil[]>([]);
   const [bekleyenler, setBekleyenler] = useState<Kayit[]>([]);
+  const [gecmis, setGecmis] = useState<OturumKaydi[]>([]);
+  const [gecmisOzeti, setGecmisOzeti] = useState<GecmisOzeti | null>(null);
   const [yapilmayanlar, setYapilmayanlar] = useState<[string, string][]>([]);
   const [surum, setSurum] = useState('');
   const [kisitlar, setKisitlar] = useState<Kisitlar>(TAM_SURUM);
@@ -130,7 +157,7 @@ export default function App() {
 
   /** Backend'den türetilen her şeyi tazeler. */
   const tazele = useCallback(async () => {
-    const [d, g, o, oz, k, p, b] = await Promise.all([
+    const [d, g, o, oz, k, p, b, gc, gcOz] = await Promise.all([
       api.durum(),
       api.gunluk(200),
       api.ornekler(),
@@ -138,6 +165,8 @@ export default function App() {
       api.karsilastirma(),
       api.profiller(),
       api.bekleyenGeriAlmalar(),
+      api.gecmis(),
+      api.gecmisOzeti(),
     ]);
     setDurum(d);
     setSatirlar(g);
@@ -146,6 +175,8 @@ export default function App() {
     setKarsilastirma(k);
     setProfiller(p);
     setBekleyenler(b);
+    setGecmis(gc);
+    setGecmisOzeti(gcOz);
   }, []);
 
   useEffect(() => {
@@ -193,7 +224,7 @@ export default function App() {
   );
 
   /**
-   * Ctrl+1..5 ile sekme değiştirme.
+   * Ctrl+1..n ile sekme değiştirme.
    *
    * Numaralar GÖRÜNEN sekmelere göre: demoda ağ sekmesi yokken Ctrl+3 Günlük'ü
    * açıyor. Kısayolun ekrandaki sıralamayı takip etmesi, gizli bir sekmeye
@@ -277,6 +308,23 @@ export default function App() {
     },
     [goster],
   );
+
+  /**
+   * Geçmiş raporunu dosyaya yazar.
+   *
+   * Yol kullanıcının kaydetme penceresinden geliyor; iptal ederse hiçbir şey
+   * yazılmıyor. Dosya yalnızca diske yazılıyor, hiçbir yere gönderilmiyor.
+   */
+  const gecmisiDisaAktar = useCallback(async () => {
+    try {
+      const yol = await api.metinDosyasiHedefi('muifly-oturum-gecmisi.txt');
+      if (!yol) return;
+      await api.gecmisDisaAktar(yol);
+      goster('basari', 'Oturum geçmişi dosyaya kaydedildi.');
+    } catch (e) {
+      goster('hata', String(e));
+    }
+  }, [goster]);
 
   const ayarDegistir = useCallback(
     (a: Ayarlar) => {
@@ -469,6 +517,20 @@ export default function App() {
             />
           )}
 
+          {sekme === 'olcekleme' && (
+            <OlceklemePaneli
+              rekabetciMod={durum.ayarlar.rekabetciMod}
+              olceklemeEkrani={durum.ayarlar.olceklemeEkrani}
+              mesgul={mesgul}
+              onIslem={islem}
+              onBildir={goster}
+              onEkranDegistir={(indeks) =>
+                ayarDegistir({ ...durum.ayarlar, olceklemeEkrani: indeks })
+              }
+              onAyarlara={() => setSekme('ayarlar')}
+            />
+          )}
+
           {sekme === 'gunluk' && (
             <GunlukPaneli
               satirlar={satirlar}
@@ -482,6 +544,24 @@ export default function App() {
               onTemizle={() =>
                 islem(async () => {
                   await api.gunlugu_temizle();
+                })
+              }
+            />
+          )}
+
+          {sekme === 'gecmis' && (
+            <GecmisPaneli
+              kayitlar={gecmis}
+              ozet={gecmisOzeti}
+              gecmisTut={durum.ayarlar.gecmisTut}
+              mesgul={mesgul}
+              onDisaAktar={gecmisiDisaAktar}
+              onYenile={() => tazele().catch((e) => goster('hata', String(e)))}
+              onAyarlara={() => setSekme('ayarlar')}
+              onTemizle={() =>
+                islem(async () => {
+                  await api.gecmisiTemizle();
+                  goster('basari', 'Oturum geçmişi silindi.');
                 })
               }
             />

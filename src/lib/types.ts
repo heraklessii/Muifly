@@ -218,6 +218,78 @@ export interface Ayarlar {
   modBildirimi: boolean;
   tepsiyeKucult: boolean;
   tema: 'dark' | 'light';
+  /** Biten oyun oturumlarını diske kaydet. Varsayılan açık. */
+  gecmisTut: boolean;
+  /** Ölçeklemenin yakalayacağı ekran (`olceklemeEkranlari` listesindeki sıra). */
+  olceklemeEkrani: number;
+}
+
+// ---------------------------------------------------------------------------
+// Ölçekleme (Faz 3) — `src-tauri/src/scaling/`
+// ---------------------------------------------------------------------------
+
+/** Algoritma anahtarı. Profil dosyasındaki değerle aynı. */
+export type AlgoritmaAnahtari = 'tam_sayi' | 'bilinear' | 'lanczos' | 'xbr';
+
+/**
+ * Bir algoritmanın adı ve açıklaması.
+ *
+ * Metinler backend'den geliyor, burada kopyalanmıyor: tasarım ilkesi 4'ün
+ * testi (`aciklamalarda_sayisal_vaat_yok`) Rust tarafında ve açıklamanın
+ * ikinci bir kopyası o testin göremediği bir yer olurdu.
+ */
+export interface AlgoritmaBilgisi {
+  anahtar: AlgoritmaAnahtari;
+  ad: string;
+  aciklama: string;
+}
+
+export interface Ekran {
+  indeks: number;
+  ad: string;
+  genislik: number;
+  yukseklik: number;
+  birincil: boolean;
+}
+
+/**
+ * Ölçekleme boru hattının EKLEDİĞİ gecikme.
+ *
+ * Bir kazanç değil bir bedel: alan adlarında "iyileşme" ya da "oran" yok ve
+ * bu, Rust tarafında testle korunuyor.
+ */
+export interface GecikmeOzeti {
+  kareSayisi: number;
+  ortMs: number;
+  p1KotuMs: number;
+  enKotuMs: number;
+  yakalamaOrtMs: number;
+  olceklemeOrtMs: number;
+  /** Dikey eşitleme beklemesi de bunun içinde. */
+  sunumOrtMs: number;
+  bosTur: number;
+}
+
+export interface OlceklemeDurumu {
+  calisiyor: boolean;
+  algoritma: AlgoritmaAnahtari | null;
+  ekran: number | null;
+  kaynakGenislik: number;
+  kaynakYukseklik: number;
+  hedefGenislik: number;
+  hedefYukseklik: number;
+  gecikme: GecikmeOzeti | null;
+  /** Neden durduğu. Kullanıcıya gösterilecek cümle. */
+  sonEngel: string | null;
+  /** Çalışıyor ama bir kısıt var — hatadan ayrı, çünkü ölçekleme sürüyor. */
+  uyari: string | null;
+}
+
+export interface YakalamaDenemesi {
+  genislik: number;
+  yukseklik: number;
+  /** Deneme süresince ekranda değişiklik oldu mu? `false` hata değil. */
+  yeniKare: boolean;
 }
 
 export interface Durum {
@@ -278,6 +350,56 @@ export interface OlcumRaporu {
   pid: number;
   saniye: number;
   sonuc: KareSonucu;
+}
+
+// ---------------------------------------------------------------------------
+// Oturum geçmişi — `src-tauri/src/monitor/gecmis.rs`
+// ---------------------------------------------------------------------------
+
+/**
+ * Biten bir oturumun kaydı.
+ *
+ * `onceki`/`sonraki` iki AYRI özet olarak geliyor ve öyle de gösteriliyor:
+ * tek bir "iyileşme oranı" backend'de de üretilmiyor (karar #15).
+ */
+export interface OturumKaydi {
+  id: number;
+  baslangic: number;
+  bitis: number;
+  surec: string;
+  /** Katalogdan ya da profilden gelen okunur ad. Bilinmiyorsa `null`. */
+  oyunAdi: string | null;
+  profilAdi: string | null;
+  modAdi: string;
+  uygulanan: string[];
+  geriAlinan: number;
+  onceki: Ozet | null;
+  sonraki: Ozet | null;
+  kare: KareOzeti | null;
+}
+
+export interface EnCok {
+  ad: string;
+  sureSn: number;
+  oturum: number;
+}
+
+export interface GecmisOzeti {
+  oturumSayisi: number;
+  toplamSureSn: number;
+  toplamDegisiklik: number;
+  olculenOturum: number;
+  enCok: EnCok | null;
+}
+
+/** Kayıtta gösterilecek ad: oyun adı bilinmiyorsa exe. */
+export function oturumAdi(k: OturumKaydi): string {
+  return k.oyunAdi ?? k.surec;
+}
+
+/** Oturumun süresi, saniye. Negatif olamaz (saat geri alınmış makine). */
+export function oturumSuresiSn(k: OturumKaydi): number {
+  return Math.max(0, Math.round((k.bitis - k.baslangic) / 1000));
 }
 
 /**

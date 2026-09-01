@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::ledger::{Defter, Kapsam, Undo};
-use crate::monitor::{self, Duzey, Gunluk, Kategori, Ornek, Ornekleyici, Ozet, Tampon};
+use crate::monitor::gecmis::OturumKaydi;
+use crate::monitor::{
+    self, Duzey, Gecmis, GecmisOzeti, Gunluk, KareOzeti, Kategori, Ornek, Ornekleyici, Ozet, Tampon,
+};
 use crate::profile_engine::{self, Mod, Profil};
 use crate::settings::{self, Ayarlar};
 use crate::system_boost::{self, GucPlani, Oncelik};
@@ -59,10 +62,27 @@ pub struct ModDegisimi {
     pub geri_alinan: usize,
 }
 
-/// Öncesi/sonrası karşılaştırması için işaretlenmiş an.
-#[derive(Debug, Clone, Copy)]
-struct Isaret {
+/// Sürmekte olan oturum: profil uygulandı, henüz geri alınmadı.
+///
+/// İki işi birden görüyor. Birincisi öncesi/sonrası karşılaştırmasının
+/// işareti: `zaman`dan önceki örnekler "öncesi", sonrakiler "sonrası".
+/// İkincisi geçmiş kaydının taslağı — oturum kapanırken burada biriken
+/// bilgi `monitor::gecmis`e yazılıyor.
+///
+/// İkisi tek yapıda çünkü ikisi de aynı anda başlayıp aynı anda bitiyor;
+/// ayrı tutulsalardı biri sıfırlanıp öteki unutulabilirdi.
+#[derive(Debug, Clone)]
+struct AcikOturum {
     zaman: i64,
+    surec: String,
+    oyun_adi: Option<String>,
+    profil_adi: Option<String>,
+    mod_adi: String,
+    /// Bu oturumda uygulanan değişikliklerin özetleri. Aynı profil ikinci kez
+    /// uygulanırsa üstüne ekleniyor: oturum boyunca yapılanların toplamı.
+    uygulanan: Vec<String>,
+    /// Oturum sırasında yapılan son kare ölçümünün özeti.
+    kare: Option<KareOzeti>,
 }
 
 pub struct Motor {
@@ -71,10 +91,18 @@ pub struct Motor {
     pub ayarlar: Ayarlar,
     pub profiller: Vec<Profil>,
     pub mod_: Mod,
+    /// Biten oturumların diskteki kaydı (`monitor::gecmis`).
+    pub gecmis: Gecmis,
+    /// Ölçekleme iş parçacığının denetleyicisi (`scaling`).
+    ///
+    /// Motor'un içinde duruyor çünkü mod geçişleri onu durdurmak zorunda:
+    /// rekabetçi moda geçildiğinde ya da oyun kapandığında açık kalan bir
+    /// ölçekleme penceresi, kullanıcının istemediği tek şey olurdu.
+    pub olcekleyici: crate::scaling::Olcekleyici,
     ornekler: Tampon,
     ornekleyici: Ornekleyici,
-    /// Optimizasyon uygulandığı an — öncesi/sonrası karşılaştırması için.
-    isaret: Option<Isaret>,
+    /// Optimizasyon uygulandığı an — karşılaştırma ve geçmiş kaydı için.
+    acik_oturum: Option<AcikOturum>,
     /// Oyun önden çıktığında ilk fark edilen an; gecikme sayacı buradan işliyor.
     cikis_baslangici: Option<i64>,
     profil_dizini: PathBuf,
@@ -104,9 +132,11 @@ impl Motor {
             ayarlar,
             profiller,
             mod_: Mod::Bosta,
+            gecmis: Gecmis::yukle(settings::gecmis_yolu()),
+            olcekleyici: crate::scaling::Olcekleyici::yeni(),
             ornekler: Tampon::yeni(monitor::ORNEK_KAPASITESI),
             ornekleyici: Ornekleyici::yeni(),
-            isaret: None,
+            acik_oturum: None,
             cikis_baslangici: None,
             profil_dizini,
         }
@@ -144,11 +174,9 @@ impl Motor {
     pub fn profil_uygula(&mut self, profil: &Profil, pid: u32) -> UygulamaSonucu {
         let mut cikti = UygulamaSonucu::default();
 
-        // Karşılaştırma için "öncesi" penceresini burada kapatıyoruz: bu andan
-        // sonraki örnekler "sonrası".
-        self.isaret = Some(Isaret {
-            zaman: chrono::Utc::now().timestamp_millis(),
-        });
+        // Oturumu açıyoruz. Karşılaştırma için "öncesi" penceresi de burada
+        // kapanıyor: bu andan sonraki örnekler "sonrası".
+        self.oturumu_ac(profil, pid);
 
         self.gunluk.bilgi(
             Kategori::Profil,
@@ -310,11 +338,145 @@ impl Motor {
             }
         }
 
+        // 7. Ölçekleme (Faz 3).
+        //
+        // Deftere yazılmıyor ve bu bir istisna değil: açılan tek şey bir
+        // pencere ve o pencere sürecin ömrüyle sınırlı — geri alınacak
+        // kalıcı bir iz yok (`scaling` modül belgesi). Günlüğe ise yazıyor.
+        if profil.scaling.enabled {
+            let algo = profil.scaling.algoritma();
+            if profil.competitive || self.ayarlar.rekabetci_mod {
+                // Dosya doğrulaması bunu zaten kapatıyor; buradaki ikinci
+                // kapı, kullanıcının ayarlardan sonradan işaretlediği
+                // rekabetçi mod için.
+                let m = "rekabetçi modda ölçekleme açılmadı (gecikme ekliyor)".to_string();
+                self.gunluk.bilgi(Kategori::Sistem, m.clone());
+                cikti.atlanan.push(m);
+            } else {
+                let ekran = self.ayarlar.olcekleme_ekrani;
+                match self.olcekleyici.baslat(ekran, algo) {
+                    Ok(()) => {
+                        let ozet = format!("ölçekleme başladı ({})", algo.ad());
+                        self.gunluk
+                            .yaz(Duzey::Aksiyon, Kategori::Sistem, ozet.clone(), None);
+                        cikti.uygulanan.push(ozet);
+                    }
+                    Err(e) => {
+                        // Yakalama açılamamak beklenen bir durum (münhasır
+                        // tam ekran). Hata metni ne yapılacağını söylüyor.
+                        let m = format!("ölçekleme açılamadı — {e}");
+                        self.gunluk.uyari(Kategori::Sistem, m.clone());
+                        cikti.hatalar.push(m);
+                    }
+                }
+            }
+        }
+
+        // Geçmiş kaydı, günlükte yazan cümlelerin aynısını taşıyor: iki
+        // yerde iki farklı anlatım, "hangisi doğru" sorusunu doğururdu.
+        if let Some(oturum) = &mut self.acik_oturum {
+            oturum.uygulanan.extend(cikti.uygulanan.iter().cloned());
+        }
+
         cikti
+    }
+
+    /// Oturumu açar; sürmekte olan aynı oyunun oturumuysa dokunmaz.
+    ///
+    /// Aynı oyun için profil ikinci kez uygulanırsa oturum SIFIRLANMIYOR:
+    /// başlangıç saati ve o ana kadar uygulananlar korunuyor. Sıfırlansaydı
+    /// geçmişte tek bir oyun akşamı, kullanıcının düğmeye kaç kez bastığı
+    /// kadar parçaya bölünürdü.
+    ///
+    /// Başka bir sürece geçildiyse önceki oturum önce **kapanıyor**: iki
+    /// oyunun değişiklikleri tek bir kayda karışmamalı.
+    fn oturumu_ac(&mut self, profil: &Profil, pid: u32) {
+        let surec = self
+            .mod_
+            .surec()
+            .map(str::to_string)
+            .or_else(|| profil.executable_names.first().cloned())
+            .unwrap_or_else(|| format!("pid {pid}"));
+
+        if let Some(mevcut) = &self.acik_oturum {
+            if mevcut.surec == surec {
+                return;
+            }
+            // Farklı bir oyuna geçildi: eldeki oturumu kapatıp defterle.
+            // Geri alma sayısı 0 — bu yol geri alma yapmıyor, `oturumu_kapat`
+            // yapıyor ve olmayan bir işi kaydetmek yanlış beyan olurdu.
+            self.oturumu_defterle(0);
+        }
+
+        // Ad sırası: kullanıcının kendi profil adı, sonra gömülü katalog.
+        // Kullanıcının yazdığı ad her zaman bizim tahminimizden önce gelir.
+        let profil_adi = (profil.profile_id != "__genel__").then(|| profil.display_name.clone());
+        let oyun_adi = profil_adi
+            .clone()
+            .or_else(|| profile_engine::katalog::ara(&surec).map(|g| g.ad.clone()));
+
+        self.acik_oturum = Some(AcikOturum {
+            zaman: chrono::Utc::now().timestamp_millis(),
+            surec,
+            oyun_adi,
+            profil_adi,
+            mod_adi: self.mod_.ad().to_string(),
+            uygulanan: Vec::new(),
+            kare: None,
+        });
+    }
+
+    /// Açık oturumu geçmişe yazar ve kapatır.
+    ///
+    /// Ayar kapalıysa kayıt üretilmiyor ama oturum yine kapanıyor: "geçmişi
+    /// tutma" isteği, bellekteki durumu yanlış bırakmak için bir sebep değil.
+    fn oturumu_defterle(&mut self, geri_alinan: usize) {
+        let Some(oturum) = self.acik_oturum.take() else {
+            return;
+        };
+        if !self.ayarlar.gecmis_tut {
+            return;
+        }
+
+        // Ölçüm özetleri karşılaştırmayla aynı kaynaktan; ikisi ayrışmasın.
+        let (onceki, sonraki) = match self.karsilastirma_penceresi(oturum.zaman) {
+            Some(k) => (Some(k.onceki), Some(k.sonraki)),
+            None => (None, None),
+        };
+
+        self.gecmis.ekle(OturumKaydi {
+            id: oturum.zaman as u64,
+            baslangic: oturum.zaman,
+            bitis: chrono::Utc::now().timestamp_millis(),
+            surec: oturum.surec,
+            oyun_adi: oturum.oyun_adi,
+            profil_adi: oturum.profil_adi,
+            mod_adi: oturum.mod_adi,
+            uygulanan: oturum.uygulanan,
+            geri_alinan,
+            onceki,
+            sonraki,
+            kare: oturum.kare,
+        });
+    }
+
+    /// Kare ölçümü sonucunu sürmekte olan oturuma iliştirir.
+    ///
+    /// Oturum yoksa sessizce düşüyor: kullanıcı optimizasyon uygulamadan da
+    /// ölçüm yapabiliyor ve o ölçüm bir oturuma ait değil.
+    pub fn kare_olcumu_kaydet(&mut self, ozet: KareOzeti) {
+        if let Some(oturum) = &mut self.acik_oturum {
+            oturum.kare = Some(ozet);
+        }
     }
 
     /// Oyun kapandı / öne başka bir şey geldi: oturumluk her şeyi geri al.
     pub fn oturumu_kapat(&mut self) -> revert::Sonuc {
+        // Ölçekleme önce kapanıyor: oyun kapandıktan sonra ekranda üstte
+        // duran siyah bir pencere, geri alınmamış bir değişikliğin en
+        // görünür hali olurdu.
+        self.olceklemeyi_durdur("oturum kapandı");
+
         let sonuc = revert::oturumu_kapat(&mut self.defter, &mut self.gunluk);
         if sonuc.geri_alinan > 0 {
             self.gunluk.bilgi(
@@ -322,8 +484,87 @@ impl Motor {
                 format!("{} değişiklik geri alındı", sonuc.geri_alinan),
             );
         }
-        self.isaret = None;
+        self.oturumu_defterle(sonuc.geri_alinan);
         sonuc
+    }
+
+    // -----------------------------------------------------------------
+    // Ölçekleme (Faz 3)
+    // -----------------------------------------------------------------
+
+    /// Kullanıcının elle başlattığı ölçekleme.
+    ///
+    /// Rekabetçi modda reddediliyor — profil dosyasındaki kapının arayüz
+    /// tarafındaki eşi (`scaling::moda_uygun`).
+    pub fn olceklemeyi_baslat(&mut self, algo: crate::scaling::Algoritma) -> Result<()> {
+        if !crate::scaling::moda_uygun(&self.mod_) || self.ayarlar.rekabetci_mod {
+            return Err(crate::error::Error::ProfileInvalid(
+                "rekabetçi modda ölçekleme kapalı (gecikme ekliyor)".into(),
+            ));
+        }
+        let ekran = self.ayarlar.olcekleme_ekrani;
+        self.olcekleyici
+            .baslat(ekran, algo)
+            .map_err(|e| crate::error::Error::Olcum(e.to_string()))?;
+        self.gunluk.yaz(
+            Duzey::Aksiyon,
+            Kategori::Sistem,
+            format!("ölçekleme başladı ({})", algo.ad()),
+            None,
+        );
+        Ok(())
+    }
+
+    /// Ölçeklemeyi durdurur ve **neden** durduğunu günlüğe yazar.
+    ///
+    /// Sebep metni parametre: aynı fonksiyona hem kullanıcının düğmesinden
+    /// hem oturum kapanışından geliniyor ve günlükte ikisi ayrılabilmeli.
+    /// Çalışmıyorsa hiçbir şey yazılmıyor — olmayan bir işi günlüğe
+    /// yazmak yanlış beyan olurdu.
+    pub fn olceklemeyi_durdur(&mut self, sebep: &str) {
+        if !self.olcekleyici.calisiyor() {
+            return;
+        }
+        self.olcekleyici.durdur();
+        self.gunluk.yaz(
+            Duzey::GeriAlma,
+            Kategori::Sistem,
+            format!("ölçekleme durduruldu ({sebep})"),
+            None,
+        );
+    }
+
+    /// Çalışan ölçeklemenin algoritmasını değiştirir.
+    pub fn olcekleme_algoritmasi(&mut self, algo: crate::scaling::Algoritma) {
+        self.olcekleyici.algoritma_ata(algo);
+        if self.olcekleyici.calisiyor() {
+            self.gunluk.bilgi(
+                Kategori::Sistem,
+                format!("ölçekleme algoritması: {}", algo.ad()),
+            );
+        }
+    }
+
+    pub fn olcekleme_durumu(&self) -> crate::scaling::OlceklemeDurumu {
+        self.olcekleyici.durum()
+    }
+
+    pub fn gecmis_ozeti(&self) -> GecmisOzeti {
+        self.gecmis.ozet()
+    }
+
+    /// Geçmişi siler ve bunu günlüğe yazar.
+    ///
+    /// Silme de bir eylem: kullanıcı "geçmişi temizledim" satırını
+    /// görebilmeli. Günlük bellekte durduğu için bu satır kalıcı değil, ama
+    /// o oturum boyunca ne yapıldığı görünür kalıyor.
+    pub fn gecmisi_temizle(&mut self) {
+        let adet = self.gecmis.liste().len();
+        self.gecmis.temizle();
+        self.gunluk.bilgi(
+            Kategori::Uygulama,
+            format!("oturum geçmişi silindi ({adet} kayıt)"),
+        );
     }
 
     /// Öndeki uygulamaya, profili olmasa da hafif varsayılanı uygular.
@@ -341,6 +582,11 @@ impl Motor {
 
     /// Kullanıcının "varsayılana dön" düğmesi.
     pub fn hepsini_geri_al(&mut self) -> revert::Sonuc {
+        // "Her şeyi geri al" düğmesine basan kullanıcı ekranda duran
+        // ölçekleme penceresini de kastediyor; defterde kaydı olmadığı için
+        // burada ayrıca kapatılıyor.
+        self.olceklemeyi_durdur("her şey geri alındı");
+
         // Muifly'ın kendi QoS ilkeleri deftere yazılıyor ama defter kaybolmuş
         // olabilir (elle silinen dosya). Ön ekli ilkeler ayrıca süpürülüyor.
         if let Ok(adet) = network_boost::qos::bizim_ilkeleri_kaldir() {
@@ -406,6 +652,14 @@ impl Motor {
             format!("mod: {} → {}", self.mod_.ad(), yeni.ad()),
         );
         self.mod_ = yeni.clone();
+
+        // Rekabetçi moda geçildiyse ölçekleme kapanıyor. Kullanıcı bu modu
+        // gecikmeyi en aza indirmek için seçiyor; gecikme ekleyen bir
+        // pencerenin açık kalması, seçimin tersini yapmak olurdu.
+        if !crate::scaling::moda_uygun(&self.mod_) {
+            self.olceklemeyi_durdur("rekabetçi moda geçildi");
+        }
+
         Some(ModDegisimi { yeni, geri_alinan })
     }
 
@@ -432,10 +686,18 @@ impl Motor {
     /// İşaret yoksa (henüz profil uygulanmadıysa) `None`: uydurulmuş bir
     /// "öncesi" göstermektense hiç göstermemek doğru.
     pub fn karsilastirma(&self) -> Option<monitor::Karsilastirma> {
-        let isaret = self.isaret?;
+        self.karsilastirma_penceresi(self.acik_oturum.as_ref()?.zaman)
+    }
+
+    /// Verilen ana göre örnekleri ikiye bölüp özetler.
+    ///
+    /// Ayrı bir fonksiyon çünkü iki çağıranı var: canlı karşılaştırma ve
+    /// geçmiş kaydı. İkisi aynı hesabı yapmak zorunda — geçmişte başka bir
+    /// sayı görünseydi hangisinin doğru olduğu sorulurdu.
+    fn karsilastirma_penceresi(&self, an: i64) -> Option<monitor::Karsilastirma> {
         let hepsi = self.ornekler.hepsi();
         let (onceki, sonraki): (Vec<Ornek>, Vec<Ornek>) =
-            hepsi.into_iter().partition(|o| o.zaman < isaret.zaman);
+            hepsi.into_iter().partition(|o| o.zaman < an);
 
         if onceki.is_empty() || sonraki.is_empty() {
             return None;
@@ -536,7 +798,7 @@ mod testler {
     #[test]
     fn tek_tarafli_veride_karsilastirma_yok() {
         let mut motor = bos_motor();
-        motor.isaret = Some(Isaret { zaman: 5000 });
+        motor.acik_oturum = Some(acik_oturum(5000));
         // Yalnızca "sonrası" var.
         motor.ornekler.ekle(ornek(6000, 10.0));
         assert!(motor.karsilastirma().is_none());
@@ -545,7 +807,7 @@ mod testler {
     #[test]
     fn karsilastirma_isarete_gore_bolunuyor() {
         let mut motor = bos_motor();
-        motor.isaret = Some(Isaret { zaman: 5000 });
+        motor.acik_oturum = Some(acik_oturum(5000));
         motor.ornekler.ekle(ornek(1000, 80.0));
         motor.ornekler.ekle(ornek(2000, 80.0));
         motor.ornekler.ekle(ornek(6000, 20.0));
@@ -558,6 +820,18 @@ mod testler {
         assert!((k.sonraki.cpu_ort - 20.0).abs() < 0.001);
     }
 
+    fn acik_oturum(zaman: i64) -> AcikOturum {
+        AcikOturum {
+            zaman,
+            surec: "oyun.exe".into(),
+            oyun_adi: None,
+            profil_adi: None,
+            mod_adi: "Oyun Profili".into(),
+            uygulanan: vec!["öncelik yükseltildi".into()],
+            kare: None,
+        }
+    }
+
     /// Diske dokunmayan motor — yalnızca saf mantık testleri için.
     fn bos_motor() -> Motor {
         Motor {
@@ -566,12 +840,152 @@ mod testler {
             ayarlar: Ayarlar::default(),
             profiller: Vec::new(),
             mod_: Mod::Bosta,
+            gecmis: Gecmis::bellekte(),
+            // Başlatılmamış ölçekleyici hiçbir iş parçacığı açmıyor: saf
+            // mantık testleri ekrana ve D3D11'e dokunmuyor.
+            olcekleyici: crate::scaling::Olcekleyici::yeni(),
             ornekler: Tampon::yeni(100),
             ornekleyici: Ornekleyici::yeni(),
-            isaret: None,
+            acik_oturum: None,
             cikis_baslangici: None,
             profil_dizini: std::env::temp_dir().join("muifly-test-profiller"),
         }
+    }
+
+    #[test]
+    fn oturum_kapaninca_gecmise_yaziliyor() {
+        let mut motor = bos_motor();
+        motor.acik_oturum = Some(acik_oturum(1000));
+        motor.oturumu_defterle(3);
+
+        let kayitlar = motor.gecmis.liste();
+        assert_eq!(kayitlar.len(), 1);
+        assert_eq!(kayitlar[0].surec, "oyun.exe");
+        assert_eq!(kayitlar[0].geri_alinan, 3);
+        assert_eq!(kayitlar[0].uygulanan, vec!["öncelik yükseltildi"]);
+        assert!(motor.acik_oturum.is_none(), "oturum kapanmalı");
+    }
+
+    #[test]
+    fn acik_oturum_yokken_kayit_uretilmiyor() {
+        // Oyun hiç algılanmadan program kapanırsa geçmişe boş bir satır
+        // düşmemeli.
+        let mut motor = bos_motor();
+        motor.oturumu_defterle(0);
+        assert!(motor.gecmis.liste().is_empty());
+    }
+
+    #[test]
+    fn gecmis_kapaliyken_kayit_yazilmiyor() {
+        // Ürün duruşu: ayar kapalıysa diske hiçbir şey yazılmıyor — ama
+        // oturum yine de kapanıyor.
+        let mut motor = bos_motor();
+        motor.ayarlar.gecmis_tut = false;
+        motor.acik_oturum = Some(acik_oturum(1000));
+        motor.oturumu_defterle(1);
+        assert!(motor.gecmis.liste().is_empty());
+        assert!(motor.acik_oturum.is_none());
+    }
+
+    #[test]
+    fn gecmis_kaydi_olcum_penceresini_tasiyor() {
+        let mut motor = bos_motor();
+        motor.acik_oturum = Some(acik_oturum(5000));
+        motor.ornekler.ekle(ornek(1000, 80.0));
+        motor.ornekler.ekle(ornek(6000, 20.0));
+        motor.oturumu_defterle(0);
+
+        let k = &motor.gecmis.liste()[0];
+        assert!((k.onceki.unwrap().cpu_ort - 80.0).abs() < 0.001);
+        assert!((k.sonraki.unwrap().cpu_ort - 20.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn ayni_oyun_ikinci_kez_uygulaninca_oturum_bolunmuyor() {
+        let mut motor = bos_motor();
+        motor.mod_ = Mod::OyunGenel {
+            pid: 42,
+            surec: "oyun.exe".into(),
+        };
+        let profil = profile_engine::genel_profil("oyun.exe")
+            .dogrula()
+            .unwrap()
+            .0;
+
+        motor.oturumu_ac(&profil, 42);
+        let ilk_zaman = motor.acik_oturum.as_ref().unwrap().zaman;
+        motor
+            .acik_oturum
+            .as_mut()
+            .unwrap()
+            .uygulanan
+            .push("x".into());
+        motor.oturumu_ac(&profil, 42);
+
+        assert_eq!(motor.acik_oturum.as_ref().unwrap().zaman, ilk_zaman);
+        assert_eq!(motor.acik_oturum.as_ref().unwrap().uygulanan, vec!["x"]);
+        assert!(motor.gecmis.liste().is_empty(), "aynı oturum bölünmemeli");
+    }
+
+    #[test]
+    fn baska_oyuna_gecince_onceki_oturum_defterleniyor() {
+        let mut motor = bos_motor();
+        motor.mod_ = Mod::OyunGenel {
+            pid: 1,
+            surec: "ilk.exe".into(),
+        };
+        let profil = profile_engine::genel_profil("ilk.exe").dogrula().unwrap().0;
+        motor.oturumu_ac(&profil, 1);
+
+        motor.mod_ = Mod::OyunGenel {
+            pid: 2,
+            surec: "ikinci.exe".into(),
+        };
+        motor.oturumu_ac(&profil, 2);
+
+        assert_eq!(motor.gecmis.liste().len(), 1);
+        assert_eq!(motor.gecmis.liste()[0].surec, "ilk.exe");
+        assert_eq!(motor.acik_oturum.as_ref().unwrap().surec, "ikinci.exe");
+    }
+
+    #[test]
+    fn genel_profil_gecmise_profil_adi_yazmiyor() {
+        // Kullanıcı profil oluşturmadıysa geçmişte profil adı olmamalı:
+        // "Genel oyun profili" bir profil adı değil, bir varsayılan.
+        let mut motor = bos_motor();
+        motor.mod_ = Mod::OyunGenel {
+            pid: 7,
+            surec: "cs2.exe".into(),
+        };
+        let profil = profile_engine::genel_profil("cs2.exe").dogrula().unwrap().0;
+        motor.oturumu_ac(&profil, 7);
+
+        let oturum = motor.acik_oturum.as_ref().unwrap();
+        assert!(oturum.profil_adi.is_none());
+        // Ad katalogdan geliyor: cs2.exe gömülü katalogda tanınıyor.
+        assert_eq!(oturum.oyun_adi.as_deref(), Some("Counter-Strike 2"));
+    }
+
+    #[test]
+    fn kare_olcumu_acik_oturuma_ilisiyor() {
+        let mut motor = bos_motor();
+        let ozet = crate::monitor::KareOzeti {
+            kare_sayisi: 100,
+            sure_s: 1.0,
+            ort_fps: 100.0,
+            ort_ms: 10.0,
+            p1_kotu_ms: 20.0,
+            p1_kotu_fps: 50.0,
+            kare_jitter_ms: 1.0,
+        };
+        // Oturum yokken sessizce düşüyor.
+        motor.kare_olcumu_kaydet(ozet);
+        assert!(motor.acik_oturum.is_none());
+
+        motor.acik_oturum = Some(acik_oturum(1000));
+        motor.kare_olcumu_kaydet(ozet);
+        motor.oturumu_defterle(0);
+        assert_eq!(motor.gecmis.liste()[0].kare, Some(ozet));
     }
 
     #[test]

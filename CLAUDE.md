@@ -53,7 +53,8 @@ state.rs (Motor)   ← akış: oyun algılandı → profil uygula → kapanınca
    ├── library/          kurulu oyunlar: Steam/Epic manifestleri, kapak, exe adayları
    ├── system_boost/     öncelik, affinite, dondurma, güç planı, açılış
    ├── network_boost/    DNS ölçümü, gecikme/jitter, TCP, QoS
-   ├── monitor/          şeffaflık günlüğü + ölçüm
+   ├── monitor/          şeffaflık günlüğü + ölçüm + oturum geçmişi
+   ├── scaling/          ekran yakalama + ölçekleme + sunum + gecikme ölçümü
    ├── ledger.rs         geri alma defteri (veri)
    └── revert.rs         geri alma uygulayıcısı (davranış)
 ```
@@ -61,6 +62,10 @@ state.rs (Motor)   ← akış: oyun algılandı → profil uygula → kapanınca
 **Değişmez kural**: Sistemde bir şey değiştiren her yol `state::Motor`
 üzerinden geçer ve **hem deftere hem günlüğe** yazar. Üçünden biri eksik
 kalırsa ya geri alma kaybolur ya kullanıcı ne olduğunu göremez.
+
+Tek istisna `scaling/`: deftere yazmıyor çünkü geri alınacak bir iz
+bırakmıyor — açtığı tek şey sürecin ömrüyle sınırlı bir pencere. Günlüğe
+yazıyor (karar #32).
 
 Detaylı mimari: `docs/ARCHITECTURE.md` · Modül detayı: `docs/MODULES.md`
 
@@ -87,11 +92,11 @@ Detaylı gerekçeler: `docs/DESIGN_PRINCIPLES.md`
 npm run dev        # sadece frontend (Vite, localhost:1420)
 npm run build      # tsc + vite build → dist/
 npm run tauri dev  # tam uygulama (Rust + pencere)
-npm test           # arayüz testleri (vitest + jsdom) — 41 test
+npm test           # arayüz testleri (vitest + jsdom) — 67 test
 ```
 
 ```bash
-cargo test                    # src-tauri/ içinde — 230 test
+cargo test                    # src-tauri/ içinde — 372 test
 cargo test --features demo    # demo ikilisinin kısıtlarıyla
 cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
 ```
@@ -147,9 +152,9 @@ Muifly/
 │   └── ceviri-sonda/          ✅ ATILACAK fizibilite denemesi (karar #29)
 ├── site/                    ✅ GitHub Pages tanıtım sayfası
 ├── src/                     ✅ React arayüzü
-│   ├── App.tsx              ✅ kabuk: kenar çubuğu, başlık çubuğu, beş ekran
+│   ├── App.tsx              ✅ kabuk: kenar çubuğu, başlık çubuğu, yedi ekran
 │   ├── styles.css           ✅ Mui tasarım sistemi (teal, Outfit, koyu zemin)
-│   ├── components/          ✅ 5 panel + 3 diyalog + grafik + mini eğri + ikon + toast
+│   ├── components/          ✅ 7 panel + 3 diyalog + grafik + mini eğri + ikon + toast
 │   ├── assets/fonts/        ✅ Outfit + LICENSE-OFL.txt (gömülü, CDN yok)
 │   └── lib/                 ✅ api.ts (invoke sarmalayıcıları), types.ts, format.ts
 └── src-tauri/               ✅ Rust çekirdeği
@@ -169,13 +174,21 @@ Muifly/
         ├── ucuncu_taraf.rs  ✅ gömülü lisans bildirimleri (EULA md. 8)
         ├── error.rs         ✅ tek hata tipi
         ├── winutil.rs       ✅ HANDLE RAII sarmalayıcı
-        ├── monitor/         ✅ log.rs (günlük), metrics.rs (jitter/özet),
-        │                       frames.rs (kare istatistiği), etw.rs (karar #27)
+        ├── monitor/         ✅ log.rs (günlük), gecmis.rs (oturum geçmişi, karar #31),
+        │                       metrics.rs (jitter/özet), frames.rs (kare
+        │                       istatistiği), etw.rs (karar #27)
         ├── system_boost/    ✅ detect, priority, suspend, power, startup
         ├── network_boost/   ✅ dns, latency, tcp, qos
         ├── profile_engine/  ✅ schema, store, aktarım (içe/dışa), mod seçimi, katalog
         ├── library/         ✅ steam, epic, exe adayları, vdf, ikon, png — hepsi yerel
-        └── scaling/         ⬜ Faz 3
+        ├── ceviri/          ✅ Faz 5'in yakalamasız katmanı (karar #30):
+        │                       onisleme, sozluk, bellek, ocr_dil.
+        │                       Motor'a BAĞLI DEĞİL, arayüzü yok — bilerek.
+        └── scaling/         ✅ Faz 3 (karar #32): yakalama (Desktop
+                                Duplication), olcekleme.hlsl (gerçek zamanlı
+                                yol), algoritma.rs (CPU REFERANSI — çalışma
+                                zamanında kullanılmıyor), sunum, gecikme.
+                                Rekabetçi modda kapalı, deftere yazmıyor.
 ```
 
 ## Faz Durumu
@@ -185,12 +198,23 @@ Muifly/
   bilinçli olarak yok, karar #6). Kare ölçümü uçtan uca bağlandı: ETW
   oturumu, yükseltilmiş yardımcı ikili, arayüz (kararlar #14, #27).
   ⬜ Gerçek bir oyunda doğrulama bekliyor — `tasks.md` → Sıradaki 5
-- **Faz 3** (spatial upscaling) — ⬜ Faz 1-2 sahada doğrulanmadan başlanmıyor
-- **Faz 4** (ML frame generation) — ⬜ ayrı fizibilite gerekiyor
-- **Faz 5** (ekran çevirisi) — ⬜ kodu yok, ama **iki fizibilite sorusu da
-  cevaplandı ve olumlu**: OCR (karar #28) ve çeviri (karar #29). Yine de Faz
-  3'ün yakalama katmanından önce başlamaz. Fizibiliteden iki bağlayıcı ürün
-  gereği çıktı — `ROADMAP.md` → Faz 5
+- **Faz 3** (spatial upscaling) — 🟡 **kod tamam** (kararlar #32, #33).
+  Yakalama, dört algoritma (gölgelendiricide), sunum penceresi, gecikme
+  ölçümü ve arayüz sekmesi bağlandı. Faz sırası **bilerek atlandı**: Faz 1
+  saha testi hâlâ yapılmadı, gerekçe karar #33'te.
+  ✅ Boru hattı bu makinede uçtan uca koştu (`cargo test
+  gercek_ekranda_bir_tur -- --ignored`). ⬜ Gerçek bir oyunla ve **gözle**
+  denenmedi — `tasks.md` → Sıradaki 7. Birim testleri görüntünün doğru
+  göründüğünü gösteremiyor; ilk çalıştırma iki işlevsizlik kusuru
+  gösterdi (karar #32).
+- **Faz 4** (ML frame generation) — ⬜ ayrı fizibilite gerekiyor. Profil
+  dosyasında `frame_generation` açılsa bile `dogrula` kapatıyor.
+- **Faz 5** (ekran çevirisi) — 🟡 **kısmen açıldı** (karar #30). İki
+  fizibilite sorusu da cevaplandı ve olumlu: OCR (karar #28), çeviri
+  (karar #29). **Yakalamadan bağımsız katman yazıldı** (`src/ceviri/`:
+  önişleme, terim sözlüğü, çeviri belleği, OCR dil kontrolü).
+  ⬜ Yakalama, overlay, kısayol, model ve arayüz hâlâ Faz 3'ün arkasında —
+  ayrım testi "Faz 3 gelince bu kod yeniden yazılır mı?"
 
 ## Claude Code için notlar
 
@@ -200,7 +224,9 @@ Muifly/
   Kod yorumları oraya atıf yapıyor; numaraları değiştirme.
 - Tasarım ilkelerinden sapan hiçbir implementasyon (özellikle
   injection/hooking) yapılmamalı — önce kullanıcıya sor.
-- Faz sırasını atlama: Faz 1 sahada doğrulanmadan Faz 3/4'e geçilmez.
+- Faz sırasını atlama: Faz 1 sahada doğrulanmadan Faz 4'e geçilmez. (Faz 3
+  bu kurala rağmen, proje sahibinin açık isteğiyle yazıldı — karar #33.
+  Bu bir emsal değil: kural duruyor.)
 - Yeni bir "yapmıyoruz" kararı verilirse, onu koruyan bir test yaz. Ürün
   duruşlarının çoğu şu an testle korunuyor (`tunel_destegi`,
   `bellek_temizleme_destegi`, `varsayilan_liste_bos`, realtime öncelik).
