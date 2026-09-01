@@ -58,9 +58,11 @@ deneme**, kod işi değil:
 - [ ] **UAC akışının elle denenmesi.** Reddetme yolu ("hiçbir şey
       değişmedi") ve zaman aşımı yolu testlerle korunuyor ama gerçek bir
       istemle bir kez görülmedi.
-- [ ] **Paketlenmiş kurulumda yardımcının yanına düştüğünün doğrulanması.**
-      `bundle.externalBin` bağlandı ama `tauri build` ile bir kez
-      denenmedi; `olcum::yardimci_yolu` ana ikilinin yanına bakıyor.
+- [x] **Paketlenmiş kurulumda yardımcının yanına düştüğü** — `tauri build`
+      2 Eylül 2026'da koştu, üretilen `installer.nsi` yardımcıyı
+      `$INSTDIR\muifly-olcum.exe` olarak ana ikilinin yanına yazıyor.
+      Kurulum dosyası çalıştırılıp **kurulmadı**: dosyanın gerçekten oraya
+      düştüğü ve yükseltilmiş olarak açıldığı hâlâ görülmedi.
 - [ ] **Yardımcının imzalanması** — M3'ün kapsamı büyüdü, `ROADMAP.md`'de
       not düşüldü.
 
@@ -167,10 +169,43 @@ Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
   gerçek bir dosya seçme penceresiyle bir kez denenmedi (dosya süzgeci, iptal,
   yazma izni olmayan klasör).
 
-- **Kurulum ölçüm yardımcısının iki kopyasını taşıyor.** `binaries/`
-  sidecar dosyası ve `target/release` içindeki ikili aynı ada açılıyor;
-  aynı koddan gelseler de ~200 KB fazla ve hangisinin üste yazdığı belirsiz.
-  Muhtemelen `externalBin` ile cargo'nun ürettiği ikinci ikilinin çakışması.
+- **Kurulum ölçüm yardımcısının iki kopyasını taşıyor — ve bu MSI hedefini
+  KIRIYOR.** Tahmin 2 Eylül 2026'da doğrulandı; sebep tam olarak
+  `externalBin` ile cargo'nun ürettiği ikinci ikilinin çakışması.
+
+  Üretilen `installer.nsi`'de aynı hedef iki kez yazılıyor:
+
+  ```nsis
+  File /a "/oname=muifly-olcum.exe" "...\src-tauri\binaries\muifly-olcum-x86_64-pc-windows-msvc.exe"
+  File /a "/oname=muifly-olcum.exe" "...\src-tauri\target\release\muifly-olcum.exe"
+  ```
+
+  NSIS buna katlanıyor (ikincisi birincinin üstüne yazıyor, yani kuruluma
+  **cargo'nun ürettiği** ikili giriyor — sidecar değil). WiX katlanmıyor:
+
+  ```text
+  error LGHT0204 : ICE30: The target file 'muifly-olcum.exe' is installed in
+  '[ProgramFiles64Folder]\Muifly\' by two different components on an LFN
+  system: 'muifly_olcum.exe' and 'muifly_olcum'.
+  ```
+
+  Bu yüzden `tauri.conf.json` `targets` listesinde `"msi"` yazdığı halde
+  **hiç MSI üretilmedi** — 0.2.0 da yalnızca NSIS ile çıkmış. Üç yol var,
+  seçim ürün kararı:
+
+  1. **`externalBin`i kaldır.** Tek satır. Tauri paketin bütün cargo `bin`
+     hedeflerini zaten yanına koyuyor (yukarıdaki ikinci satır) ve
+     `olcum::yardimci_yolu` ana ikilinin yanına baktığı için çalışmaya devam
+     eder. `arac/olcum-yardimcisi-hazirla.mjs` gereksizleşir; CLAUDE.md'deki
+     "çalıştırılmazsa tauri build kırılır" notu ve imzalama uyarısı
+     `target/release`'i gösterecek şekilde güncellenmeli. **Riski**: cargo
+     bin'lerinin paketlenmesi belgelenmiş bir sözleşme değil, gözlenen bir
+     davranış; Tauri sürümü değişince sessizce kaybolabilir.
+  2. **Yardımcıyı ayrı bir crate'e taşı.** `externalBin` (desteklenen yol)
+     kalır, çakışma kalkar. Daha çok iş ama sözleşmeye dayanıyor.
+  3. **`"msi"`yi hedeflerden çıkar.** Ürün NSIS ile dağıtılıyor
+     (`installMode: currentUser` zaten NSIS ayarı, site Releases'e bakıyor).
+     Çakışma sürer, ~200 KB fazla kurulum boyutu kalır.
 
 - **GitHub Actions Node 20 uyarısı.** `actions/checkout@v4`,
   `setup-node@v4`, `configure-pages@v5`, `deploy-pages@v4` ve

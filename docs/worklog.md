@@ -1181,3 +1181,23 @@ gösterdiğini, tıklamaların oyuna geçtiğini ancak bir insan söyleyebilir.
 
 Faz 1 ve 2'nin bekleyen doğrulamaları da yerinde duruyor; şimdi üstlerine
 Faz 3'ünki bindi. Bu, karar #33'te "taşınan risk" olarak yazılı.
+
+### Sürüm 0.3.0 ve paketleme
+
+Faz 3 commit edildi, sürüm 0.3.0'a çekildi (üç dosya birlikte), `v0.3.0`
+etiketi atıldı ve `origin/main`e gönderildi. 0.2.0'daki not aynen geçerli:
+**bu bir yayın değil.** 1.0 hâlâ M4, demo M3'ü bekliyor ve M3'ün önkoşulu
+olan kod imzalama sertifikası yok.
+
+`tauri build` koştu ve NSIS kurulumu üretildi
+(`Muifly_0.3.0_x64-setup.exe`, 2.2 MB). MSI hedefi **kırıldı** ve sebebi
+`tasks.md`'de tahmin olarak duran madde çıktı: `externalBin` sidecar'ı ile
+cargo'nun ürettiği ikinci ikili aynı hedefe yazılıyor. NSIS buna katlanıp
+üstüne yazıyor, WiX ICE30 ile reddediyor. Tahmin artık kanıt: üretilen
+`installer.nsi` ve `main.wxs` satırları `tasks.md`'ye alındı, üç çözüm yolu
+ve riskleri yazıldı. Seçim yapılmadı — paketleme yapısını yayın gecesinde
+tek taraflı değiştirmek doğru olmazdı.
+
+Bir bekleyen madde kapandı: yardımcı ikilinin kurulumda ana ikilinin yanına
+düştüğü, üretilen kurulum betiğinden doğrulandı. Kurulumun kendisi
+çalıştırılmadı.
