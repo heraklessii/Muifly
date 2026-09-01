@@ -815,3 +815,27 @@ M4'ü bekliyor. Public dağıtım `heraklessii/Muifly` üzerinden yapılacak;
 imzasız bir kurulumu oraya koymak, aynı gün siteye yazdığımız "Demo yakında"
 düzeltmesini geçersiz kılar ve performans aracı kategorisinde SmartScreen
 uyarısı doğrudan "virüs mü" algısı yaratır (`RISKS.md`).
+
+### Aynı oturum — ilk gerçek `tauri build` paketleme hatasını ortaya çıkardı
+
+Kurulum ilk kez derlendi ve içinden **`muifly.exe` çıkmadı**. NSIS kurulumu
+249 KB'ydi (uygulama tek başına 8,9 MB) ve içinde iki kez `muifly-olcum.exe`
+vardı: Tauri ana ikili diye **ölçüm yardımcısını** paketlemişti. Kurulan şey
+uygulama değil, ölçen yardımcı olurdu.
+
+Sebep: kare ölçümü ayrı bir ikiliye taşındığında (karar #27) cargo iki ikili
+üretmeye başladı ve hangisinin ana ikili olduğu söylenmedi. `Cargo.toml`'a
+`default-run = "muifly"` eklendi; kurulum 2,1 MB oldu ve `muifly.exe` içine
+girdi.
+
+**Bu hatanın cinsi tanıdık**: bir oturum önce aynı ikili yüzünden sidecar
+paketlenmiyordu ve o zaman "paketleme boşluğu kapatıldı" denmişti. Kapanan
+yalnızca yarısıymış — yardımcı içeri girdi, ana ikili dışarı düştü. İkisi de
+`cargo test` ve `cargo build` yeşilken oluyor; **yalnızca kurulumu üretip
+içini açmak gösteriyor.** Ders: karar #27'nin bedeli tek seferlik değil,
+paketlemede kalıcı bir dikkat borcu.
+
+Kalan küçük pürüz: kurulum yardımcının **iki kopyasını** taşıyor (biri
+`binaries/` sidecar'ı, biri `target/release`'deki ikili). Aynı koddan, aynı
+ada açılıyorlar; işlevsel bir sorun değil ama ~200 KB fazla ve hangisinin
+üste yazdığı belirsiz. `tasks.md`'ye yazıldı.

@@ -96,6 +96,11 @@ deneme**, kod işi değil:
   gerçek bir dosya seçme penceresiyle bir kez denenmedi (dosya süzgeci, iptal,
   yazma izni olmayan klasör).
 
+- **Kurulum ölçüm yardımcısının iki kopyasını taşıyor.** `binaries/`
+  sidecar dosyası ve `target/release` içindeki ikili aynı ada açılıyor;
+  aynı koddan gelseler de ~200 KB fazla ve hangisinin üste yazdığı belirsiz.
+  Muhtemelen `externalBin` ile cargo'nun ürettiği ikinci ikilinin çakışması.
+
 - **GitHub Actions Node 20 uyarısı.** `actions/checkout@v4`,
   `setup-node@v4`, `configure-pages@v5`, `deploy-pages@v4` ve
   `upload-artifact@v4` Node 20 hedefliyor; runner onları zorla Node 24'te

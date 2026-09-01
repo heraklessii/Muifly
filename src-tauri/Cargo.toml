@@ -7,6 +7,10 @@ license = "LicenseRef-Muifly-EULA"
 edition = "2021"
 rust-version = "1.77.2"
 publish = false
+# Kare olcumu ayri bir ikilide (karar #27) ve cargo iki ikili uretiyor. Bunu
+# soylemezsek "tauri build" ana ikiliyi degil YARDIMCIYI paketliyor: kurulum
+# icinden muifly.exe cikmiyor. Sessiz bir hata, yalnizca kurulumu acan fark eder.
+default-run = "muifly"
 
 [lib]
 name = "muifly_lib"
