@@ -1303,3 +1303,113 @@ Rust 373 → 376 test, arayüz 67 test, hepsi geçiyor. Clippy
 Değişikliklerin hiçbiri gerçek bir oyunla denenmedi — kilitlenmenin
 kendisi zaten o denemenin ilk adımıydı. `tasks.md` → Sıradaki 7 iki yeni
 maddeyle güncellendi.
+
+---
+
+## Oturum 14 — 2 Eylül 2026 · Faz 4: kare üretimi, ML'siz
+
+### Soru ve çerçevenin düzeltilmesi
+
+İstek "Faz 4'ü tamamla" idi. `ROADMAP.md`'de yazıldığı haliyle Faz 4 =
+özel eğitilmiş ML modeli, ve kabul kriteri olarak ayrı bir fizibilite
+istiyordu. O haliyle tamamlanamazdı: model eğitimi, veri seti toplama ve
+GPU inference optimizasyonu bu oturumda üretilebilecek şeyler değil.
+
+Ama araştırma bir şey gösterdi: **yol haritası fazı yanlış
+çerçevelemiş.** Kare üretimi ML gerektirmiyor; referans aldığımız Lossless
+Scaling'in ilk kare üreteci de klasik bir algoritmaydı. Faz ikiye ayrıldı
+(karar #35) ve proje sahibi "klasik + fizibilite" seçeneğini seçti.
+
+### Yazılanlar (Faz 4a)
+
+```
+hareket.rs    CPU referansı + testler   (doğruluğun ölçüldüğü yer)
+uretim.hlsl   gerçek zamanlı yol        (beş geçiş)
+uretim.rs     D3D11 boru hattı          (dokular açılışta bir kez)
+```
+
+Algoritma: parlaklık piramidi → üç seviyeli blok eşleme (16 px blok,
+kabadan inceye) → 3×3 ortanca → çift yönlü warp + karışım, örtüşmede tek
+kareye düşerek.
+
+Bağlananlar: döngüde sunum sırası (ara kare önce, gerçek kare sonra),
+`gecikme.rs`'e `uretim_us` / `uretilenKare` / `yenilemeHz`, ekran yenileme
+hızı okuması (`EnumDisplaySettingsW`), profil şeması kapısı, `Motor` ve
+komut yüzeyi, arayüzde bedeli anahtardan önce yazan bir bölüm.
+
+### İki gerçek kusur, testler tarafından yakalandı
+
+Bu oturumun en öğretici kısmı burası — ikisi de gözle asla bulunamazdı.
+
+**1. Yarım piksel kayması.** `Gri::ornekle` sürekli koordinatı doğrudan
+`floor`luyordu; piksel merkezleri 0.5'te olduğu için bu, hareketsiz bir
+görüntüyü bile her karede yarım piksel kaydırıyordu. Yani kare üretimi
+açıldığı an ekran hafifçe bulanacaktı ve kimse sebebini bulamayacaktı.
+`hareketsiz_ara_kare_ayni` testi düştü.
+
+**2. İki seviyeli arama yetmiyor.** Kaba seviye vektörü dört pikselin
+katına yuvarlıyor; ince tur o yuvarlamanın yanlış tarafına düştüğünde
+gerçek hareketi bir daha yakalayamıyordu. 5 piksellik kaydırma 3
+ölçülüyordu. Üçüncü seviye eklendi.
+
+### Ve bir kusur testin kendisindeydi
+
+`bilinen_kaydirma_bulunuyor` düşmeye devam etti. Tahmin yürütmek yerine
+tek bir bloğun seviye seviye çıktısı yazdırıldı: algoritma o bloğu **tam
+doğru** buluyordu (5,0). Sorun test desenindeydi.
+
+Desen `(x·7 + y·13) mod 37` idi ve yorumda "blok eşleme yanlış bir konumda
+kilitlenemez" yazıyordu. Yanlıştı: (15, 9) kaydırması bu deseni birebir
+tekrar ediyor, çünkü 7·15 + 13·9 = 222 = 6·37. Yani blok eşleme için
+mükemmel bir sahte eşleşme vardı ve ham hareket alanında gerçekten
+[15,9], [20,9], [-18,1] gibi vektörler duruyordu.
+
+Desen karıştırıcı (hash) tabanlıya çevrildi, dokuz testin dokuzu geçti.
+**Ders**: sentetik test verisi de bir tasarım kararıdır ve periyodik bir
+desen, eşleşme algoritmalarını test etmek için en kötü seçimdir. Testler
+iki kez algoritmayı doğru suçladı, bir kez haksız yere.
+
+### Bedel, ve neden gizlenemez
+
+Ara kare iki gerçek kare arasına giriyor: ikinci gerçek kare elde tutulup
+bir sunum turu geç gösteriliyor. Kaynak 60 kare/s ise ~17 ms ve bu bekleme
+**algoritmanın hızıyla azalmıyor** — beklenen şey hesap değil bilgi.
+
+Koda giren üç sonuç: rekabetçi modda iki ayrı kapı, ekran yenileme hızı
+uyarısı (`UYUMLU_YENILEME_HZ`), varsayılan kapalı. Arayüzde bedel
+anahtardan **önce** yazıyor ve bunu bir test koruyor.
+
+"Kaç kare/s kazandırır" ölçüsü bilinçli olarak yok: ölçülen şey bedel.
+Üretilen kare sayısı gösteriliyor ama o karelerin ne kadar iyi olduğu bu
+modülün ölçemediği bir şey — `uretim_metinlerinde_sayisal_vaat_yok` bunu
+tutuyor.
+
+### Faz 4b (ML) — fizibilite yapıldı, açılmadı
+
+`docs/FRAME_GENERATION.md`: veri seti (self-supervised, etiket gerekmiyor;
+ama oyun görüntüsü telifli ve genel video setleri oyun içeriğini
+temsil etmiyor), eğitim maliyeti (birkaç bin dolar — projenin duramayacağı
+bir rakam değil), inference bütçesi (144 Hz'de 6,9 ms, oyunla aynı GPU'da —
+asıl engel bu), dağıtım etkisi (ML çalışma zamanı 2,2 MB'lık kurulumu bir
+mertebe büyütür).
+
+Açılmama gerekçesi maliyet değil **sıralama**: 4a sahada doğrulanmadan onu
+iyileştirecek bir modele yatırım yapmak, çözülmemiş bir problemi optimize
+etmek olur. Açılma koşulu yazıldı: 4a en az 5 oyunda denenmiş ve
+kusurlarının hangisinin ML ile kapanacağı listelenmiş olmalı.
+
+### Sayılar
+
+Rust 376 → 393 test, arayüz 67 → 72 test, clippy temiz. Gölgelendiricinin
+derlendiği ayrı bir birim testi var (`D3DCompile` cihaz istemiyor), yani
+bir HLSL hatası artık çalışma zamanına kalmıyor.
+
+### Kalan
+
+4a'nın hiçbir parçası gerçek bir oyunla **gözle** denenmedi. Birim
+testleri hareket vektörünün doğru olduğunu gösteriyor, görüntünün iyi
+göründüğünü göstermiyor. `tasks.md` → Sıradaki 8, on maddelik liste.
+
+Faz 1'in saha doğrulaması hâlâ bekliyor. Bu, kuralı üçüncü kez esneten
+oturum (Faz 3 → karar #33, Faz 4a → karar #35) ve
+`FRAME_GENERATION.md` dördüncüye çıkarılmamasını gerekçelendiriyor.

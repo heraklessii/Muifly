@@ -290,6 +290,36 @@ mod win {
             &self.ekran
         }
 
+        /// Ekranın yenileme hızı (Hz), okunabiliyorsa.
+        ///
+        /// Kare üretimi (Faz 4) bu sayıya bağlı: ekran kaynaktan belirgin
+        /// olarak hızlı değilse üretilen kare, gerçek karelerin sırasını
+        /// bekletmekten başka bir işe yaramıyor. Sayı ölçülemezse özellik
+        /// engellenmiyor ama uyarı da verilmiyor — olmayan bir ölçüme
+        /// dayanarak kullanıcıyı uyarmak, tasarım ilkesi 4'ün yasakladığı
+        /// şey.
+        pub fn yenileme_hz(&self) -> Option<u32> {
+            use windows::Win32::Graphics::Gdi::{
+                EnumDisplaySettingsW, DEVMODEW, ENUM_CURRENT_SETTINGS,
+            };
+            unsafe {
+                let mut ad: Vec<u16> = self.ekran.ad.encode_utf16().collect();
+                ad.push(0);
+                let mut mod_ = DEVMODEW {
+                    dmSize: std::mem::size_of::<DEVMODEW>() as u16,
+                    ..Default::default()
+                };
+                let ok = EnumDisplaySettingsW(
+                    windows::core::PCWSTR(ad.as_ptr()),
+                    ENUM_CURRENT_SETTINGS,
+                    &mut mod_,
+                );
+                // 0 ve 1, "varsayılan/bilinmiyor" için ayrılmış değerler.
+                (ok.as_bool() && mod_.dmDisplayFrequency > 1)
+                    .then_some(mod_.dmDisplayFrequency)
+            }
+        }
+
         /// Çoğaltmayı kapatıp yeniden açar.
         ///
         /// `ErisimKesildi` sonrası tek doğru davranış bu: ekran modu

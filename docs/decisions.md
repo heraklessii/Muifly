@@ -1094,3 +1094,107 @@ sonucu görünmüyor — yani sistem çalışıyor, kullanıcı göremiyor.
 kare durmaya devam ediyor. Bu artık kilitlenme değil — kısayol çalışıyor —
 ama "donmuş görüntü" hâlâ mümkün ve gerçek oyunla denemede bakılacak
 (`tasks.md` → Sıradaki 7).
+
+---
+
+## #35 — Faz 4: kare üretimi ML'siz yazıldı
+
+**Soru neydi**: `ROADMAP.md` Faz 4'ü "özel eğitilmiş ML modeli" olarak
+tanımlıyor ve kabul kriteri olarak ayrı bir fizibilite değerlendirmesi
+istiyor. Proje sahibi Faz 4'ün tamamlanmasını istedi.
+
+**Bulgu**: Yol haritası fazı yanlış çerçevelemiş. **Kare üretimi ML
+gerektirmiyor.** Referans aldığımız Lossless Scaling'in ilk kare üreteci
+(LSFG 1.0) klasik bir algoritmaydı; ML sonradan, kalite yükseltmesi olarak
+geldi. Faz 4 tek parça bir dağ değil, iki basamak: klasik yol (4a) ve ML
+yükseltmesi (4b). Bu ayrım yapılmasaydı ulaşılabilir olan bir özellik,
+ulaşılmaz olanın arkasında bekleyecekti.
+
+**Karar**: 4a yazıldı, 4b yazılmadı ve gerekçesi
+`docs/FRAME_GENERATION.md`'de sayılarla duruyor.
+
+### Uygulanan algoritma
+
+Parlaklık piramidi → üç seviyeli blok eşleme (16 px blok, kabadan inceye)
+→ 3×3 ortanca → çift yönlü warp + karışım. CPU referansı `hareket.rs`,
+gerçek zamanlı yol `uretim.hlsl`, boru hattı `uretim.rs`.
+
+Seçimlerin gerekçeleri:
+
+- **Blok eşleme, piksel başına optik akış değil.** Izgara 1920×1080'de
+  120×68'e düşüyor; arama maliyetinin katlanabilir olmasının tek sebebi
+  bu. Piksel başına akış daha iyi bir alan üretirdi ama bütçeye sığmıyor.
+- **Üç seviye, iki değil.** İki seviye yazıldı ve **testte düştü**: kaba
+  seviye vektörü dört pikselin katına yuvarlıyor, dar bir düzeltme
+  penceresi o yuvarlamayı kapatamıyor. 5 piksellik kaydırma 3 ölçülüyordu.
+- **Ortanca, ortalama değil.** Ortalama tek bir yanlış vektörü
+  komşularına bulaştırıyor.
+- **Örtüşmede karışım yok.** İki yön birbirini tutmuyorsa oradaki piksel
+  önceki karede yok; ortalaması hayalet üretir. Zaman olarak yakın kare
+  seçiliyor — sonuç "yanlış" değil, "üretilmemiş".
+
+### Doğruluk gözle değil, sentetik gerçek-referansla
+
+Kare üretiminin doğru çalıştığı gözle anlaşılmıyor: yanlış bir hareket
+vektörü "biraz bulanık" görünür, hata gibi durmaz. Bu yüzden `hareket.rs`
+bilinen kaydırma uygulanmış kareler verip çıkan vektörü ölçüyor, ve
+üretilen ara karenin "önceki kareyi tekrarlamak"tan belirgin olarak daha
+yakın olmasını arıyor.
+
+Bu testler bir kez gerçekten işe yaradı ve bir kez de **yanlış yere
+baktırdı**: ilk test deseni `(x·7 + y·13) mod 37` idi ve o desende (15, 9)
+kaydırması görüntüyü birebir tekrar ediyor (7·15 + 13·9 = 222 = 6·37).
+Yani blok eşleme için mükemmel bir sahte eşleşme vardı; testler algoritmayı
+suçladı, kusur desendeydi. Desen karıştırıcı (hash) tabanlıya çevrildi.
+
+**Ders**: sentetik test verisi de bir tasarım kararıdır ve periyodik bir
+desen, eşleşme algoritmalarını test etmek için en kötü seçimdir.
+
+### Bedel ve iki kapı
+
+Ara kare iki **gerçek** kare arasına giriyor: ikinci gerçek kare elde
+tutuluyor ve bir sunum turu geç gösteriliyor. Kaynak 60 kare/s ise ~17 ms
+ve bu bekleme **algoritmanın hızıyla azalmıyor** — sonsuz hızlı bir GPU'da
+bile duruyor, çünkü beklenen şey hesap değil bilgi.
+
+Bunun iki sonucu koda girdi:
+
+1. **Rekabetçi modda kapalı** — profil şemasında ve `Motor`da iki kapı.
+   Şemadaki genel kapı ("Faz 4 henüz yok") kaldırıldı, rekabetçi kapı
+   kalıcı.
+2. **Yenileme hızı okunuyor** (`UYUMLU_YENILEME_HZ`). Her gerçek kare için
+   iki sunum turu harcanıyor; ekran kaynaktan belirgin olarak hızlı
+   değilse üretilen kare, gerçek karelerin sırasını bekletmekten başka bir
+   işe yaramıyor. Kullanıcıya söyleniyor.
+
+Varsayılan **kapalı**. Gecikme ekleyen bir özelliğin kendiliğinden açık
+gelmesi, kullanıcının istemediği bir bedeli sessizce ödetmek olurdu.
+
+### Reddedilenler
+
+- **3x/4x çarpanlar.** Aynı iki kareden birden fazla ara kare üretmek,
+  aynı hareket alanına dayandığı için hatayı da çoğaltıyor; üstelik
+  bekleme süresi değişmiyor, yani gecikme bedeli aynı kalırken kalite
+  düşüyor. `Carpan` tek seçenekli ve bu testle korunuyor.
+- **"Kaç kare/s kazandırır" ölçüsü.** Ölçülen şey bedel; üretilen kare
+  sayısı gösteriliyor ama o karelerin ne kadar iyi olduğu bu modülün
+  ölçemediği bir şey. Rakiplerin tamamı bu sayıyı reklam olarak
+  kullanıyor; tasarım ilkesi 4 burada da geçerli ve testle korunuyor
+  (`uretim_metinlerinde_sayisal_vaat_yok`).
+- **Kare üretimi hazırlanamazsa ölçeklemeyi de kapatmak.** Kare üretimi
+  olmadan ölçekleme çalışan bir özellik; ikisini bağlamak, bellek
+  yetmediğinde çalışan tarafı da kapatmak olurdu.
+
+### Faz disiplini — üçüncü kez taşınan risk
+
+Faz 1'in saha doğrulaması hâlâ yapılmadı. Faz 3 bu kurala rağmen yazıldı
+(karar #33), 4a da öyle. Bu **iki kez taşınan bir risk** ve
+`FRAME_GENERATION.md` üçüncüye çıkarılmamasını gerekçelendiriyor: 4b'nin
+açılma koşulu, 4a'nın en az 5 oyunda denenmiş ve kusurlarının hangisinin
+ML ile kapanacağının listelenmiş olması.
+
+### Kalan
+
+4a'nın hiçbir parçası gerçek bir oyunla **gözle** denenmedi. Birim
+testleri hareket vektörünün doğru olduğunu gösteriyor, görüntünün iyi
+göründüğünü göstermiyor. `tasks.md` → Sıradaki 8.

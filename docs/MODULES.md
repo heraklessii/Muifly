@@ -62,7 +62,9 @@ generation (Faz 4).
 | Kaçış kısayolu | `RegisterHotKey` (kanca değil) | ✅ Yukarıdaki beş bayrak birlikte kapatılamayan bir kutu yapıyor; kısayol kaydedilemezse ölçekleme başlamıyor (karar #34) |
 | Hedef önde değilken | Sunum penceresi gizleniyor | ✅ Masaüstünde ve Muifly'a bakarken ekran kullanıcıya kalıyor; hedef unutulmuyor (karar #34) |
 | Gecikme ölçümü | Kare başına yakalama/sunum süreleri | ✅ Eklenen bedel; kazanç iddiası taşımıyor |
-| Frame generation (Faz 4) | Özel eğitilmiş ML modeli (LSFG benzeri) | ⬜ Faz 1-3 sahada doğrulanmadan başlanmaz |
+| Kare üretimi (Faz 4a) | Piramitli blok eşleme + çift yönlü warp, HLSL | ✅ ML yok. Varsayılan kapalı, rekabetçi modda kapalı; bir kareyi elde tutuyor ve bu bedel algoritma hızıyla azalmıyor (karar #35) |
+| Kare üretimi doğruluğu | `hareket.rs` CPU referansı + sentetik gerçek-referans | ✅ Bilinen kaydırma → beklenen vektör; gözle değil testle |
+| Frame generation ML (Faz 4b) | Eğitilmiş model | ⬜ Fizibilite yapıldı, **açılmadı** — `docs/FRAME_GENERATION.md` |
 | İkinci GPU offload | Çoklu adaptör (iGPU+dGPU) tespiti ve hesaplama dağıtımı | ⬜ Faz 3/4 sonrası "nice to have" |
 
 **Kritik**: Bu modül oyun process'ine HİÇBİR ŞEY enjekte etmez, sadece ekranı okur.

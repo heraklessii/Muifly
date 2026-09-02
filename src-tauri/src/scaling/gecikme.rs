@@ -34,6 +34,12 @@ pub const KAPASITE: usize = 600;
 pub struct KareOlcumu {
     pub yakalama_us: u32,
     pub olcekleme_us: u32,
+    /// Kare üretiminin (Faz 4) bu turda harcadığı CPU süresi.
+    ///
+    /// Ayrı bir alan, çünkü kullanıcının sorduğu soru "kare üretimi
+    /// bana ne kadara mal oluyor" — ölçeklemeyle toplanmış bir sayı o
+    /// soruyu cevaplamıyor. Üretim kapalıyken sıfır.
+    pub uretim_us: u32,
     pub sunum_us: u32,
 }
 
@@ -41,6 +47,7 @@ impl KareOlcumu {
     pub fn toplam_us(&self) -> u32 {
         self.yakalama_us
             .saturating_add(self.olcekleme_us)
+            .saturating_add(self.uretim_us)
             .saturating_add(self.sunum_us)
     }
 }
@@ -64,7 +71,22 @@ pub struct GecikmeOzeti {
     pub en_kotu_ms: f32,
     pub yakalama_ort_ms: f32,
     pub olcekleme_ort_ms: f32,
+    /// Kare üretiminin kare başına ortalama CPU süresi (Faz 4).
+    pub uretim_ort_ms: f32,
     pub sunum_ort_ms: f32,
+    /// Bu pencerede üretilen (gerçek olmayan) kare sayısı.
+    ///
+    /// Kullanıcının gördüğü karelerin kaçının üretildiğini söylüyor.
+    /// Bir "kaç kare/s kazandın" iddiası **değil**: kaç karenin
+    /// hesaplandığı, o karelerin ne kadar iyi olduğundan ayrı bir bilgi
+    /// ve ikincisini bu modül ölçemiyor (karar #35).
+    pub uretilen_kare: u64,
+    /// Kare üretiminin bu makinede anlamlı olup olmadığı.
+    ///
+    /// Ekran yenileme hızı kaynaktan belirgin olarak yüksek değilse
+    /// üretilen kare, gerçek karelerin sırasını bekletmekten başka bir işe
+    /// yaramıyor. `None` ölçülemedi demek.
+    pub yenileme_hz: Option<u32>,
     /// Yakalamanın yeni kare veremediği tur sayısı.
     ///
     /// Hata değil: oyun o anda yeni kare üretmediyse Desktop Duplication
@@ -79,6 +101,8 @@ pub struct GecikmeTamponu {
     olcumler: std::collections::VecDeque<KareOlcumu>,
     kapasite: usize,
     bos_tur: u64,
+    uretilen_kare: u64,
+    yenileme_hz: Option<u32>,
 }
 
 impl GecikmeTamponu {
@@ -87,6 +111,8 @@ impl GecikmeTamponu {
             olcumler: std::collections::VecDeque::with_capacity(kapasite.min(4096)),
             kapasite: kapasite.max(1),
             bos_tur: 0,
+            uretilen_kare: 0,
+            yenileme_hz: None,
         }
     }
 
@@ -110,9 +136,15 @@ impl GecikmeTamponu {
         self.olcumler.is_empty()
     }
 
+    /// Ölçümleri siler.
+    ///
+    /// Yenileme hızı KORUNUYOR: o, ölçülen bir performans değeri değil,
+    /// makinenin bir özelliği. Algoritma değişince yeniden okumak
+    /// gereksiz bir sistem çağrısı olurdu.
     pub fn temizle(&mut self) {
         self.olcumler.clear();
         self.bos_tur = 0;
+        self.uretilen_kare = 0;
     }
 
     /// Özet.
@@ -138,9 +170,22 @@ impl GecikmeTamponu {
             en_kotu_ms: *toplamlar.last().unwrap() as f32 / 1000.0,
             yakalama_ort_ms: ort(|o| o.yakalama_us),
             olcekleme_ort_ms: ort(|o| o.olcekleme_us),
+            uretim_ort_ms: ort(|o| o.uretim_us),
             sunum_ort_ms: ort(|o| o.sunum_us),
+            uretilen_kare: self.uretilen_kare,
+            yenileme_hz: self.yenileme_hz,
             bos_tur: self.bos_tur,
         })
+    }
+
+    /// Bir kare üretildi.
+    pub fn uretildi(&mut self) {
+        self.uretilen_kare = self.uretilen_kare.saturating_add(1);
+    }
+
+    /// Ekranın yenileme hızını kaydeder (bir kez, açılışta).
+    pub fn yenileme_ata(&mut self, hz: Option<u32>) {
+        self.yenileme_hz = hz;
     }
 }
 
@@ -168,6 +213,7 @@ mod testler {
             yakalama_us: y,
             olcekleme_us: o,
             sunum_us: s,
+            ..Default::default()
         }
     }
 

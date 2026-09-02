@@ -265,8 +265,14 @@ export interface GecikmeOzeti {
   enKotuMs: number;
   yakalamaOrtMs: number;
   olceklemeOrtMs: number;
+  /** Kare üretiminin (Faz 4) kare başına ortalama CPU süresi. */
+  uretimOrtMs: number;
   /** Dikey eşitleme beklemesi de bunun içinde. */
   sunumOrtMs: number;
+  /** Bu pencerede üretilen kare sayısı — bir kazanç iddiası değil. */
+  uretilenKare: number;
+  /** Ekran yenileme hızı (Hz), ölçülebildiyse. */
+  yenilemeHz: number | null;
   bosTur: number;
 }
 
@@ -289,6 +295,14 @@ export interface OlceklemeDurumu {
   hedefBekleniyor: boolean;
   /** Döngü kaçış kısayoluyla mı durdu? Günlüğe arka plan döngüsü yazıyor. */
   kacislaDurduruldu: boolean;
+  /** Kare üretimi (Faz 4) şu an açık mı? */
+  uretimAcik: boolean;
+  /** Kare üretimi bu oturumda kullanılabilir mi? `false` ise hazırlanamadı. */
+  uretimKullanilabilir: boolean;
+  /** Ekranın yenileme hızı (Hz), okunabildiyse. */
+  yenilemeHz: number | null;
+  /** Kare üretimi beklendiği gibi çalışmayabilir — sebebi yazılı. */
+  uretimUyarisi: string | null;
 }
 
 export interface YakalamaDenemesi {

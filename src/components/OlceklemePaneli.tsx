@@ -270,6 +270,61 @@ export function OlceklemePaneli({
         </div>
       </div>
 
+      {/*
+        --- Kare üretimi (Faz 4) --------------------------------------
+        Bedeli anahtardan ÖNCE yazıyor. Bu panelin 1 numaralı kuralının
+        (dosya başı) kare üretimindeki karşılığı: burada eklenen gecikme
+        ölçekleminkinden farklı, çünkü algoritma hızlandıkça azalmıyor.
+      */}
+      <div className="panel">
+        <div className="panel__baslik">Kare üretimi</div>
+        <p className="panel__aciklama">
+          İki gerçek kare arasına, ikisinden hesaplanmış bir kare koyar.
+          Hareket tahmini ekran görüntüsünden yapılır;{' '}
+          <strong>oyunun kendisine yine dokunulmaz</strong>.
+        </p>
+        <p className="panel__aciklama">
+          <strong>Bedeli ölçeklemeninkinden farklı:</strong> ara kare, iki
+          gerçek karenin <em>ikisi de</em> elde olmadan hesaplanamaz. Yani
+          ikinci gerçek kare bir sunum turu bekletilir. Bu bekleme daha hızlı
+          bir ekran kartıyla <em>azalmaz</em> — kare üretiminin tanımında
+          vardır. Aşağıdaki "Kare üretimi" satırı yalnızca hesabın CPU
+          süresini gösterir, bu beklemeyi değil.
+        </p>
+
+        {durum?.uretimUyarisi && (
+          <div className="serit uyari">
+            <IconUyari />
+            <div>
+              <strong>Bu makinede beklendiği gibi çalışmayabilir.</strong>
+              <p>{durum.uretimUyarisi}</p>
+            </div>
+          </div>
+        )}
+
+        <label className="secim-satir">
+          <input
+            type="checkbox"
+            checked={durum?.uretimAcik ?? false}
+            disabled={!calisiyor || durum?.uretimKullanilabilir === false}
+            onChange={(e) =>
+              onIslem(async () => {
+                await api.olceklemeUretimi(e.target.checked);
+                durumuOku();
+              })
+            }
+          />
+          <span className="secim-satir__govde">
+            <span className="secim-satir__ad">Kare üretimini aç</span>
+            <span className="secim-satir__alt">
+              {calisiyor
+                ? 'Açıp kapatmak ekranı karartmaz — farkı aynı sahnede görebilirsin.'
+                : 'Ölçekleme çalışırken açılabilir.'}
+            </span>
+          </span>
+        </label>
+      </div>
+
       {/* --- Ekran -------------------------------------------------------- */}
       <div className="panel">
         <div className="panel__baslik">Ekran</div>
@@ -352,10 +407,28 @@ export function OlceklemePaneli({
                 <span className="kv__ad">Yakalama</span>
                 <span className="kv__deger">{milisaniye(gecikme.yakalamaOrtMs, 2)}</span>
               </div>
+              {gecikme.uretilenKare > 0 && (
+                <div className="kv">
+                  <span className="kv__ad">Kare üretimi (hesap süresi)</span>
+                  <span className="kv__deger">{milisaniye(gecikme.uretimOrtMs, 2)}</span>
+                </div>
+              )}
               <div className="kv">
                 <span className="kv__ad">Sunum (dikey eşitleme beklemesi dahil)</span>
                 <span className="kv__deger">{milisaniye(gecikme.sunumOrtMs, 2)}</span>
               </div>
+              {gecikme.uretilenKare > 0 && (
+                <div className="kv">
+                  <span className="kv__ad">Üretilen kare</span>
+                  <span className="kv__deger">{sayi(gecikme.uretilenKare, 0)}</span>
+                </div>
+              )}
+              {gecikme.yenilemeHz != null && (
+                <div className="kv">
+                  <span className="kv__ad">Ekran yenileme</span>
+                  <span className="kv__deger">{gecikme.yenilemeHz} Hz</span>
+                </div>
+              )}
               <div className="kv">
                 <span className="kv__ad">Yeni kare gelmeyen tur</span>
                 <span className="kv__deger">{sayi(gecikme.bosTur, 0)}</span>

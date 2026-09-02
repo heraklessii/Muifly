@@ -354,6 +354,11 @@ impl Motor {
                 cikti.atlanan.push(m);
             } else {
                 let ekran = self.ayarlar.olcekleme_ekrani;
+                // Kare üretimi (Faz 4) profilden geliyor. Şemadaki
+                // doğrulama rekabetçi profillerde bunu zaten kapatıyor;
+                // buradaki atama o kararı taşıyor, yeniden vermiyor.
+                self.olcekleyici
+                    .uretim_ata(profil.scaling.frame_generation);
                 match self.olcekleyici.baslat(ekran, algo) {
                     Ok(()) => {
                         let ozet = format!("ölçekleme başladı ({})", algo.ad());
@@ -570,6 +575,33 @@ impl Motor {
 
     pub fn olcekleme_durumu(&self) -> crate::scaling::OlceklemeDurumu {
         self.olcekleyici.durum()
+    }
+
+    /// Kare üretimini (Faz 4) açar/kapatır.
+    ///
+    /// Rekabetçi modda **açılmıyor**: kare üretimi tanımı gereği bir kareyi
+    /// elde tutuyor ve rekabetçi mod tam olarak o beklemeyi en aza indirmek
+    /// için var. Profil şemasındaki kapının çalışma zamanı eşi — kullanıcı
+    /// rekabetçi modu sonradan işaretlemiş olabilir.
+    ///
+    /// Günlüğe yazıyor: gecikme ekleyen bir özelliğin ne zaman açıldığı,
+    /// kullanıcının sonradan "neden böyle hissediyor" sorusunun cevabı.
+    pub fn olcekleme_uretimi(&mut self, acik: bool) -> Result<()> {
+        if acik && (!crate::scaling::moda_uygun(&self.mod_) || self.ayarlar.rekabetci_mod) {
+            return Err(crate::error::Error::ProfileInvalid(
+                "rekabetçi modda kare üretimi kapalı (bir kareyi elde tutuyor)".into(),
+            ));
+        }
+        self.olcekleyici.uretim_ata(acik);
+        self.gunluk.bilgi(
+            Kategori::Sistem,
+            if acik {
+                "kare üretimi açıldı"
+            } else {
+                "kare üretimi kapatıldı"
+            },
+        );
+        Ok(())
     }
 
     pub fn gecmis_ozeti(&self) -> GecmisOzeti {

@@ -156,6 +156,7 @@ pub fn run() {
             commands::olcekleme_baslat,
             commands::olcekleme_durdur,
             commands::olcekleme_algoritma,
+            commands::olcekleme_uretimi,
             commands::olcekleme_denemesi,
         ])
         .build(tauri::generate_context!())

@@ -56,19 +56,47 @@ gerektirmiyor, mevcut Rust/Windows sistem deneyimiyle doğrudan örtüşüyor.
 **Not**: Bu faza, Faz 1'in saha doğrulaması yapılmadan başlandı — gerekçe ve
 taşınan risk `decisions.md` #33'te. Kalan işler `tasks.md` → Sıradaki 7.
 
-## Faz 4 — ML Tabanlı Frame Generation (uzun vadeli)
+## Faz 4 — Frame Generation
 
-**Kapsam**: Lossless Scaling'in LSFG'sine benzer, iki ardışık frame'i analiz edip
-aralarına yapay bir frame üreten özel eğitilmiş model.
+> Bu faz **ikiye ayrıldı** (karar #35). Önceki hali tek parça "ML tabanlı
+> frame generation" idi ve fazı yanlış çerçeveliyordu: kare üretimi ML
+> gerektirmiyor. Referans aldığımız Lossless Scaling'in ilk kare üreteci de
+> klasik bir algoritmaydı; ML sonradan, kalite yükseltmesi olarak geldi.
 
-**Not**: Bu faz, Faz 1-3'ten çok daha büyük bir mühendislik yatırımı gerektirir
-(ML model eğitimi, veri toplama, GPU inference optimizasyonu). Solo geliştirici
-için bu, referans aldığımız Lossless Scaling'in kendisinin de yedi yıllık bir
-evrimle ulaştığı bir nokta. İlk sürümlerde bu faza girilmesi ZORUNLU DEĞİL —
-ürün Faz 1-3 ile de bağımsız bir değer önerisi sunabilir.
+### Faz 4a — Klasik kare üretimi ✅
 
-**Kabul kriterleri**: Bu faza başlanmadan önce ayrı bir fizibilite değerlendirmesi
-yapılmalı (gerekli veri seti, eğitim maliyeti, inference hızı hedefleri).
+**Kapsam**: İki ardışık kare arasında hareket tahmini (piramitli blok
+eşleme) yapıp aralarına bir kare koyan boru hattı. ML yok, model yok,
+indirilen ağırlık yok.
+
+**Durum**: Kod, gölgelendirici, arayüz ve testler tamam (karar #35).
+Doğruluk sentetik gerçek-referansla ölçülüyor — bilinen bir kaydırma
+uygulanmış iki kare veriliyor ve çıkan vektörün o kaydırma olması
+bekleniyor.
+
+**Kabul kriterleri**:
+- [x] Hareket tahmini bilinen kaydırmayı buluyor
+- [x] Eklenen bedel ölçülüyor ve kullanıcıya gösteriliyor
+- [x] Rekabetçi modda kapalı (profil şeması + çalışma zamanı, iki kapı)
+- [x] Ekran yenileme hızı okunup uygunsuzluk söyleniyor
+- [ ] **En az 5 oyunda gözle denenmiş** — `tasks.md` → Sıradaki 8
+
+### Faz 4b — ML tabanlı kare üretimi ⬜
+
+**Kapsam**: 4a'nın zayıf olduğu yerleri (örtüşme, hızlı kamera hareketi,
+saydam efektler, arayüz katmanları) kapatan eğitilmiş model. 4a'nın yerine
+geçmiyor, üstüne biniyor.
+
+**Fizibilite değerlendirmesi yapıldı**: `docs/FRAME_GENERATION.md`.
+Veri seti, eğitim maliyeti, inference bütçesi ve dağıtım etkisi orada.
+
+**Sonuç: şu an açılmıyor.** Gerekçe maliyet değil sıralama — 4a sahada
+doğrulanmadan onu iyileştirecek bir modele yatırım yapmak, çözülmemiş bir
+problemi optimize etmek olur.
+
+**Açılma koşulu**: 4a en az 5 oyunda denenmiş ve görülen kusurların
+**hangisinin** ML ile kapanacağı listelenmiş olmalı. O liste olmadan 4b'nin
+neyi çözeceği bilinmiyor demektir.
 
 ## Faz 5 — Ekran Çevirisi (değerlendiriliyor, kapsamı karara bağlı)
 

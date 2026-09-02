@@ -28,6 +28,7 @@ vi.mock('../lib/api', () => ({
   olceklemeDurdur: vi.fn(async () => undefined),
   olceklemeAlgoritma: vi.fn(async () => undefined),
   olceklemeDenemesi: vi.fn(),
+  olceklemeUretimi: vi.fn(async () => undefined),
 }));
 
 const sahte = vi.mocked(api);
@@ -46,6 +47,10 @@ const BOS_DURUM: OlceklemeDurumu = {
   durdurmaKisayoli: null,
   hedefBekleniyor: false,
   kacislaDurduruldu: false,
+  uretimAcik: false,
+  uretimKullanilabilir: true,
+  yenilemeHz: null,
+  uretimUyarisi: null,
 };
 
 const ALGORITMALAR = [
@@ -139,7 +144,10 @@ describe('OlceklemePaneli', () => {
         enKotuMs: 14,
         yakalamaOrtMs: 0.8,
         olceklemeOrtMs: 0,
+        uretimOrtMs: 0,
         sunumOrtMs: 1.7,
+        uretilenKare: 0,
+        yenilemeHz: null,
         bosTur: 12,
       },
     });
@@ -201,6 +209,83 @@ describe('OlceklemePaneli', () => {
       const secim = screen.getByRole('radio', { name: /DISPLAY1/i }) as HTMLInputElement;
       expect(secim.disabled).toBe(true);
     });
+  });
+
+  it('kare üretiminin bedelini anahtardan önce yazıyor', async () => {
+    // Faz 4'ün bedeli ölçeklemeninkinden farklı: bir kareyi elde tutuyor ve
+    // bu bekleme daha hızlı donanımla azalmıyor. Anahtarın yanında bunu
+    // söylemeyen bir ekran, kullanıcıya bilmediği bir bedel ödetirdi.
+    panel();
+    expect(screen.getByText(/ikinci gerçek kare bir sunum turu bekletilir/i)).toBeTruthy();
+    expect(screen.getByText(/daha hızlı bir ekran kartıyla/i)).toBeTruthy();
+  });
+
+  it('kare üretimi ölçekleme kapalıyken açılamıyor', async () => {
+    panel();
+    const anahtar = screen.getByRole('checkbox', {
+      name: /kare üretimini aç/i,
+    }) as HTMLInputElement;
+    expect(anahtar.disabled).toBe(true);
+  });
+
+  it('kare üretimi hazırlanamadıysa anahtar kapalı ve sebebi yazılı', async () => {
+    sahte.olceklemeDurumu.mockResolvedValue({
+      ...BOS_DURUM,
+      calisiyor: true,
+      uretimKullanilabilir: false,
+      uretimUyarisi: 'Kare üretimi bu oturumda hazırlanamadı; ölçekleme üretimsiz çalışıyor.',
+    });
+    panel();
+    await waitFor(() => expect(screen.getByText(/hazırlanamadı/i)).toBeTruthy());
+    const anahtar = screen.getByRole('checkbox', {
+      name: /kare üretimini aç/i,
+    }) as HTMLInputElement;
+    expect(anahtar.disabled).toBe(true);
+  });
+
+  it('kare üretimi açılırken yeniden başlatmıyor', async () => {
+    sahte.olceklemeDurumu.mockResolvedValue({ ...BOS_DURUM, calisiyor: true });
+    const kullanici = userEvent.setup();
+    panel();
+    await waitFor(() => {
+      const a = screen.getByRole('checkbox', { name: /kare üretimini aç/i }) as HTMLInputElement;
+      expect(a.disabled).toBe(false);
+    });
+
+    await kullanici.click(screen.getByRole('checkbox', { name: /kare üretimini aç/i }));
+
+    await waitFor(() => expect(sahte.olceklemeUretimi).toHaveBeenCalledWith(true));
+    // Farkın aynı sahnede görülebilmesi şart: yeniden başlatma yok.
+    expect(sahte.olceklemeDurdur).not.toHaveBeenCalled();
+    expect(sahte.olceklemeBaslat).not.toHaveBeenCalled();
+  });
+
+  it('üretilen kare sayısını bir kazanç iddiası olarak sunmuyor', async () => {
+    sahte.olceklemeDurumu.mockResolvedValue({
+      ...BOS_DURUM,
+      calisiyor: true,
+      uretimAcik: true,
+      gecikme: {
+        kareSayisi: 300,
+        ortMs: 3.1,
+        p1KotuMs: 9,
+        enKotuMs: 14,
+        yakalamaOrtMs: 0.8,
+        olceklemeOrtMs: 0,
+        uretimOrtMs: 1.2,
+        sunumOrtMs: 1.7,
+        uretilenKare: 150,
+        yenilemeHz: 144,
+        bosTur: 0,
+      },
+    });
+    panel();
+    await waitFor(() => expect(screen.getByText(/üretilen kare/i)).toBeTruthy());
+    // Tasarım ilkesi 4: ekranda bir hızlanma/akıcılık iddiası yok.
+    const metin = document.body.textContent?.toLowerCase() ?? '';
+    for (const yasak of ['kat hızlı', 'daha akıcı', 'fps artışı', 'kazandırır']) {
+      expect(metin).not.toContain(yasak);
+    }
   });
 
   it('ekran listesi okunamazsa sebebi yazılıyor', async () => {

@@ -123,6 +123,39 @@ Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
 - [ ] **Oyun kapanınca pencere kapanıyor mu.** `oturumu_kapat` ölçeklemeyi
       durduruyor; ekranda kalan siyah bir pencere en görünür hata olurdu.
 
+### 8. Kare üretiminin gerçek bir oyunda denenmesi (Faz 4a)
+
+Kod ve testler tamam (karar #35). Hareket tahmini sentetik gerçek-referansa
+karşı doğrulandı ve gölgelendirici derleniyor. Ama **görüntünün doğru
+göründüğünü ancak göz söyler** — birim testleri yanlış bir vektörün ekranda
+nasıl durduğunu göremez. Sırayla:
+
+- [x] Hareket tahmini bilinen kaydırmayı buluyor (`hareket::testler`)
+- [x] Gölgelendirici derleniyor (`golgelendirici_derleniyor`)
+- [x] Gölgelendirici sabitleri CPU referansıyla aynı
+      (`sabitler_referansla_ayni`)
+- [ ] **Ara kare makul görünüyor mu.** Ölçekleme çalışırken "Kare
+      üretimini aç". Hareketli bir sahnede, üretilen karede yırtılma,
+      hayalet iz ya da 16 pikselde bir basamak **olmamalı**. Basamak
+      görünüyorsa ızgara örneklemesi, hayalet iz görünüyorsa örtüşme eşiği
+      bakılacak.
+- [ ] **Açıp kapatmak ekranı karartmıyor mu.** Anahtar çalışırken
+      değiştirilebilmeli; farkın aynı sahnede görülebilmesinin tek yolu bu.
+- [ ] **Hızlı kamera hareketi.** ±24 pikselden hızlı hareket sınırın
+      dışında; orada üretilen kare "karışım yerine en yakın gerçek kare"ye
+      düşmeli, bozulmamalı.
+- [ ] **Arayüz katmanı ve yazı.** Oyun arayüzü (HUD, menü) sabit durur
+      ama arkası hareket eder; kare üretiminin klasik zayıf noktası burası.
+      Yazının titreyip titremediğine bakılacak.
+- [ ] **Ölçülen bedel makul mü.** "Kare üretimi (hesap süresi)" satırı.
+      Ekran yenileme aralığına yakınsa boru hattı sığmıyor demektir.
+- [ ] **Yenileme hızı uyarısı.** 60 Hz bir ekranda uyarı çıkıyor mu;
+      yüksek yenilemeli ekranda çıkmıyor mu.
+- [ ] **Rekabetçi mod kapısı.** Rekabetçi moda geçilince kare üretimi
+      gerçekten kapanıyor mu (iki kapı da: profil ve çalışma zamanı).
+- [ ] **Kusur listesi.** Görülen her kusur yazılacak — `FRAME_GENERATION.md`
+      §5'e göre Faz 4b'nin (ML) açılma koşulu bu listenin varlığı.
+
 ## Değerlendirilecek
 
 - **Ölçekleme demo ikilisinde açık kalsın mı?** Şu an açık: `surum.rs`'teki

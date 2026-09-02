@@ -159,6 +159,9 @@ export const olceklemeDurdur = () => invoke<void>('olcekleme_durdur');
 /** Çalışırken algoritma değiştirir; ekran kararmıyor. */
 export const olceklemeAlgoritma = (algoritma: AlgoritmaAnahtari) =>
   invoke<void>('olcekleme_algoritma', { algoritma });
+/** Kare üretimini (Faz 4) çalışırken açar/kapatır. */
+export const olceklemeUretimi = (acik: boolean) =>
+  invoke<void>('olcekleme_uretimi', { acik });
 /** Pencereyi açmadan yakalamanın çalışıp çalışmadığını dener. */
 export const olceklemeDenemesi = () => invoke<YakalamaDenemesi>('olcekleme_denemesi');
 

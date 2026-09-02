@@ -28,11 +28,14 @@
 
 pub mod algoritma;
 pub mod gecikme;
+pub mod hareket;
 pub mod sunum;
+pub mod uretim;
 pub mod yakalama;
 
 pub use algoritma::{Algoritma, Goruntu};
 pub use gecikme::{GecikmeOzeti, GecikmeTamponu, KareOlcumu};
+pub use hareket::Carpan;
 pub use yakalama::{Ekran, Engel};
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -102,7 +105,32 @@ pub struct OlceklemeDurumu {
     /// durduran her yol günlükte görünmeli, kısayolla durdurulan da
     /// (şeffaflık ilkesi — `lib.rs::arka_plan_dongusu`).
     pub kacisla_durduruldu: bool,
+    /// Kare üretimi (Faz 4) şu an açık mı?
+    pub uretim_acik: bool,
+    /// Kare üretimi bu oturumda **kullanılabilir** mi?
+    ///
+    /// `false` ise boru hattı hazırlanamadı (bellek ya da sürücü) ve
+    /// ölçekleme üretimsiz sürüyor. Ayrı bir alan, çünkü "kapalı" ile
+    /// "açılamaz" kullanıcı için farklı iki durum.
+    pub uretim_kullanilabilir: bool,
+    /// Ekranın yenileme hızı (Hz), okunabildiyse.
+    pub yenileme_hz: Option<u32>,
+    /// Kare üretimi bu makinede beklendiği gibi çalışmayabilir.
+    ///
+    /// `uyari`dan ayrı, çünkü konusu ölçekleme değil kare üretimi ve
+    /// kullanıcı özelliği kapatarak bundan kurtulabiliyor. Tek bir alanda
+    /// birleştirilseydi, üretim kapalıyken de üretimle ilgili bir uyarı
+    /// gösterilirdi.
+    pub uretim_uyarisi: Option<String>,
 }
+
+/// Kare üretiminin anlamlı olması için gereken en düşük yenileme hızı.
+///
+/// 60 Hz'de 60 kare/s üreten bir kaynağa ara kare eklemek, gerçek
+/// karelerin yarısını beklemeye almak demek — görüntüyü hızlandırmak değil
+/// yavaşlatmak. Sayı bir vaat değil, boru hattının aritmetiği: her gerçek
+/// kare için iki sunum turu harcanıyor.
+pub const UYUMLU_YENILEME_HZ: u32 = 90;
 
 /// Arayüzdeki algoritma listesi.
 ///
@@ -184,6 +212,36 @@ pub fn deneme(ekran: usize) -> Result<YakalamaDenemesi, Engel> {
     }
 }
 
+/// Kare üretimiyle ilgili uyarı metni.
+///
+/// Saf fonksiyon: sistemi okumuyor, verilen iki gerçeğe bakıp cümleyi
+/// kuruyor. Testi bu yüzden mümkün.
+///
+/// Cümlede sayısal vaat yok (tasarım ilkesi 4): "şu kadar kazandırır"
+/// demiyor, ölçülen yenileme hızını ve boru hattının aritmetiğini
+/// söylüyor. Kullanıcı kararı kendi veriyor.
+pub fn uretim_uyarisi(yenileme_hz: Option<u32>, kullanilabilir: bool) -> Option<String> {
+    if !kullanilabilir {
+        return Some(
+            "Kare üretimi bu oturumda hazırlanamadı; ölçekleme üretimsiz \
+             çalışıyor."
+                .to_string(),
+        );
+    }
+    match yenileme_hz {
+        // Ölçülemedi: uyarı da yok. Olmayan bir ölçüme dayanarak
+        // kullanıcıyı uyarmak, tasarım ilkesi 4'ün yasakladığı şey.
+        None => None,
+        Some(hz) if hz < UYUMLU_YENILEME_HZ => Some(format!(
+            "Bu ekran {hz} Hz. Kare üretimi her gerçek kare için iki sunum \
+             turu harcıyor; ekran kaynaktan belirgin olarak hızlı değilse \
+             üretilen kare, gerçek karelerin sırasını bekletmekten başka \
+             bir işe yaramıyor."
+        )),
+        Some(_) => None,
+    }
+}
+
 /// Ölçeklemenin bu modda çalışmasına izin var mı?
 ///
 /// Saf fonksiyon: sistemi okumuyor, karar veriyor.
@@ -204,6 +262,12 @@ pub struct Olcekleyici {
     /// Çalışırken algoritma değiştirilebiliyor: yeniden başlatmak, ekranın
     /// bir anlığına kararması demek olurdu.
     algoritma: Arc<AtomicU8>,
+    /// Kare üretimi (Faz 4) açık mı? Çalışırken değiştirilebiliyor.
+    ///
+    /// Varsayılan **kapalı**: gecikme ekleyen bir özelliğin kendiliğinden
+    /// açık gelmesi, kullanıcının istemediği bir bedeli sessizce ödetmek
+    /// olurdu (karar #35).
+    uretim: Arc<AtomicBool>,
     is_parcasi: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -219,6 +283,7 @@ impl Olcekleyici {
             durum: Arc::new(Mutex::new(OlceklemeDurumu::default())),
             dur: Arc::new(AtomicBool::new(false)),
             algoritma: Arc::new(AtomicU8::new(0)),
+            uretim: Arc::new(AtomicBool::new(false)),
             is_parcasi: None,
         }
     }
@@ -229,6 +294,19 @@ impl Olcekleyici {
 
     pub fn durum(&self) -> OlceklemeDurumu {
         self.durum.lock().clone()
+    }
+
+    /// Kare üretimini açar/kapatır. Çalışırken de geçerli.
+    ///
+    /// Yeniden başlatma yok: kullanıcı üretimi açıp kapatarak farkı
+    /// **aynı sahnede** görebilmeli. Yeniden başlatmak ekranı karartır ve
+    /// karşılaştırmayı imkânsız kılardı.
+    pub fn uretim_ata(&self, acik: bool) {
+        self.uretim.store(acik, Ordering::Relaxed);
+    }
+
+    pub fn uretim_acik(&self) -> bool {
+        self.uretim.load(Ordering::Relaxed)
     }
 
     /// Çalışan ölçeklemenin algoritmasını değiştirir.
@@ -256,10 +334,11 @@ impl Olcekleyici {
         let durum = Arc::clone(&self.durum);
         let dur = Arc::clone(&self.dur);
         let secili = Arc::clone(&self.algoritma);
+        let uretim = Arc::clone(&self.uretim);
 
         let is = std::thread::Builder::new()
             .name("muifly-olcekleme".into())
-            .spawn(move || dongu(ekran, durum, dur, secili, gonderici))
+            .spawn(move || dongu(ekran, durum, dur, secili, uretim, gonderici))
             .map_err(|_| Engel::Desteklenmeyen)?;
 
         match alici.recv_timeout(ACILIS_BEKLEME) {
@@ -336,6 +415,7 @@ fn dongu(
     durum: Arc<Mutex<OlceklemeDurumu>>,
     dur: Arc<AtomicBool>,
     secili: Arc<AtomicU8>,
+    uretim_istegi: Arc<AtomicBool>,
     gonderici: std::sync::mpsc::Sender<Result<(), Engel>>,
 ) {
     use std::time::Instant;
@@ -379,6 +459,26 @@ fn dongu(
         return;
     };
 
+    // Kare üretimi boru hattı (Faz 4, karar #35). Dokular açılışta bir kez
+    // ayrılıyor: kullanıcı özelliği açtığı an ekranın kararmaması için.
+    //
+    // Ayrılamıyorsa ölçekleme yine de sürüyor. Kare üretimi olmadan
+    // ölçekleme çalışan bir özellik; ikisini birbirine bağlamak, bellek
+    // yetmediğinde çalışan tarafı da kapatmak olurdu.
+    let mut uretici = match uretim::Uretici::yeni(
+        &yakalayici.cihaz,
+        &yakalayici.baglam,
+        yakalayici.genislik,
+        yakalayici.yukseklik,
+    ) {
+        Ok(u) => Some(u),
+        Err(e) => {
+            log::warn!("kare üretimi hazırlanamadı, ölçekleme üretimsiz sürüyor: {e}");
+            None
+        }
+    };
+    let yenileme = yakalayici.yenileme_hz();
+
     {
         let mut d = durum.lock();
         d.calisiyor = true;
@@ -392,6 +492,10 @@ fn dongu(
         d.gecikme = None;
         d.durdurma_kisayoli = Some(kacis.etiket.to_string());
         d.hedef_bekleniyor = true;
+        d.uretim_kullanilabilir = uretici.is_some();
+        d.uretim_acik = uretim_istegi.load(Ordering::Relaxed) && uretici.is_some();
+        d.yenileme_hz = yenileme;
+        d.uretim_uyarisi = uretim_uyarisi(yenileme, uretici.is_some());
         d.uyari = (!pencere.yakalamadan_gizli).then(|| {
             "Bu Windows sürümü pencereyi yakalamanın dışına çıkaramıyor; \
              ölçekleme kendi çıktısını yakalayabilir (Windows 10 sürüm 2004 \
@@ -402,6 +506,7 @@ fn dongu(
     let _ = gonderici.send(Ok(()));
 
     let mut tampon = GecikmeTamponu::yeni(gecikme::KAPASITE);
+    tampon.yenileme_ata(yenileme);
     let mut onceki_algo = algoritmadan(secili.load(Ordering::Relaxed));
     let mut sayac = 0u32;
     let mut engel_metni: Option<String> = None;
@@ -502,6 +607,39 @@ fn dongu(
         }
         let t1 = Instant::now();
 
+        // --- Kare üretimi (Faz 4, karar #35) ---------------------------
+        //
+        // Sıra önemli ve tersine çevrilemez: ara kare iki GERÇEK kare
+        // arasına giriyor, yani ikinci gerçek kare elde tutuluyor ve bir
+        // sunum turu geç gösteriliyor. Ölçülen bedel bu satırlarda değil,
+        // o beklemede — ve o bekleme algoritmanın hızıyla azalmıyor.
+        let uretim_acik = uretim_istegi.load(Ordering::Relaxed) && uretici.is_some();
+        let mut uretim_us = 0u32;
+        if uretim_acik {
+            let u = uretici.as_mut().expect("üstte kontrol edildi");
+            u.luma_kur(&yakalayici.gorunum);
+            if let Some(ara) = u.ara_kare(&yakalayici.gorunum, 0.5) {
+                // Önce üretilen kare. Gerçek kare bunun ardından geliyor;
+                // ikisi arasında ekran bir yenileme turu bekliyor.
+                if let Err(e) = pencere.ciz(
+                    &ara,
+                    alan,
+                    yakalayici.genislik,
+                    yakalayici.yukseklik,
+                    algo,
+                ) {
+                    engel_metni = Some(e.to_string());
+                    break;
+                }
+                tampon.uretildi();
+            }
+            uretim_us = Instant::now()
+                .duration_since(t1)
+                .as_micros()
+                .min(u32::MAX as u128) as u32;
+        }
+        let t_uretim = Instant::now();
+
         let cizim = pencere.ciz(
             &yakalayici.gorunum,
             alan,
@@ -513,6 +651,15 @@ fn dongu(
         if let Err(e) = cizim {
             engel_metni = Some(e.to_string());
             break;
+        }
+
+        // Bu karenin rengi "önceki kare" olarak saklanıyor: yakalayıcının
+        // dokusu bir sonraki turda üstüne yazılacak ve warp'ın kaynağı
+        // kalmazdı. Üretim kapalıyken de yapılıyor — kullanıcı özelliği
+        // açtığı anda elde bir önceki kare olsun diye; aksi halde açılışta
+        // bir kare boyunca hiçbir şey üretilemezdi.
+        if let Some(u) = uretici.as_mut() {
+            u.renk_sakla(&yakalayici.doku);
         }
         // Pencere ilk **başarılı** çizimden sonra gösteriliyor. Önce
         // gösterip sonra çizmek, bir kare boyunca ekranı kaplayan boş bir
@@ -526,13 +673,18 @@ fn dongu(
         tampon.ekle(KareOlcumu {
             yakalama_us: t1.duration_since(t0).as_micros().min(u32::MAX as u128) as u32,
             olcekleme_us: 0,
-            sunum_us: t2.duration_since(t1).as_micros().min(u32::MAX as u128) as u32,
+            uretim_us,
+            sunum_us: t2
+                .duration_since(t_uretim)
+                .as_micros()
+                .min(u32::MAX as u128) as u32,
         });
 
         sayac += 1;
         if sayac % OZET_ARALIGI == 0 {
             let mut d = durum.lock();
             d.gecikme = tampon.ozetle();
+            d.uretim_acik = uretim_acik;
             // Kaynak boyutu ölçeklenen ALAN, yakalanan dokunun tamamı
             // değil: kullanıcı "1280×720 → 2560×1440" görmeli, ekranın
             // kendi çözünürlüğünü değil.
@@ -720,6 +872,71 @@ mod testler {
         assert!(json.contains("durdurmaKisayoli"), "{json}");
         assert!(json.contains("hedefBekleniyor"), "{json}");
         assert!(json.contains("kacislaDurduruldu"), "{json}");
+    }
+
+    /// Yenileme hızı düşükse kullanıcı uyarılıyor.
+    ///
+    /// Kare üretiminin bu makinede işe yaramayacağını **söylememek**, onu
+    /// sessizce satmak olurdu.
+    #[test]
+    fn dusuk_yenilemede_uretim_uyarisi_var() {
+        let u = uretim_uyarisi(Some(60), true).expect("60 Hz'de uyarı bekleniyordu");
+        assert!(u.contains("60 Hz"), "{u}");
+        assert!(uretim_uyarisi(Some(144), true).is_none(), "144 Hz'de uyarı çıktı");
+    }
+
+    /// Ölçülemeyen bir şey hakkında uyarı yok.
+    ///
+    /// Tasarım ilkesi 4: olmayan bir ölçüme dayanarak kullanıcıya bir şey
+    /// söylemek, sayısal vaadin tersten hali.
+    #[test]
+    fn olculemeyen_yenilemede_uyari_yok() {
+        assert!(uretim_uyarisi(None, true).is_none());
+    }
+
+    /// Boru hattı hazırlanamadıysa bu ayrıca söyleniyor.
+    #[test]
+    fn hazirlanamayan_uretim_soyleniyor() {
+        let u = uretim_uyarisi(Some(240), false).expect("kullanılamazken uyarı bekleniyordu");
+        assert!(u.contains("hazırlanamadı"), "{u}");
+    }
+
+    /// Ürün duruşu: kare üretimi metinlerinde sayısal vaat yok.
+    ///
+    /// `network_boost::tcp`'deki testin eşi. Kare üretimi, "kaç kare/s
+    /// kazandırır" iddiasının en kolay kaçacağı yer: rakiplerin tamamı bu
+    /// sayıyı reklam olarak kullanıyor. Bizim ölçtüğümüz şey **bedel**,
+    /// kazanç değil (tasarım ilkesi 4, karar #35).
+    #[test]
+    fn uretim_metinlerinde_sayisal_vaat_yok() {
+        let yasakli = ["kat hızlı", "daha akıcı", "fps artışı", "kazandırır", "iki kat"];
+        let metinler: Vec<String> = [
+            uretim_uyarisi(Some(60), true),
+            uretim_uyarisi(Some(240), false),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        assert!(!metinler.is_empty(), "test edilecek metin yok");
+        for m in &metinler {
+            for y in yasakli {
+                assert!(
+                    !m.to_lowercase().contains(y),
+                    "kare üretimi metninde sayısal vaat: '{y}' → {m}"
+                );
+            }
+        }
+    }
+
+    /// Kare üretimi varsayılan olarak kapalı.
+    ///
+    /// Gecikme ekleyen bir özelliğin kendiliğinden açık gelmesi,
+    /// kullanıcının istemediği bir bedeli sessizce ödetmek olurdu.
+    #[test]
+    fn uretim_varsayilan_kapali() {
+        let o = Olcekleyici::yeni();
+        assert!(!o.uretim_acik());
+        assert!(!o.durum().uretim_acik);
     }
 
     /// Ürün duruşu: rekabetçi modda ölçekleme kapalı.

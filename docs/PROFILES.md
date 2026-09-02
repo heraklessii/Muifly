@@ -57,8 +57,13 @@ Notlar:
   ölçekleme her karede ölçülebilir bir gecikme ekliyor, rekabetçi mod tam
   olarak o gecikmeyi en aza indirmek için var (karar #32). Kısıtlı değil,
   kapalı.
-- `scaling.frame_generation` Faz 4 gelene kadar her koşulda `false`'a
-  çekiliyor ve bu bir düzeltme olarak kullanıcıya gösteriliyor.
+- `scaling.frame_generation` artık **çalışıyor** (Faz 4a, karar #35). Faz 4
+  gelene kadar geçerli olan "her koşulda `false`" kuralı kaldırıldı;
+  rekabetçi profildeki kapı ise kalıcı. Rekabetçi olmayan bir profilde ayar
+  artık yok sayılmıyor — sessizce yok sayılsaydı kullanıcı, profilinde
+  açtığı özelliğin neden çalışmadığını bulamazdı.
+  Bedeli ölçeklemeninkinden farklı: kare üretimi ikinci gerçek kareyi elde
+  tutuyor ve bu bekleme daha hızlı donanımla azalmıyor.
 - `shared`: ileride community profil paylaşımı için ayrılmış alan, Faz 1 kapsamında
   kullanılmıyor.
 

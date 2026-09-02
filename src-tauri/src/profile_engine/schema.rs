@@ -239,16 +239,18 @@ impl Profil {
             .filter(|a| !a.is_empty())
             .collect();
 
-        // Kare üretimi (Faz 4) henüz yok: profilde açık yazıyorsa
-        // kapatılıyor. Rekabetçi profilde ayrıca Faz 4 geldiğinde de kapalı
-        // kalacak (`docs/PROFILES.md`).
-        if self.scaling.frame_generation {
+        // Kare üretimi (Faz 4, karar #35) artık **var**; genel kapı
+        // kaldırıldı. Rekabetçi profildeki kapı ise kalıcı: kare üretimi
+        // tanımı gereği bir kareyi elde tutuyor ve rekabetçi mod tam
+        // olarak o beklemeyi en aza indirmek için var (`docs/PROFILES.md`).
+        //
+        // Ölçeklemeyi kapatan kural aşağıda ayrıca çalışıyor; burası
+        // ondan önce, çünkü ölçekleme kapatıldığında üretimin de kapanmış
+        // olması gerekiyor ve iki ayrı düzeltme satırı kullanıcıya iki ayrı
+        // şey söylüyor.
+        if self.scaling.frame_generation && self.competitive {
             self.scaling.frame_generation = false;
-            duzeltmeler.push(if self.competitive {
-                "rekabetçi profilde kare üretimi kapatıldı (gecikme riski)".into()
-            } else {
-                "kare üretimi henüz yok (Faz 4), ayar yok sayıldı".to_string()
-            });
+            duzeltmeler.push("rekabetçi profilde kare üretimi kapatıldı (gecikme ekliyor)".into());
         }
 
         // Rekabetçi mod kuralı: ölçekleme de kapalı.
@@ -390,13 +392,24 @@ mod testler {
             .any(|d| d.contains("ölçekleme kapatıldı")));
     }
 
+    /// Faz 4 geldi: genel kapı **kalktı**.
+    ///
+    /// Bu test eskiden tersini koruyordu ("Faz 4'e kadar kapalı"). Kare
+    /// üretimi yazıldığında (karar #35) yön değişti; testin kendisi
+    /// silinmedi çünkü korunacak bir şey hâlâ var: rekabetçi olmayan bir
+    /// profilde ayar artık **yok sayılmamalı**. Sessizce yok sayılsaydı
+    /// kullanıcı profilinde açtığı özelliğin neden çalışmadığını
+    /// bulamazdı.
     #[test]
-    fn kare_uretimi_faz4e_kadar_kapali() {
+    fn kare_uretimi_rekabetci_olmayanda_korunuyor() {
         let mut p = temel();
         p.scaling.frame_generation = true;
         let (p, duzeltmeler) = p.dogrula().unwrap();
-        assert!(!p.scaling.frame_generation);
-        assert!(duzeltmeler.iter().any(|d| d.contains("Faz 4")));
+        assert!(p.scaling.frame_generation, "ayar yok sayıldı");
+        assert!(
+            !duzeltmeler.iter().any(|d| d.contains("kare üretimi")),
+            "kare üretimi için gereksiz düzeltme satırı: {duzeltmeler:?}"
+        );
     }
 
     #[test]

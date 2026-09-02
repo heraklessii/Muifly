@@ -812,6 +812,14 @@ pub fn olcekleme_algoritma(motor: MotorState<'_>, algoritma: String) -> Result<(
     Ok(())
 }
 
+/// Kare üretimini (Faz 4) çalışırken açar/kapatır.
+///
+/// Yeniden başlatma yok: kullanıcı farkı **aynı sahnede** görebilmeli.
+#[tauri::command]
+pub fn olcekleme_uretimi(motor: MotorState<'_>, acik: bool) -> Result<()> {
+    motor.lock().olcekleme_uretimi(acik)
+}
+
 /// Ölçeklemeyi açmadan yakalamanın çalışıp çalışmadığını dener.
 ///
 /// Ayrı bir iş parçacığında: yarım saniyeye kadar sürüyor ve o sırada

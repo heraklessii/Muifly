@@ -11,7 +11,7 @@ altında birleştirir:
 
 1. **System Boost** — process önceliklendirme, arka plan servis yönetimi, güç planı
 2. **Network Boost** — DNS/route ölçümü, QoS, jitter/packet loss izleme
-3. **Scaling** — post-process upscaling (spatial), ileride frame generation (ML, faz 4)
+3. **Scaling** — post-process upscaling (spatial) + kare üretimi (Faz 4a, ML'siz)
 
 Rakip/ilham: Lossless Scaling (Steam), Razer Cortex, WTFast/ExitLag. Boşluk: bu üçünü
 ayrı ayrı satın alıyorlar, biz tek + şeffaf + tersine çevrilebilir bir araçta topluyoruz.
@@ -54,7 +54,7 @@ state.rs (Motor)   ← akış: oyun algılandı → profil uygula → kapanınca
    ├── system_boost/     öncelik, affinite, dondurma, güç planı, açılış
    ├── network_boost/    DNS ölçümü, gecikme/jitter, TCP, QoS
    ├── monitor/          şeffaflık günlüğü + ölçüm + oturum geçmişi
-   ├── scaling/          ekran yakalama + ölçekleme + sunum + gecikme ölçümü
+   ├── scaling/          ekran yakalama + ölçekleme + kare üretimi + sunum
    ├── ledger.rs         geri alma defteri (veri)
    └── revert.rs         geri alma uygulayıcısı (davranış)
 ```
@@ -92,11 +92,11 @@ Detaylı gerekçeler: `docs/DESIGN_PRINCIPLES.md`
 npm run dev        # sadece frontend (Vite, localhost:1420)
 npm run build      # tsc + vite build → dist/
 npm run tauri dev  # tam uygulama (Rust + pencere)
-npm test           # arayüz testleri (vitest + jsdom) — 67 test
+npm test           # arayüz testleri (vitest + jsdom) — 72 test
 ```
 
 ```bash
-cargo test                    # src-tauri/ içinde — 373 test
+cargo test                    # src-tauri/ içinde — 393 test
 cargo test --features demo    # demo ikilisinin kısıtlarıyla
 cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
 
@@ -144,6 +144,7 @@ Muifly/
 │   ├── MODULES.md           ✅ modül bazlı teknik detay
 │   ├── DESIGN_PRINCIPLES.md ✅ beş ilke ve gerekçeleri
 │   ├── PROFILES.md          ✅ mod sistemi, profil JSON şeması
+│   ├── FRAME_GENERATION.md  ✅ Faz 4a tasarımı + 4b (ML) fizibilitesi
 │   ├── ROADMAP.md           ✅ fazlar + yayın kilometre taşları
 │   ├── RISKS.md             ✅ bilinen riskler ve azaltmaları
 │   ├── decisions.md         ✅ ADR tarzı kararlar (kod buraya numarayla atıf yapıyor)
@@ -189,12 +190,21 @@ Muifly/
         ├── ceviri/          ✅ Faz 5'in yakalamasız katmanı (karar #30):
         │                       onisleme, sozluk, bellek, ocr_dil.
         │                       Motor'a BAĞLI DEĞİL, arayüzü yok — bilerek.
-        └── scaling/         ✅ Faz 3 (karar #32): yakalama (Desktop
-                                Duplication), olcekleme.hlsl (gerçek zamanlı
-                                yol), algoritma.rs (CPU REFERANSI — çalışma
-                                zamanında kullanılmıyor), sunum, gecikme.
+        └── scaling/         ✅ Faz 3 (karar #32) + Faz 4a (karar #35):
+                                yakalama (Desktop Duplication),
+                                olcekleme.hlsl + uretim.hlsl (gerçek zamanlı
+                                yollar), algoritma.rs ve hareket.rs (CPU
+                                REFERANSLARI — çalışma zamanında
+                                kullanılmıyor, doğruluk orada ölçülüyor),
+                                uretim.rs, sunum, gecikme.
                                 Rekabetçi modda kapalı, deftere yazmıyor.
 ```
+
+> `scaling/` içinde **iki** CPU referansı var (`algoritma.rs`,
+> `hareket.rs`) ve ikisi de çalışma zamanında kullanılmıyor. Sebebi aynı:
+> görüntü işlemenin doğruluğu gözle anlaşılmıyor. Gölgelendiriciyle
+> ayrışmamaları test ile bağlı — sabitleri değiştirirken ikisini birden
+> değiştir.
 
 ## Faz Durumu
 
@@ -215,8 +225,15 @@ Muifly/
   kullanılamaz hale getirdi: sunum penceresinin kapatılacak hiçbir yolu
   yoktu. Kaçış kısayolu ve gizlenme kuralı eklendi (karar #34), ikisi de
   **henüz elle denenmedi**.
-- **Faz 4** (ML frame generation) — ⬜ ayrı fizibilite gerekiyor. Profil
-  dosyasında `frame_generation` açılsa bile `dogrula` kapatıyor.
+- **Faz 4** (kare üretimi) — faz **ikiye ayrıldı** (karar #35), çünkü kare
+  üretimi ML gerektirmiyor.
+  - **4a (klasik)** — 🟡 **kod tamam**. Piramitli blok eşleme + çift yönlü
+    warp, HLSL'de; CPU referansı `hareket.rs` ve doğruluğu sentetik
+    gerçek-referansla ölçülüyor. Varsayılan kapalı, rekabetçi modda kapalı.
+    ⬜ Gerçek bir oyunla gözle denenmedi — `tasks.md` → Sıradaki 8.
+  - **4b (ML)** — ⬜ fizibilite **yapıldı** (`docs/FRAME_GENERATION.md`) ve
+    sonucu: şu an açılmıyor. Açılma koşulu 4a'nın sahada denenmiş ve
+    kusurlarının listelenmiş olması.
 - **Faz 5** (ekran çevirisi) — 🟡 **kısmen açıldı** (karar #30). İki
   fizibilite sorusu da cevaplandı ve olumlu: OCR (karar #28), çeviri
   (karar #29). **Yakalamadan bağımsız katman yazıldı** (`src/ceviri/`:
