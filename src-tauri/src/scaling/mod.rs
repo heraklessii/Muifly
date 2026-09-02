@@ -56,6 +56,15 @@ const KARE_ZAMAN_ASIMI_MS: u32 = 16;
 /// Özetin paylaşılan duruma yazılma sıklığı (kare).
 const OZET_ARALIGI: u32 = 30;
 
+/// Peş peşe yeniden açma denemelerinin sınırı ve penceresi (karar #36).
+///
+/// Ekran modu değişimi bir oyun açılırken üst üste birkaç kez gelebiliyor;
+/// tek denemeyle vazgeçmek erken olurdu. Sınırsız denemek de olmaz: her
+/// deneme yeni bir çoğaltma oturumu (gerekirse yeni bir D3D11 cihazı)
+/// demek ve sürekli başarısız olan bir ekranda saniyede onlarcası.
+const YENIDEN_ACMA_SINIRI: u32 = 5;
+const YENIDEN_ACMA_PENCERESI: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// Ölçekleme başlarken beklenen açılış cevabı.
 ///
 /// Yakalama açılamıyorsa kullanıcı bunu **hemen** görmeli; arka planda
@@ -240,6 +249,46 @@ pub fn uretim_uyarisi(yenileme_hz: Option<u32>, kullanilabilir: bool) -> Option<
         )),
         Some(_) => None,
     }
+}
+
+/// Peş peşe yeniden açma denemelerini sayar (karar #36).
+///
+/// Pencere dolduğunda sayaç sıfırlanıyor: saatlerce açık kalan bir
+/// oturumda arada bir ekran modu değişimi normal ve o denemelerin
+/// birikmesi, sonunda çalışan bir ölçeklemeyi durdururdu.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct YenidenAcmaSayaci {
+    ilk: Option<std::time::Instant>,
+    adet: u32,
+}
+
+impl YenidenAcmaSayaci {
+    /// Bir denemeyi kaydeder. Dönen değer false ise vazgeçilmeli.
+    pub fn dene(&mut self, simdi: std::time::Instant) -> bool {
+        match self.ilk {
+            Some(t) if simdi.duration_since(t) <= YENIDEN_ACMA_PENCERESI => {}
+            _ => {
+                self.ilk = Some(simdi);
+                self.adet = 0;
+            }
+        }
+        self.adet += 1;
+        self.adet <= YENIDEN_ACMA_SINIRI
+    }
+}
+
+/// Kare üretimi bu turda ara kare üretebilir mi?
+///
+/// ardisik: üretimin kesintisiz açık olduğu tur sayısı, bu tur dahil.
+///
+/// İki tur şart. Ara kare iki karenin parlaklık piramidine bakıyor ve
+/// piramit yalnızca üretim açıkken kuruluyor; üretim kapalıyken önceki
+/// karenin piramidi tazelenmiyor. Sınır olmasaydı kullanıcı anahtarı her
+/// açtığında ilk ara kare dakikalar öncesine ait bir önceki kareyle
+/// hesaplanır ve ekranda tek karelik bir hayalet iz olarak görünürdü —
+/// üstelik tam da farkı görmek için anahtarla oynadığı anda (karar #36).
+pub fn ara_kare_hazir(ardisik: u32) -> bool {
+    ardisik >= 2
 }
 
 /// Ölçeklemenin bu modda çalışmasına izin var mı?
@@ -429,20 +478,8 @@ fn dongu(
         }
     };
 
-    // Sunum penceresi yakalanan ekranın tamamını kaplıyor. Köşe
-    // koordinatları yakalayıcının kendi ekran kaydından geliyor: çok ekranlı
-    // kurulumda ikinci ekranın kökeni (0,0) değil ve sabit (0,0) yazsaydık
-    // pencere her zaman birincil ekranda belirirdi.
-    let (x, y) = (yakalayici.ekran().x, yakalayici.ekran().y);
-
-    let mut pencere = match sunum::SunumPenceresi::ac(
-        &yakalayici.cihaz,
-        &yakalayici.baglam,
-        x,
-        y,
-        yakalayici.genislik,
-        yakalayici.yukseklik,
-    ) {
+    // Sunum penceresi yakalanan ekranın tamamını kaplıyor.
+    let mut pencere = match pencere_kur(&yakalayici) {
         Ok(p) => p,
         Err(e) => {
             let _ = gonderici.send(Err(e));
@@ -465,19 +502,8 @@ fn dongu(
     // Ayrılamıyorsa ölçekleme yine de sürüyor. Kare üretimi olmadan
     // ölçekleme çalışan bir özellik; ikisini birbirine bağlamak, bellek
     // yetmediğinde çalışan tarafı da kapatmak olurdu.
-    let mut uretici = match uretim::Uretici::yeni(
-        &yakalayici.cihaz,
-        &yakalayici.baglam,
-        yakalayici.genislik,
-        yakalayici.yukseklik,
-    ) {
-        Ok(u) => Some(u),
-        Err(e) => {
-            log::warn!("kare üretimi hazırlanamadı, ölçekleme üretimsiz sürüyor: {e}");
-            None
-        }
-    };
-    let yenileme = yakalayici.yenileme_hz();
+    let mut uretici = uretici_kur(&yakalayici);
+    let mut yenileme = yakalayici.yenileme_hz();
 
     {
         let mut d = durum.lock();
@@ -515,6 +541,11 @@ fn dongu(
     // döngünün ölçtüğü sürelere kendi gürültüsünü katardı.
     let mut bekliyordu = true;
     let mut kacisla_durduruldu = false;
+    // Üretimin kesintisiz açık olduğu tur sayısı; kapanınca sıfırlanıyor.
+    // Gerekçesi ara_kare_hazir'da.
+    let mut uretim_ardisik = 0u32;
+    let mut onceki_uretim = false;
+    let mut yeniden_acmalar = YenidenAcmaSayaci::default();
 
     while !dur.load(Ordering::Relaxed) {
         match pencere.mesajlari_isle() {
@@ -592,11 +623,56 @@ fn dongu(
             }
             Ok(KareDurumu::Yeni) => {}
             Err(Engel::ErisimKesildi) => {
-                // Ekran modu değişti (oyun açılırken sık olur). Bir kez
-                // yeniden denemek, kullanıcıya hata göstermekten iyi.
-                if yakalayici.yeniden_ac().is_err() {
+                // Ekran modu değişti (oyun açılırken sık olur). Yeniden
+                // denemek kullanıcıya hata göstermekten iyi — ama sınırlı
+                // sayıda (karar #36).
+                if !yeniden_acmalar.dene(Instant::now()) {
                     engel_metni = Some(Engel::ErisimKesildi.to_string());
                     break;
+                }
+                let yeniden_kurulacak = match yakalayici.yeniden_ac() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        engel_metni = Some(e.to_string());
+                        break;
+                    }
+                };
+                if yeniden_kurulacak {
+                    // Cihaz ya da boyut değişti: sunum penceresi ve kare
+                    // üreticisi eski değerlere göre ayrılmıştı. Eskisiyle
+                    // çizmeye devam etmek, D3D11'in sessizce yok saydığı
+                    // bir çizim demek olurdu — ekran siyah kalır, hiçbir
+                    // hata görünmezdi (karar #36).
+                    pencere.gorunurluk(false);
+                    match pencere_kur(&yakalayici) {
+                        Ok(p) => pencere = p,
+                        Err(e) => {
+                            engel_metni = Some(e.to_string());
+                            break;
+                        }
+                    }
+                    uretici = uretici_kur(&yakalayici);
+                    yenileme = yakalayici.yenileme_hz();
+                    uretim_ardisik = 0;
+                    tampon.temizle();
+                    tampon.yenileme_ata(yenileme);
+                    bekliyordu = true;
+                    let mut d = durum.lock();
+                    d.kaynak_genislik = yakalayici.genislik;
+                    d.kaynak_yukseklik = yakalayici.yukseklik;
+                    d.hedef_genislik = pencere.genislik;
+                    d.hedef_yukseklik = pencere.yukseklik;
+                    d.hedef_bekleniyor = true;
+                    d.gecikme = None;
+                    d.yenileme_hz = yenileme;
+                    d.uretim_kullanilabilir = uretici.is_some();
+                    d.uretim_uyarisi = uretim_uyarisi(yenileme, uretici.is_some());
+                    drop(d);
+                    log::info!(
+                        "ölçekleme: ekran modu değişti, boru hattı yeniden kuruldu ({}x{})",
+                        yakalayici.genislik,
+                        yakalayici.yukseklik
+                    );
                 }
                 continue;
             }
@@ -614,11 +690,29 @@ fn dongu(
         // sunum turu geç gösteriliyor. Ölçülen bedel bu satırlarda değil,
         // o beklemede — ve o bekleme algoritmanın hızıyla azalmıyor.
         let uretim_acik = uretim_istegi.load(Ordering::Relaxed) && uretici.is_some();
+        uretim_ardisik = if uretim_acik {
+            uretim_ardisik.saturating_add(1)
+        } else {
+            0
+        };
+        if uretim_acik != onceki_uretim {
+            // Anahtarın karşılığı özet turunu beklemeden görünüyor:
+            // kullanıcı açıp kapatarak farkı arıyor ve arayüz o sırada
+            // yarım saniye eski durumu yazsaydı hangi karenin hangi ayara
+            // ait olduğu okunamazdı.
+            onceki_uretim = uretim_acik;
+            durum.lock().uretim_acik = uretim_acik;
+        }
         let mut uretim_us = 0u32;
         if uretim_acik {
             let u = uretici.as_mut().expect("üstte kontrol edildi");
             u.luma_kur(&yakalayici.gorunum);
-            if let Some(ara) = u.ara_kare(&yakalayici.gorunum, 0.5) {
+            // Isınma turu: piramidin iki karesi de bu açılışa ait olana
+            // kadar ara kare üretilmiyor (ara_kare_hazir).
+            let ara = ara_kare_hazir(uretim_ardisik)
+                .then(|| u.ara_kare(&yakalayici.gorunum, 0.5))
+                .flatten();
+            if let Some(ara) = ara {
                 // Önce üretilen kare. Gerçek kare bunun ardından geliyor;
                 // ikisi arasında ekran bir yenileme turu bekliyor.
                 if let Err(e) = pencere.ciz(
@@ -670,8 +764,15 @@ fn dongu(
         // `sunum` içinde dikey eşitleme beklemesi de var; arayüz bunu
         // böyle yazıyor, çünkü "1 ms yakalama, 15 ms sunum" satırını
         // açıklamadan göstermek yanlış okunurdu.
+        // Yakalama süresinden bekleme düşülüyor: kalan, kareyi kendi
+        // dokumuza kopyalamanın süresi — yani boru hattının gerçekten
+        // eklediği iş (karar #36).
+        let bekleme_us = yakalayici.son_bekleme_us();
+        let yakalama_us = (t1.duration_since(t0).as_micros().min(u32::MAX as u128) as u32)
+            .saturating_sub(bekleme_us);
         tampon.ekle(KareOlcumu {
-            yakalama_us: t1.duration_since(t0).as_micros().min(u32::MAX as u128) as u32,
+            yakalama_us,
+            bekleme_us,
             olcekleme_us: 0,
             uretim_us,
             sunum_us: t2
@@ -704,6 +805,44 @@ fn dongu(
     d.durdurma_kisayoli = None;
     d.kacisla_durduruldu = kacisla_durduruldu;
     d.son_engel = engel_metni;
+}
+
+/// Sunum penceresini yakalayıcının cihazıyla ve ekranıyla açar.
+///
+/// Ayrı fonksiyon, çünkü ekran modu değiştiğinde (karar #36) aynı kurulum
+/// bir kez daha yapılıyor; iki yere kopyalanan bir kurulum, birinin
+/// sessizce eskimesi demek olurdu.
+///
+/// Köşe koordinatları yakalayıcının kendi ekran kaydından geliyor: çok
+/// ekranlı kurulumda ikinci ekranın kökeni (0,0) değil ve sabit (0,0)
+/// yazsaydık pencere her zaman birincil ekranda belirirdi.
+#[cfg(windows)]
+fn pencere_kur(y: &yakalama::Yakalayici) -> Result<sunum::SunumPenceresi, Engel> {
+    sunum::SunumPenceresi::ac(
+        &y.cihaz,
+        &y.baglam,
+        y.ekran().x,
+        y.ekran().y,
+        y.genislik,
+        y.yukseklik,
+    )
+}
+
+/// Kare üretimi boru hattını kurar; kurulamazsa None.
+///
+/// Hata döndürmüyor: kare üretimi olmadan ölçekleme çalışan bir özellik ve
+/// ikisini birbirine bağlamak, bellek yetmediğinde çalışan tarafı da
+/// kapatmak olurdu. Dokular burada bir kez ayrılıyor — kullanıcı özelliği
+/// açtığı an ekranın kararmaması için.
+#[cfg(windows)]
+fn uretici_kur(y: &yakalama::Yakalayici) -> Option<uretim::Uretici> {
+    match uretim::Uretici::yeni(&y.cihaz, &y.baglam, y.genislik, y.yukseklik) {
+        Ok(u) => Some(u),
+        Err(e) => {
+            log::warn!("kare üretimi hazırlanamadı, ölçekleme üretimsiz sürüyor: {e}");
+            None
+        }
+    }
 }
 
 /// Önplanda ne var?
@@ -1053,6 +1192,51 @@ mod testler {
 
         o.durdur();
         assert!(!o.calisiyor(), "durdurma iş parçacığını kapatmadı");
+    }
+
+    /// Kare üretimi ısınma turunu bekliyor (karar #36).
+    ///
+    /// Test ettiği şey bir sayı değil bir duruş: üretim açıldıktan sonraki
+    /// İLK turda ara kare üretilmiyor, çünkü o turda "önceki kare"nin
+    /// parlaklık piramidi bu açılışa ait değil.
+    #[test]
+    fn uretim_acildiktan_sonraki_ilk_turda_ara_kare_yok() {
+        assert!(!ara_kare_hazir(0), "üretim kapalıyken ara kare olamaz");
+        assert!(!ara_kare_hazir(1), "ilk tur ısınma turu");
+        assert!(ara_kare_hazir(2), "ikinci turda iki kare de tazedir");
+        assert!(ara_kare_hazir(9_000));
+    }
+
+    /// Yeniden açma sınırsız değil (karar #36).
+    ///
+    /// Sınırın kendisi bir performans ayarı değil, bir güvenlik kemeri: her
+    /// deneme yeni bir çoğaltma oturumu açıyor ve sürekli başarısız olan
+    /// bir ekranda sınırsız tekrar, saniyede onlarca cihaz kurulumu demek.
+    #[test]
+    fn yeniden_acma_ard_arda_sinirli() {
+        let mut s = YenidenAcmaSayaci::default();
+        let t = std::time::Instant::now();
+        for i in 0..YENIDEN_ACMA_SINIRI {
+            assert!(s.dene(t), "{i}. deneme sınırın içinde olmalıydı");
+        }
+        assert!(!s.dene(t), "sınırın üstündeki deneme durdurulmalıydı");
+    }
+
+    /// Pencere dolunca sayaç sıfırlanıyor.
+    ///
+    /// Saatlerce açık kalan bir oturumda arada bir ekran modu değişimi
+    /// normal. Sayaç sıfırlanmasaydı, birbiriyle ilgisiz denemeler birikip
+    /// sonunda çalışan bir ölçeklemeyi durdururdu.
+    #[test]
+    fn yeniden_acma_penceresi_dolunca_sayac_sifirlaniyor() {
+        let mut s = YenidenAcmaSayaci::default();
+        let t = std::time::Instant::now();
+        for _ in 0..YENIDEN_ACMA_SINIRI {
+            assert!(s.dene(t));
+        }
+        assert!(!s.dene(t));
+        let sonra = t + YENIDEN_ACMA_PENCERESI + std::time::Duration::from_secs(1);
+        assert!(s.dene(sonra), "pencere dolduktan sonra yeniden denenebilmeli");
     }
 
     /// Windows dışında ölçekleme açılmıyor ve bunu söylüyor.

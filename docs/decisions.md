@@ -1198,3 +1198,104 @@ ML ile kapanacağının listelenmiş olması.
 4a'nın hiçbir parçası gerçek bir oyunla **gözle** denenmedi. Birim
 testleri hareket vektörünün doğru olduğunu gösteriyor, görüntünün iyi
 göründüğünü göstermiyor. `tasks.md` → Sıradaki 8.
+
+---
+
+## #36 — Kararlılık turu: sessiz bozulan dört yol kapatıldı
+
+**Tarih**: 2 Eylül 2026
+**Bağlam**: Faz 3 ve 4a kodu yazıldı ama hiçbiri sahada denenmedi. Bu tur
+yeni özellik eklemedi; **bir şey ters gittiğinde ne olduğuna** baktı.
+Ortak nokta: üçü de kullanıcıya hata göstermiyordu. Sessiz bozulma,
+gösterilen hatadan kötü — çünkü kullanıcı neyi bildireceğini bilemiyor.
+
+### 1. Ekran modu değişince ölçekleme siyah kalıyordu
+
+`Yakalayici::yeniden_ac`, `DXGI_ERROR_ACCESS_LOST` sonrası **yepyeni bir
+D3D11 cihazı** kuruyor ve `*self = yeni` yapıyordu. Ama sunum penceresi ve
+kare üreticisi eski cihazın nesneleriyle kurulmuştu; D3D11 başka bir
+cihaza ait kaynakla yapılan çizimi hata döndürmeden yok sayıyor. Sonuç:
+ölçekleme "çalışıyor" diyor, gecikme sayaçları dönüyor, ekran siyah.
+
+Bu yolun ne zaman işlediği önemli: `ACCESS_LOST`ın en sık sebebi **oyun
+açılırken çözünürlüğün değişmesi**. Yani hata, özelliğin tam da asıl
+kullanım anında ortaya çıkacaktı.
+
+Üç parça değişti:
+
+- `yeniden_ac` artık **cihazı koruyor**: yalnızca çoğaltmayı yeniliyor.
+  Çoğaltma alanı `Option` oldu, çünkü aynı cihaz aynı çıkışı ikinci kez
+  çoğaltamıyor — yenisini açmadan önce eskisinin düşmesi gerekiyor.
+- Cihaz da gitmişse (sürücü sıfırlaması) her şey yeniden kuruluyor ve
+  fonksiyon `true` dönüyor: **aşağı akış yeniden kurulmalı**. Boyut ya da
+  ekranın köşesi değiştiyse de aynı cevap. Döngü bunu görünce sunum
+  penceresini ve kare üreticisini yeni değerlerle kuruyor.
+- Denemeler sınırlı: 10 saniyelik pencerede 5 deneme (`YenidenAcmaSayaci`).
+  Sınır bir performans ayarı değil, güvenlik kemeri — her deneme yeni bir
+  çoğaltma oturumu, gerekirse yeni bir cihaz demek ve sürekli başarısız
+  olan bir ekranda sınırsız tekrar, saniyede onlarca cihaz kurulumu olurdu.
+  Bu makinede ölçeklemenin ilk elle denemesi zaten makineyi kullanılamaz
+  hale getirmişti (karar #34); aynı sınıftan bir riski açık bırakmak
+  tutarsız olurdu.
+
+### 2. Kare üretimi, anahtar açılır açılmaz hayalet iz gösteriyordu
+
+Ara kare **iki** karenin parlaklık piramidine bakıyor, ama piramit
+yalnızca üretim açıkken kuruluyor. Kullanıcı anahtarı açtığında "önceki
+kare"nin piramidi dakikalar öncesine ait olabiliyordu: ilk ara kare
+tamamen alakasız bir hareket alanıyla hesaplanırdı.
+
+Görünürlüğü kötü bir kusur bu — tek kare sürüyor ve tam da kullanıcının
+farkı görmek için anahtarla oynadığı anda oluyor. Çözüm bir ısınma turu:
+`ara_kare_hazir(ardisik)`, üretim kesintisiz iki tur açık kalmadan ara
+kare üretmiyor.
+
+### 3. Gecikme ölçümü kaynağın kare hızını ölçüyordu
+
+`yakalama_us`, `AcquireNextFrame`in tamamını sayıyordu. O çağrının çoğu
+**oyunun bir sonraki karesini beklemekle** geçiyor: ölçekleme kapalıyken
+de var olan, boru hattının eklemediği bir süre. Bu makinede ölçüldü —
+"kare başına 7,26 ms" yazan boru hattının gerçek bedeli **0,40 ms**, geri
+kalan 15,03 ms beklemeydi.
+
+Fark on sekiz kat ve yönü kötü: araç kendi bedelini olduğundan **büyük**
+gösteriyordu. Faz 3'ün ikinci kabul kriteri bu ölçüm; yanlış ölçen bir
+kabul kriteri, kriter değil.
+
+Bekleme artık ayrı ölçülüyor (`bekleme_us`), toplama **girmiyor** ve
+arayüzde "bedele dahil değil" etiketiyle ayrı bir satırda duruyor.
+Gizlenmiyor, çünkü sürekli yüksek bir bekleme "yakalanan kaynak
+beklediğin kaynak değil" demenin bir yolu.
+
+### 4. Arka plan ölçümü Motor kilidini bir saniyeye kadar tutuyordu
+
+`ornek_al` ICMP ölçümünü **kilit altında** yapıyordu. Cevap vermeyen bir
+hedefte (ad çözümü de sayılırsa daha uzun) arayüzün her komutu ve bir
+sonraki mod kontrolü o kadar bekliyordu. Kullanıcının göreceği şey "araç
+donuyor" olurdu; sebebi bir ağ paketinin beklenmesi.
+
+`Motor` ikiye ayrıldı: `gecikme_olcum_hedefi` (kilit altında, mikrosaniye)
+ve `ornek_kaydet` (ölçülmüş değeri alıyor). Ping, kilidin dışında. Aynı
+ayrım `oyunu_olc` komutunda zaten vardı — orada bilinçliydi, burada
+atlanmıştı.
+
+### Neden bunların hiçbiri test tarafından yakalanmamıştı
+
+Dördü de **birden fazla parçanın birlikte çalışmasıyla** ilgili: cihaz
+kimliği, iki kare arasındaki durum, ölçülen sürenin anlamı, kilidin ne
+kadar tutulduğu. Birim testi her parçayı ayrı ayrı doğru bulmuştu.
+
+Yeni testler bu yüzden davranışı değil **duruşu** koruyor:
+`uretim_acildiktan_sonraki_ilk_turda_ara_kare_yok`,
+`yeniden_acma_ard_arda_sinirli`,
+`yeniden_acma_penceresi_dolunca_sayac_sifirlaniyor`,
+`kaynagi_bekleme_bedele_sayilmiyor`, `gecikme_hedefi_ayara_bagli`.
+Sonuncusu ilginç: ölçtüğü şey bir değer değil, ölçümün Motor'un dışında
+kaldığı **yapı**. İki fonksiyon yeniden birleştirilirse test derlenmiyor.
+
+### Kalan
+
+Bunların hiçbiri gerçek bir oyunla denenmedi; birinci ve ikinci madde
+zaten yalnızca oyun açılırken ortaya çıkan yollar. Boru hattının bu
+makinede uçtan uca koştuğu ve ölçümün düzeldiği `gercek_ekranda_bir_tur`
+ile görüldü, o kadar.

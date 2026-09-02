@@ -146,6 +146,7 @@ describe('OlceklemePaneli', () => {
         olceklemeOrtMs: 0,
         uretimOrtMs: 0,
         sunumOrtMs: 1.7,
+        beklemeOrtMs: 15.9,
         uretilenKare: 0,
         yenilemeHz: null,
         bosTur: 12,
@@ -157,6 +158,11 @@ describe('OlceklemePaneli', () => {
     // Dikey eşitleme beklemesinin sunum süresine dahil olduğu yazılı:
     // yazılmasaydı "1,70 ms sunum" satırı yanlış okunurdu.
     expect(screen.getByText(/dikey eşitleme beklemesi dahil/i)).toBeTruthy();
+    // Kaynağı bekleme ayrı bir satır ve "bedele dahil değil" diye yazıyor.
+    // Bu satır olmasaydı 15,90 ms'lik bekleme ya görünmez olurdu ya da
+    // ölçeklemenin eklediği gecikme sanılırdı (karar #36).
+    expect(screen.getByText(/bedele dahil değil/i)).toBeTruthy();
+    expect(screen.getByText(/15,90 ms|15.90 ms/)).toBeTruthy();
   });
 
   it('çalışırken bir kısıt varsa hata gibi değil uyarı gibi gösteriyor', async () => {
@@ -274,6 +280,7 @@ describe('OlceklemePaneli', () => {
         olceklemeOrtMs: 0,
         uretimOrtMs: 1.2,
         sunumOrtMs: 1.7,
+        beklemeOrtMs: 15.9,
         uretilenKare: 150,
         yenilemeHz: 144,
         bosTur: 0,

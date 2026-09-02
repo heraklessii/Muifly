@@ -32,6 +32,10 @@ pub const KAPASITE: usize = 600;
 /// baskınsa algoritma seçiminde, sunum baskınsa dikey eşitlemede.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct KareOlcumu {
+    /// Yakalanan kareyi kendi dokumuza kopyalama süresi.
+    ///
+    /// Kaynağın yeni kare üretmesini BEKLEME süresi buna dahil değil;
+    /// o `bekleme_us`ta duruyor (karar #36).
     pub yakalama_us: u32,
     pub olcekleme_us: u32,
     /// Kare üretiminin (Faz 4) bu turda harcadığı CPU süresi.
@@ -41,9 +45,26 @@ pub struct KareOlcumu {
     /// soruyu cevaplamıyor. Üretim kapalıyken sıfır.
     pub uretim_us: u32,
     pub sunum_us: u32,
+    /// Kaynağın yeni kare üretmesi beklenen süre.
+    ///
+    /// **Toplama girmiyor** ve bu, ölçümün anlamına dair bir karar
+    /// (karar #36). `AcquireNextFrame` çoğu turda oyunun bir sonraki
+    /// karesini bekleyerek geçiyor; 60 kare/s üreten bir kaynakta bu
+    /// bekleme kare başına ~16 ms ve ölçekleme kapalıyken de var olurdu.
+    /// Toplama katılsaydı kullanıcının gördüğü "kare başına" sayısı boru
+    /// hattının bedelini değil kaynağın kare hızını ölçerdi — üstelik
+    /// kaynak hızlandıkça "gecikme" düşüyormuş gibi görünürdü.
+    ///
+    /// Gizlenmiyor da: ayrı bir satır olarak gösteriliyor, çünkü sürekli
+    /// yüksek bir bekleme "yakalanan kaynak beklediğin kaynak değil"
+    /// demenin bir yolu.
+    pub bekleme_us: u32,
 }
 
 impl KareOlcumu {
+    /// Boru hattının bu karede EKLEDİĞİ süre.
+    ///
+    /// `bekleme_us` bilerek dışarıda — gerekçesi alanın kendi belgesinde.
     pub fn toplam_us(&self) -> u32 {
         self.yakalama_us
             .saturating_add(self.olcekleme_us)
@@ -74,6 +95,10 @@ pub struct GecikmeOzeti {
     /// Kare üretiminin kare başına ortalama CPU süresi (Faz 4).
     pub uretim_ort_ms: f32,
     pub sunum_ort_ms: f32,
+    /// Kaynağın yeni kare üretmesi beklenen ortalama süre.
+    ///
+    /// Bedel değil bilgi: `ort_ms`e dahil edilmiyor (karar #36).
+    pub bekleme_ort_ms: f32,
     /// Bu pencerede üretilen (gerçek olmayan) kare sayısı.
     ///
     /// Kullanıcının gördüğü karelerin kaçının üretildiğini söylüyor.
@@ -172,6 +197,7 @@ impl GecikmeTamponu {
             olcekleme_ort_ms: ort(|o| o.olcekleme_us),
             uretim_ort_ms: ort(|o| o.uretim_us),
             sunum_ort_ms: ort(|o| o.sunum_us),
+            bekleme_ort_ms: ort(|o| o.bekleme_us),
             uretilen_kare: self.uretilen_kare,
             yenileme_hz: self.yenileme_hz,
             bos_tur: self.bos_tur,
@@ -260,6 +286,29 @@ mod testler {
         assert!(o.ort_ms < 2.0, "ortalama {}", o.ort_ms);
         assert!((o.p1_kotu_ms - 30.0).abs() < 1e-3, "p1 {}", o.p1_kotu_ms);
         assert!((o.en_kotu_ms - 30.0).abs() < 1e-3);
+    }
+
+    /// Kaynağı bekleme, boru hattının bedeline sayılmıyor (karar #36).
+    ///
+    /// Bu bir hesap ayrıntısı değil, ölçümün ne iddia ettiğiyle ilgili:
+    /// bekleme dahil edilseydi 30 kare/s üreten bir oyunda "ölçekleme kare
+    /// başına 33 ms ekliyor" yazardı ve o sayı, ölçekleme kapalıyken de
+    /// aynı olurdu.
+    #[test]
+    fn kaynagi_bekleme_bedele_sayilmiyor() {
+        let mut t = GecikmeTamponu::yeni(10);
+        t.ekle(KareOlcumu {
+            yakalama_us: 500,
+            sunum_us: 500,
+            // 16 ms: 60 kare/s üreten bir kaynakta tipik bekleme.
+            bekleme_us: 16_000,
+            ..Default::default()
+        });
+        let o = t.ozetle().unwrap();
+        assert!((o.ort_ms - 1.0).abs() < 1e-3, "toplam {}", o.ort_ms);
+        assert!((o.en_kotu_ms - 1.0).abs() < 1e-3);
+        // Gizlenmiyor da: ayrı bir satır olarak duruyor.
+        assert!((o.bekleme_ort_ms - 16.0).abs() < 1e-3, "{}", o.bekleme_ort_ms);
     }
 
     #[test]

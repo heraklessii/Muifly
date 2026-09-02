@@ -206,13 +206,20 @@ mod win {
     pub struct Yakalayici {
         pub cihaz: ID3D11Device,
         pub baglam: ID3D11DeviceContext,
-        cogaltma: IDXGIOutputDuplication,
+        /// Çoğaltma oturumu.
+        ///
+        /// `Option`, çünkü yenilerken eskisinin **önce** bırakılması
+        /// gerekiyor: aynı cihaz aynı çıkışı ikinci kez çoğaltamıyor
+        /// (karar #36).
+        cogaltma: Option<IDXGIOutputDuplication>,
         /// Yakalanan karenin kendi kopyamız. Gölgelendiriciye bu bağlanıyor.
         pub doku: ID3D11Texture2D,
         pub gorunum: ID3D11ShaderResourceView,
         pub genislik: u32,
         pub yukseklik: u32,
         ekran: Ekran,
+        /// Son `kare()` çağrısında yeni kare beklenen süre (mikrosaniye).
+        bekleme_us: u32,
     }
 
     impl Yakalayici {
@@ -232,10 +239,6 @@ mod win {
                 let adaptor = fabrika
                     .EnumAdapters1(ekran.adaptor)
                     .map_err(|_| Engel::EkranYok)?;
-                let cikis = adaptor
-                    .EnumOutputs(ekran.cikis)
-                    .map_err(|_| Engel::EkranYok)?;
-
                 let mut cihaz: Option<ID3D11Device> = None;
                 let mut baglam: Option<ID3D11DeviceContext> = None;
                 let adaptor_iface: IDXGIAdapter = adaptor.cast().map_err(|e| engel(&e))?;
@@ -260,8 +263,7 @@ mod win {
                     _ => return Err(Engel::Desteklenmeyen),
                 };
 
-                let cikis1: IDXGIOutput1 = cikis.cast().map_err(|e| engel(&e))?;
-                let cogaltma = cikis1.DuplicateOutput(&cihaz).map_err(|e| engel(&e))?;
+                let cogaltma = cogalt(&cihaz, &ekran)?;
 
                 let tanim = cogaltma.GetDesc();
                 let genislik = tanim.ModeDesc.Width;
@@ -275,12 +277,13 @@ mod win {
                 Ok(Self {
                     cihaz,
                     baglam,
-                    cogaltma,
+                    cogaltma: Some(cogaltma),
                     doku,
                     gorunum,
                     genislik,
                     yukseklik,
                     ekran,
+                    bekleme_us: 0,
                 })
             }
         }
@@ -326,10 +329,62 @@ mod win {
         /// değiştiğinde (oyun açılırken çok olur) eski çoğaltma bir daha
         /// kare vermiyor. Kullanıcıya hata göstermeden önce bir kez
         /// deneniyor.
-        pub fn yeniden_ac(&mut self) -> Result<(), Engel> {
-            let yeni = Self::ekranla(self.ekran.clone())?;
-            *self = yeni;
-            Ok(())
+        ///
+        /// **Cihaz korunuyor** (karar #36). Eskiden burada yepyeni bir
+        /// `Yakalayici` kuruluyordu; yeni cihazın dokusu, sunum
+        /// penceresinin ve kare üreticisinin cihazına ait olmadığı için
+        /// D3D11 çizimi sessizce yok sayardı: ölçekleme "çalışıyor"
+        /// görünüp siyah kalırdı. Aynı cihazla yalnızca çoğaltma
+        /// yenileniyor; cihaz da gitmişse (sürücü sıfırlaması) her şey
+        /// yeniden kuruluyor ve çağıran bunu `true` olarak öğreniyor.
+        ///
+        /// Dönen değer: **aşağı akış yeniden kurulmalı mı?** Boyut, köşe
+        /// ya da cihaz değiştiyse `true` — sunum penceresi ve kare
+        /// üreticisi o değerlere göre ayrıldı.
+        pub fn yeniden_ac(&mut self) -> Result<bool, Engel> {
+            let eski_kose = (self.ekran.x, self.ekran.y);
+            let eski_boyut = (self.genislik, self.yukseklik);
+
+            // Ekranın güncel geometrisi: çözünürlük değiştiyse köşe de
+            // kaymış olabilir (çok ekranlı masaüstünde sık). Ad üzerinden
+            // eşleştiriliyor; liste sırası değişebilir ama sürücünün
+            // verdiği ad aynı kalıyor.
+            if let Ok(liste) = ekranlar() {
+                if let Some(g) = liste.into_iter().find(|e| e.ad == self.ekran.ad) {
+                    let indeks = self.ekran.indeks;
+                    self.ekran = Ekran { indeks, ..g };
+                }
+            }
+
+            // Eskisi ÖNCE bırakılıyor: aynı cihaz aynı çıkışı ikinci kez
+            // çoğaltamaz, elde tutulursa yenisi hiç açılmaz.
+            self.cogaltma = None;
+            let Ok(cogaltma) = cogalt(&self.cihaz, &self.ekran) else {
+                // Cihaz da gitti (sürücü sıfırlaması, kart değişimi).
+                // Baştan kurmaktan başka yol yok ve bu, aşağı akıştaki
+                // her şeyin yeniden kurulması demek.
+                *self = Self::ekranla(self.ekran.clone())?;
+                return Ok(true);
+            };
+
+            let tanim = unsafe { cogaltma.GetDesc() };
+            let (g, y) = (tanim.ModeDesc.Width, tanim.ModeDesc.Height);
+            if g == 0 || y == 0 {
+                return Err(Engel::Desteklenmeyen);
+            }
+            self.cogaltma = Some(cogaltma);
+
+            if (g, y) != eski_boyut {
+                // Doku yeni çözünürlüğe göre ayrılıyor; eskisine kopyalamak
+                // `CopyResource` boyut uyuşmazlığı demek olurdu.
+                let (doku, gorunum) = hedef_doku(&self.cihaz, g, y)?;
+                self.doku = doku;
+                self.gorunum = gorunum;
+                self.genislik = g;
+                self.yukseklik = y;
+                return Ok(true);
+            }
+            Ok(eski_kose != (self.ekran.x, self.ekran.y))
         }
 
         /// Bir sonraki kareyi bekler ve kendi dokumuza kopyalar.
@@ -337,9 +392,20 @@ mod win {
             unsafe {
                 let mut bilgi = DXGI_OUTDUPL_FRAME_INFO::default();
                 let mut kaynak: Option<IDXGIResource> = None;
-                let sonuc = self
-                    .cogaltma
-                    .AcquireNextFrame(zaman_asimi_ms, &mut bilgi, &mut kaynak);
+                // Çoğaltma yenileme sırasında bir an boş kalabiliyor;
+                // boşken kare istemek hata değil, "erişim kesildi" hâli.
+                let Some(cogaltma) = self.cogaltma.as_ref() else {
+                    return Err(Engel::ErisimKesildi);
+                };
+                // Beklemenin süresi ayrı ölçülüyor: bu sürenin çoğu oyunun
+                // bir sonraki karesini üretmesini beklemekle geçiyor ve o,
+                // ölçeklemenin EKLEDİĞİ bir gecikme değil (karar #36).
+                let bekleme_basi = std::time::Instant::now();
+                let sonuc = cogaltma.AcquireNextFrame(zaman_asimi_ms, &mut bilgi, &mut kaynak);
+                self.bekleme_us = bekleme_basi
+                    .elapsed()
+                    .as_micros()
+                    .min(u32::MAX as u128) as u32;
                 if let Err(e) = sonuc {
                     if e.code() == DXGI_ERROR_WAIT_TIMEOUT {
                         return Ok(KareDurumu::Bos);
@@ -349,7 +415,7 @@ mod win {
                 let Some(kaynak) = kaynak else {
                     // Kare gelmedi ama hata da yok: bırakma çağrısı yine de
                     // yapılmalı, yoksa çoğaltma bir daha kare vermez.
-                    let _ = self.cogaltma.ReleaseFrame();
+                    let _ = cogaltma.ReleaseFrame();
                     return Ok(KareDurumu::Bos);
                 };
 
@@ -363,13 +429,23 @@ mod win {
                 }
                 // Bırakma her yolda: erken dönen bir `?` burada masaüstü
                 // bileşicisini kilitli bırakırdı.
-                let _ = self.cogaltma.ReleaseFrame();
+                let _ = cogaltma.ReleaseFrame();
                 Ok(if yeni_goruntu {
                     KareDurumu::Yeni
                 } else {
                     KareDurumu::Bos
                 })
             }
+        }
+
+        /// Son `kare()` çağrısında yeni kare BEKLENEN süre (mikrosaniye).
+        ///
+        /// Çağıran bunu yakalama süresinden düşüyor. Ayrı durması şart:
+        /// bekleme, kaynağın kare hızının bir sonucu ve ölçekleme kapalıyken
+        /// de olurdu; boru hattının bedeliyle toplanırsa ölçüm, ölçmek
+        /// istediği şeyden başka bir şeyi ölçer (karar #36).
+        pub fn son_bekleme_us(&self) -> u32 {
+            self.bekleme_us
         }
 
         /// Son kareyi CPU'ya indirir.
@@ -414,6 +490,26 @@ mod win {
                 self.baglam.Unmap(&gecici, 0);
                 Ok(g)
             }
+        }
+    }
+
+    /// Bir ekranın çoğaltmasını **verilen** cihazla açar.
+    ///
+    /// Ayrı fonksiyon, çünkü `yeniden_ac` bunu cihazı değiştirmeden
+    /// çağırıyor. Adaptör ve çıkış her seferinde yeniden sayılıyor: ekran
+    /// modu değiştiğinde eski çıkış nesnesi geçerliliğini yitiriyor.
+    fn cogalt(cihaz: &ID3D11Device, ekran: &Ekran) -> Result<IDXGIOutputDuplication, Engel> {
+        unsafe {
+            let fabrika: IDXGIFactory1 =
+                CreateDXGIFactory1().map_err(|e| Engel::Sistem(e.code().0))?;
+            let adaptor = fabrika
+                .EnumAdapters1(ekran.adaptor)
+                .map_err(|_| Engel::EkranYok)?;
+            let cikis = adaptor
+                .EnumOutputs(ekran.cikis)
+                .map_err(|_| Engel::EkranYok)?;
+            let cikis1: IDXGIOutput1 = cikis.cast().map_err(|e| engel(&e))?;
+            cikis1.DuplicateOutput(cihaz).map_err(|e| engel(&e))
         }
     }
 
@@ -472,11 +568,14 @@ impl Yakalayici {
     pub fn ac(_indeks: usize) -> Result<Self, Engel> {
         Err(Engel::Platform)
     }
-    pub fn yeniden_ac(&mut self) -> Result<(), Engel> {
+    pub fn yeniden_ac(&mut self) -> Result<bool, Engel> {
         Err(Engel::Platform)
     }
     pub fn kare(&mut self, _zaman_asimi_ms: u32) -> Result<KareDurumu, Engel> {
         Err(Engel::Platform)
+    }
+    pub fn son_bekleme_us(&self) -> u32 {
+        0
     }
     pub fn oku(&self) -> Result<crate::scaling::algoritma::Goruntu, Engel> {
         Err(Engel::Platform)

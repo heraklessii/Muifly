@@ -52,6 +52,12 @@ use crate::state::Motor;
 /// ölçüm bir ICMP paketi demek.
 const DONGU_ADIMI: Duration = Duration::from_secs(1);
 
+/// Arka plan ölçümündeki ICMP zaman aşımı.
+///
+/// Bir saniye: cevap vermeyen bir hedefte her ölçüm turu bu kadar sürüyor
+/// ve tur, Motor kilidinin dışında geçiyor (bkz. `arka_plan_dongusu`).
+const GECIKME_ZAMAN_ASIMI_MS: u32 = 1000;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -305,8 +311,19 @@ fn arka_plan_dongusu(uygulama: tauri::AppHandle) {
             }
 
             // 3. Ölçüm — kullanıcının seçtiği aralıkta.
+            //
+            // Ping, Motor kilidinin DIŞINDA atılıyor (karar #36). Kilit
+            // altında ölçülseydi, cevap vermeyen bir hedefte arayüzün her
+            // komutu zaman aşımı kadar beklerdi: "araç donuyor" diye
+            // görünen şey, aslında bir ağ paketinin beklenmesi olurdu.
             if sayac % olcum_araligi == 0 {
-                let ornek = kilit.lock().ornek_al();
+                let hedef = kilit.lock().gecikme_olcum_hedefi();
+                let gecikme = hedef.and_then(|h| {
+                    network_boost::latency::olc(&h, GECIKME_ZAMAN_ASIMI_MS)
+                        .ok()
+                        .flatten()
+                });
+                let ornek = kilit.lock().ornek_kaydet(gecikme);
                 let _ = uygulama.emit(commands::OLAY_ORNEK, ornek);
             }
         }

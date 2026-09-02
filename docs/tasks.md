@@ -115,6 +115,9 @@ Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
       metni gerçekten çıkıyor mu ve kenarlıksız moda geçince düzeliyor mu.
 - [ ] **Ekran modu değişimi.** Oyun açılırken çözünürlük değişiyor;
       `ErisimKesildi` sonrası yeniden açma yolu bir kez görülmedi.
+      Yol karar #36'da yeniden yazıldı (eskisi ekranı siyah bırakıyordu):
+      çözünürlük değişince görüntü kaldığı yerden sürmeli, ölçekleme
+      durmamalı, günlükte "boru hattı yeniden kuruldu" satırı görünmeli.
 - [ ] **Çok ekranlı kurulum.** İkinci ekran seçilince pencere doğru ekranda
       mı açılıyor (masaüstü kökeni (0,0) değil).
 - [ ] **Ölçülen gecikmenin makul olup olmadığı.** "Sunum" satırı dikey
@@ -141,6 +144,8 @@ nasıl durduğunu göremez. Sırayla:
       bakılacak.
 - [ ] **Açıp kapatmak ekranı karartmıyor mu.** Anahtar çalışırken
       değiştirilebilmeli; farkın aynı sahnede görülebilmesinin tek yolu bu.
+      Karar #36'dan sonra ilk ara kare bir tur gecikiyor (ısınma):
+      anahtarı açtığın anda **tek karelik bir hayalet iz olmamalı**.
 - [ ] **Hızlı kamera hareketi.** ±24 pikselden hızlı hareket sınırın
       dışında; orada üretilen kare "karışım yerine en yakın gerçek kare"ye
       düşmeli, bozulmamalı.
@@ -149,6 +154,8 @@ nasıl durduğunu göremez. Sırayla:
       Yazının titreyip titremediğine bakılacak.
 - [ ] **Ölçülen bedel makul mü.** "Kare üretimi (hesap süresi)" satırı.
       Ekran yenileme aralığına yakınsa boru hattı sığmıyor demektir.
+      "Kaynağı bekleme" satırı ayrı okunmalı: o süre bedele dahil değil
+      (karar #36) ve kaynağın kare hızını gösteriyor.
 - [ ] **Yenileme hızı uyarısı.** 60 Hz bir ekranda uyarı çıkıyor mu;
       yüksek yenilemeli ekranda çıkmıyor mu.
 - [ ] **Rekabetçi mod kapısı.** Rekabetçi moda geçilince kare üretimi
@@ -235,6 +242,18 @@ nasıl durduğunu göremez. Sırayla:
 
 ## Tamamlandı
 
+- [x] **Kararlılık turu: sessiz bozulan dört yol** (2 Eylül 2026, karar #36).
+      Hiçbiri kullanıcıya hata göstermiyordu:
+      (1) ekran modu değişince ölçekleme siyah kalıyordu — `yeniden_ac`
+      yeni bir D3D11 cihazı kuruyor, sunum penceresi eskisiyle çiziyordu;
+      (2) kare üretimi anahtarı açıldığında ilk ara kare bayat bir
+      piramitle hesaplanıyordu;
+      (3) gecikme ölçümü kaynağın kare hızını bedele katıyordu — aynı
+      sahnede 7,26 ms yerine 0,40 ms;
+      (4) arka plan ICMP ölçümü Motor kilidini bir saniyeye kadar
+      tutuyordu.
+      Beş yeni test duruşu koruyor. Dördü de yalnızca gerçek bir oyunla
+      görülebilecek yollar — Sıradaki 7 ve 8'e madde eklendi.
 - [x] **MSI paketlemesini kıran yardımcı ikili çakışması** (2 Eylül 2026).
       `tauri build` paketin bütün cargo `bin` hedeflerini kuruluma koyuyordu;
       `externalBin` sidecar'ı da aynı dosyayı koyunca `muifly-olcum.exe` iki

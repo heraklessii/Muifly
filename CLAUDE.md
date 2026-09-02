@@ -224,12 +224,16 @@ Muifly/
   gösterdi (karar #32). Masaüstünde ilk elle deneme makineyi
   kullanılamaz hale getirdi: sunum penceresinin kapatılacak hiçbir yolu
   yoktu. Kaçış kısayolu ve gizlenme kuralı eklendi (karar #34), ikisi de
-  **henüz elle denenmedi**.
+  **henüz elle denenmedi**. Kararlılık turunda (karar #36) ekran modu
+  değişince boru hattının siyah kalması düzeltildi ve gecikme ölçümü
+  kaynağı bekleme süresini bedelden ayırdı — ölçülen bedel 7,26 ms
+  değil 0,40 ms çıktı.
 - **Faz 4** (kare üretimi) — faz **ikiye ayrıldı** (karar #35), çünkü kare
   üretimi ML gerektirmiyor.
   - **4a (klasik)** — 🟡 **kod tamam**. Piramitli blok eşleme + çift yönlü
     warp, HLSL'de; CPU referansı `hareket.rs` ve doğruluğu sentetik
     gerçek-referansla ölçülüyor. Varsayılan kapalı, rekabetçi modda kapalı.
+    Anahtar açıldığında ilk ara kare bir ısınma turu bekliyor (karar #36).
     ⬜ Gerçek bir oyunla gözle denenmedi — `tasks.md` → Sıradaki 8.
   - **4b (ML)** — ⬜ fizibilite **yapıldı** (`docs/FRAME_GENERATION.md`) ve
     sonucu: şu an açılmıyor. Açılma koşulu 4a'nın sahada denenmiş ve

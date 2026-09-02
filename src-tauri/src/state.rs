@@ -718,15 +718,24 @@ impl Motor {
         Some(ModDegisimi { yeni, geri_alinan })
     }
 
-    /// Bir ölçüm örneği alır.
-    pub fn ornek_al(&mut self) -> Ornek {
-        let gecikme = if self.ayarlar.gecikme_olcumu {
-            network_boost::latency::olc(&self.ayarlar.gecikme_hedefi, 1000)
-                .ok()
-                .flatten()
-        } else {
-            None
-        };
+    /// Gecikme ölçümünün hedefi — ölçüm kapalıysa `None`.
+    ///
+    /// Ölçümün kendisi burada YAPILMIYOR ve bu bilinçli (karar #36). Bir
+    /// ICMP turu, ad çözümüyle birlikte saniyelerce sürebiliyor; Motor
+    /// kilidi o süre boyunca elde kalsaydı arayüzün her komutu ve bir
+    /// sonraki mod kontrolü beklerdi. Çağıran hedefi alıyor, ölçümü
+    /// **kilit dışında** yapıyor, sonucu `ornek_kaydet`e veriyor.
+    pub fn gecikme_olcum_hedefi(&self) -> Option<String> {
+        self.ayarlar
+            .gecikme_olcumu
+            .then(|| self.ayarlar.gecikme_hedefi.clone())
+    }
+
+    /// Ölçülmüş gecikmeyle bir örnek kaydeder.
+    ///
+    /// Yalnızca CPU/bellek okuyor ve tampona yazıyor: kilidin altında
+    /// geçen süre mikrosaniyeler mertebesinde.
+    pub fn ornek_kaydet(&mut self, gecikme: Option<f32>) -> Ornek {
         let ornek = self.ornekleyici.ornek_al(gecikme);
         self.ornekler.ekle(ornek);
         ornek
@@ -839,6 +848,28 @@ mod testler {
     fn tek_ornekte_sure_sifir() {
         assert_eq!(sure_saniye(&[ornek(1000, 1.0)]), 0.0);
         assert_eq!(sure_saniye(&[]), 0.0);
+    }
+
+    /// Ölçüm ayarı kapalıyken hedef verilmiyor (karar #36).
+    ///
+    /// Testin asıl konusu ayar değil **yapı**: ölçümü Motor'un dışına
+    /// taşıyan ayrım burada duruyor. `ornek_kaydet` ağ işi yapmıyor,
+    /// hedefi soran çağıran ölçümü kilidin dışında yapıyor. Bu ikisi
+    /// yeniden tek fonksiyona birleştirilirse test derlenmez.
+    #[test]
+    fn gecikme_hedefi_ayara_bagli() {
+        let mut motor = bos_motor();
+        motor.ayarlar.gecikme_olcumu = false;
+        assert_eq!(motor.gecikme_olcum_hedefi(), None);
+
+        motor.ayarlar.gecikme_olcumu = true;
+        motor.ayarlar.gecikme_hedefi = "1.1.1.1".into();
+        assert_eq!(motor.gecikme_olcum_hedefi().as_deref(), Some("1.1.1.1"));
+
+        // Kayıt yolu ağa hiç bakmıyor: ölçülen değer dışarıdan geliyor.
+        let o = motor.ornek_kaydet(Some(12.5));
+        assert_eq!(o.gecikme_ms, Some(12.5));
+        assert_eq!(motor.ornekler().len(), 1);
     }
 
     #[test]

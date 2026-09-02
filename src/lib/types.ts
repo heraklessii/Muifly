@@ -269,6 +269,13 @@ export interface GecikmeOzeti {
   uretimOrtMs: number;
   /** Dikey eşitleme beklemesi de bunun içinde. */
   sunumOrtMs: number;
+  /**
+   * Kaynağın yeni kare üretmesi beklenen ortalama süre.
+   *
+   * `ortMs`e DAHİL DEĞİL: bu bekleme ölçekleme kapalıyken de olurdu,
+   * boru hattının eklediği bir bedel değil (karar #36).
+   */
+  beklemeOrtMs: number;
   /** Bu pencerede üretilen kare sayısı — bir kazanç iddiası değil. */
   uretilenKare: number;
   /** Ekran yenileme hızı (Hz), ölçülebildiyse. */

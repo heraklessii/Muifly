@@ -1413,3 +1413,79 @@ göründüğünü göstermiyor. `tasks.md` → Sıradaki 8, on maddelik liste.
 Faz 1'in saha doğrulaması hâlâ bekliyor. Bu, kuralı üçüncü kez esneten
 oturum (Faz 3 → karar #33, Faz 4a → karar #35) ve
 `FRAME_GENERATION.md` dördüncüye çıkarılmamasını gerekçelendiriyor.
+
+---
+
+## Oturum 15 — 2 Eylül 2026 · Kararlılık turu (karar #36)
+
+### İstek ve çerçeve
+
+"Geliştirmeye devam et, stabil hâle getir." `tasks.md` → Sıradaki'nin
+neredeyse tamamı elle deneme işi (gerçek oyun, gerçek kurulum, gerçek
+UAC istemi) ve bu oturumda yapılamazdı. Yapılabilecek olan başka bir
+soruydu: **bir şey ters gittiğinde ne oluyor?**
+
+Yeni özellik yazılmadı. Bulunan dört kusurun ortak noktası, hiçbirinin
+kullanıcıya hata göstermemesiydi.
+
+### 1. Ekran modu değişince ölçekleme siyah kalıyordu
+
+`yeniden_ac` yeni bir D3D11 cihazı kuruyordu; sunum penceresi ve kare
+üreticisi eskisinin nesneleriyle kalıyordu. D3D11, başka cihaza ait
+kaynakla çizimi **hata döndürmeden** yok sayıyor: sayaçlar döner, ekran
+siyah kalır.
+
+Bu yolun tetikleyicisi çoğunlukla **oyun açılırken çözünürlüğün
+değişmesi**; yani hata, özelliğin asıl kullanım anında ortaya çıkacaktı.
+Cihaz artık korunuyor, yalnızca çoğaltma yenileniyor; boyut/köşe/cihaz
+değiştiyse döngü sunum penceresini ve üreticiyi yeniden kuruyor.
+Denemeler 10 saniyede 5 ile sınırlı.
+
+### 2. Kare üretimi açılır açılmaz hayalet iz gösteriyordu
+
+Piramit yalnızca üretim açıkken kuruluyor; anahtar açıldığında "önceki
+kare" dakikalar öncesine ait olabiliyordu. Isınma turu eklendi
+(`ara_kare_hazir`): üretim kesintisiz iki tur açık kalmadan ara kare yok.
+
+### 3. Ölçüm, ölçtüğünü sandığı şeyi ölçmüyordu
+
+En öğretici bulgu. `yakalama_us`, `AcquireNextFrame`in tamamını
+sayıyordu — çoğu, oyunun bir sonraki karesini bekleyerek geçen ve
+ölçekleme kapalıyken de var olan bir süre.
+
+Aynı makinede, aynı sahne:
+
+```text
+önce:  ort 7,26 ms   (yakalama 7,07)
+sonra: ort 0,40 ms   (yakalama 0,20 · bekleme 15,03, toplama dahil değil)
+```
+
+Araç kendi bedelini **on sekiz kat büyük** gösteriyordu. Faz 3'ün ikinci
+kabul kriteri bu ölçüm; yanlış ölçen bir kabul kriteri kriter değil.
+Bekleme gizlenmedi: "bedele dahil değil" etiketiyle ayrı satırda duruyor,
+çünkü sürekli yüksek bir bekleme yanlış kaynağın yakalandığını söyler.
+
+### 4. Arka plan ölçümü arayüzü kilitleyebiliyordu
+
+ICMP ölçümü Motor kilidi altında yapılıyordu: cevap vermeyen bir hedefte
+her ölçüm turu, arayüzün her komutunu bir saniyeye kadar bekletirdi.
+`gecikme_olcum_hedefi` + `ornek_kaydet` ayrımıyla ping kilidin dışına
+çıktı. Aynı ayrım `oyunu_olc`ta zaten vardı; burada atlanmıştı.
+
+### Testler ne öğretti
+
+Dördü de birim testlerinden geçmişti, çünkü dördü de **parçaların
+birlikte çalışmasıyla** ilgili: cihaz kimliği, iki kare arasındaki durum,
+ölçülen sürenin anlamı, kilidin süresi. Yeni beş test davranıştan çok
+duruşu koruyor; `gecikme_hedefi_ayara_bagli` bunların en tuhafı — ölçtüğü
+şey bir değer değil, ölçümün Motor'un dışında kaldığı yapı.
+
+Rust 393 → 398 test, arayüz 72 → 72 (bir test fixture'ı büyüdü), clippy
+temiz. `gercek_ekranda_bir_tur` yeniden koştu ve yukarıdaki iki satırlık
+ölçüm farkı oradan geldi.
+
+### Kalan
+
+Birinci ve ikinci madde yalnızca gerçek bir oyun açılırken ortaya çıkan
+yollar; ikisi de hâlâ elle denenmedi. `tasks.md` → Sıradaki 7 ve 8'e
+birer madde eklendi.

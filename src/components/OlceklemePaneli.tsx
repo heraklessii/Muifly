@@ -417,6 +417,10 @@ export function OlceklemePaneli({
                 <span className="kv__ad">Sunum (dikey eşitleme beklemesi dahil)</span>
                 <span className="kv__deger">{milisaniye(gecikme.sunumOrtMs, 2)}</span>
               </div>
+              <div className="kv">
+                <span className="kv__ad">Kaynağı bekleme (bedele dahil değil)</span>
+                <span className="kv__deger">{milisaniye(gecikme.beklemeOrtMs, 2)}</span>
+              </div>
               {gecikme.uretilenKare > 0 && (
                 <div className="kv">
                   <span className="kv__ad">Üretilen kare</span>
@@ -447,8 +451,12 @@ export function OlceklemePaneli({
             <p className="field-hint">
               Süreler CPU tarafında ölçülüyor. "Sunum" satırı ekranın kendi
               yenileme hızını beklemeyi de içeriyor; o bekleme bir maliyet
-              değil, kareyi yırtılmadan göstermenin bedeli. Bu sayılar senin
-              makinende ölçüldü — başka bir makinede farklı çıkar.
+              değil, kareyi yırtılmadan göstermenin bedeli. "Kaynağı bekleme"
+              satırı ise oyunun bir sonraki karesini üretmesini beklemek:
+              ölçekleme kapalıyken de geçen bu süre "kare başına" toplamına
+              katılmıyor, ama sürekli yüksekse yakalanan kaynak beklediğin
+              kaynak değil demektir. Bu sayılar senin makinende ölçüldü —
+              başka bir makinede farklı çıkar.
             </p>
           </>
         )}
