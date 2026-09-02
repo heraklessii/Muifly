@@ -143,6 +143,7 @@ export interface Profil {
   system: SistemBolumu;
   network: AgBolumu;
   scaling: OlceklemeBolumu;
+  ceviri: CeviriBolumu;
   created_by: string;
   shared: boolean;
 }
@@ -163,6 +164,7 @@ export function bosProfil(): Profil {
     },
     network: { preferred_dns: null, qos_priority: false, tcp_nodelay: false },
     scaling: { enabled: false, algorithm: null, frame_generation: false },
+    ceviri: { enabled: false, region: null, source_language: null },
     created_by: 'user',
     shared: false,
   };
@@ -222,6 +224,14 @@ export interface Ayarlar {
   gecmisTut: boolean;
   /** Ölçeklemenin yakalayacağı ekran (`olceklemeEkranlari` listesindeki sıra). */
   olceklemeEkrani: number;
+  /** Ekran çevirisi açık mı (kısayol kayıtlı mı). Varsayılan kapalı. */
+  ceviriAcik: boolean;
+  /** Çevirinin okuyacağı ekran. Ölçeklemeninkinden ayrı. */
+  ceviriEkrani: number;
+  /** Sonuç ekranın üstünde bir pencerede gösterilsin mi. */
+  ceviriOverlay: boolean;
+  /** Model kaç saniye boşta kalınca bellekten düşsün. `0` = hiç. */
+  ceviriBostaDusurSn: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -575,3 +585,126 @@ export interface UcuncuTarafListesi {
   hedef: string;
   bilesenler: UcuncuTarafBileseni[];
 }
+
+
+/* ---------------------------------------------------------------------------
+ * Ekran çevirisi (Faz 5) — `src-tauri/src/ceviri/`
+ *
+ * Alan adları Rust tarafıyla birebir aynı. `Alan` ve `CeviriBolumu` profil
+ * dosyasına yazıldığı için snake_case, geri kalanı camelCase.
+ * ------------------------------------------------------------------------- */
+
+/** Çevrilecek ekran parçası — kenar uzunluklarının **oranı** (0..1). */
+export interface Alan {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface CeviriBolumu {
+  enabled: boolean;
+  /** `null` = ekranın tamamı. */
+  region: Alan | null;
+  /** OCR'ın okuyacağı dil. `null` = varsayılan. */
+  source_language: string | null;
+}
+
+/** Çevirinin hangi adımda olduğu. */
+export type CeviriAsamasi =
+  | 'bosta'
+  | 'yakalaniyor'
+  | 'okunuyor'
+  | 'modelYukleniyor'
+  | 'cevriliyor';
+
+export const ASAMA_ETIKETLERI: Record<CeviriAsamasi, string> = {
+  bosta: 'Hazır',
+  yakalaniyor: 'Ekran okunuyor',
+  okunuyor: 'Yazı taranıyor',
+  modelYukleniyor: 'Model belleğe alınıyor',
+  cevriliyor: 'Çevriliyor',
+};
+
+export interface CeviriDurumu {
+  acik: boolean;
+  /** Kayıtlı kısayol, örn. `Ctrl+Alt+T`. Açıkken hep dolu. */
+  kisayol: string | null;
+  asama: CeviriAsamasi;
+  modelBellekte: boolean;
+  yakalamaMs: number | null;
+  ocrMs: number | null;
+  ceviriMs: number | null;
+  /** Son isteğin hatası. Sonraki başarılı istekte siliniyor. */
+  sonHata: string | null;
+  oyun: string;
+  kaynakDil: string;
+  hedefDil: string;
+  tumEkran: boolean;
+}
+
+/** Bir kaydın nereden geldiği (karar #22). */
+export type Koken = 'makine' | 'kullanici';
+
+export interface CeviriBirimi {
+  /** Kullanıcının ekranda gördüğü hâli. Her zaman gösteriliyor (karar #29). */
+  kaynak: string;
+  ceviri: string;
+  koken: Koken;
+  korunanTerimler: string[];
+  /** Çıktıda işareti bulunamayan terimler — "çeviri eksik" demek. */
+  kayipTerimler: string[];
+  /** Model bu birim için hiçbir şey üretmedi. */
+  bos: boolean;
+}
+
+export interface CeviriSonucu {
+  ham: string;
+  uyarilar: string[];
+  birimler: CeviriBirimi[];
+  bellekten: number;
+  ceviriMs: number;
+}
+
+export interface ModelDurumu {
+  kurulu: boolean;
+  toplamBayt: number;
+  dizin: string;
+  eksikler: string[];
+  kaynak: string;
+}
+
+export interface IndirmeIlerlemesi {
+  sira: number;
+  adet: number;
+  ad: string;
+  inen: number;
+  toplam: number;
+  bitti: boolean;
+  hata: string | null;
+}
+
+export interface CeviriKaydi {
+  metin: string;
+  ceviri: string;
+  koken: Koken;
+  zaman: number;
+}
+
+export interface CeviriBellegi {
+  oyun: string;
+  kaynakDil: string;
+  hedefDil: string;
+  terimler: Record<string, string>;
+  kayitlar: CeviriKaydi[];
+}
+
+/** OCR dil paketinin durumu (karar #28). */
+export type OcrDilDurumu =
+  | { durum: 'var'; dil: { etiket: string; ad: string } }
+  | {
+      durum: 'yok';
+      etiket: string;
+      nasilKurulur: string;
+      mevcut: { etiket: string; ad: string }[];
+    };

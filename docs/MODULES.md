@@ -84,6 +84,35 @@ profil doğrulaması, profil uygulama yolu, mod geçişi.
 **Deftere yazmıyor, günlüğe yazıyor.** Sistemde geri alınacak bir iz
 bırakmıyor: açılan tek şey sürecin ömrüyle sınırlı bir pencere.
 
+## ceviri (Faz 5 — yazıldı)
+
+**Sorumluluk**: Tuşa basınca ekrandaki yazıyı okumak ve bu bilgisayarda
+çevirmek. Ağa yalnızca modelin indirilmesi için, yalnızca kullanıcı
+isterse çıkılıyor.
+
+| İşlev | API / Yöntem | Not |
+|---|---|---|
+| Kısayol | `RegisterHotKey` (kanca değil) | ✅ Tuş basışları okunmuyor; sisteme tek kombinasyon. Kaydedilemezse özellik **açılmıyor** |
+| Ekran okuma | `scaling::yakalama` yeniden kullanılıyor | ✅ Faz 3'ün katmanı; ikinci bir yakalama yazılmadı (karar #37) |
+| Alan kesme | `alan.rs` | ✅ Oran olarak saklanıyor; profil başka çözünürlükte de doğru yere düşüyor |
+| Yazı çıkarma | `Windows.Media.Ocr` | ✅ İkiliye sıfır bayt ekliyor; satır sonları korunuyor (karar #28) |
+| Cümlelere ayırma | `cumle.rs` | ✅ Karar #29 zaaf 3'ü kaynağında kapatıyor: model tek cümle görüyor |
+| Çeviri | ONNX Runtime, greedy çözümleme | ✅ İki çekirdekle sınırlı; boştayken bellekten düşüyor |
+| Model dosyaları | `model.rs` + `indirme.rs` (WinHTTP) + `sha256.rs` | ✅ İkiliye girmiyor, isteğe bağlı iniyor, her dosya doğrulanıyor (karar #1, #22) |
+| Sonuç penceresi | Tauri penceresi: üstte, odak almayan, kapatma düğmeli | ✅ Ekranın tamamını kaplamıyor ve tıklanabilir — karar #34'ün dersi |
+| Alan seçici | Donmuş ekran görüntüsü üstünde dikdörtgen | ✅ Esc ile kapanıyor; görüntü gelmese bile kilitlenmiyor |
+
+**Kritik**: Bu modül de oyun sürecine HİÇBİR ŞEY enjekte etmiyor. Yakalama
+Faz 3'ün yolu, kısayol resmî bir API, çeviri ayrı bir iş parçacığında.
+
+**Rekabetçi modda KAPALI DEĞİL** — ölçeklemeden farkı bu. Ölçekleme her
+karede gecikme ekliyor; çeviri kullanıcı tuşa bastığında bir kez çalışıyor.
+Açıkça istenen bir işi reddetmek, kapının koruduğu şeyi korumazdı (karar
+#37).
+
+**Deftere yazmıyor, günlüğe yazıyor.** Kaydedilen tek sistem kaynağı klavye
+kısayolu ve o da sürecin ömrüyle sınırlı.
+
 ## profile_engine
 
 **Sorumluluk**: JSON profil yükleme/kaydetme, oyun algılama, mod state yönetimi.
@@ -146,7 +175,7 @@ Bir modülü değiştirmeden önce buraya bak.
 | PNG yazıcı | `library/png.rs` | ✅ Sıkıştırmasız; yeni bağımlılık eklememek için (karar #21) |
 | Oyun katalogu | `profile_engine/katalog.rs` | ✅ Gömülü `katalog.json`: exe → oyun adı + rekabetçi bayrağı. Hazır ayar taşımıyor (karar #26) |
 | Çeviri önişleme | `ceviri/onisleme.rs` | ✅ BÜYÜK HARF metni cümle düzenine indirir; OCR'ın bozduğundan şüphelenilen yeri **işaretler, düzeltmez** (karar #29 zaaf 1, #28) |
-| Terim sözlüğü | `ceviri/sozluk.rs` | ✅ Terimler çeviriden önce çıkarılıp yerlerine işaret konuyor; model terimi hiç görmüyor. İşaretin modelden sağ çıktığı **ölçülmedi** (karar #30) |
+| Terim sözlüğü | `ceviri/sozluk.rs` | ✅ Terimler çeviriden önce çıkarılıp yerlerine işaret konuyor; model terimi hiç görmüyor. İşaret biçimi **ölçülerek** seçildi — ilk seçim (`[[0]]`) modelden sağ çıkmıyordu (karar #37) |
 | Çeviri belleği | `ceviri/bellek.rs` | ✅ Oyun başına JSON. Makine kaydı kullanıcı kaydını ezemiyor, budama kullanıcı kayıtlarına dokunmuyor (karar #22) |
 | OCR dil kontrolü | `ceviri/ocr_dil.rs` | ✅ Kaynak dilin OCR paketi kurulu mu; değilse nasıl kurulacağı söyleniyor. Karar mantığı WinRT'den ayrı, her platformda test ediliyor (karar #28) |
 | Ekran yakalama | `scaling/yakalama.rs` | ✅ Desktop Duplication; çok kartlı makinelerde ekranı süren adaptörle açılıyor. Münhasır tam ekranda çalışmaz ve bunu **ne yapılacağını söyleyerek** bildirir |
@@ -155,7 +184,17 @@ Bir modülü değiştirmeden önce buraya bak.
 | Sunum penceresi | `scaling/sunum.rs` | ✅ Odak almayan, tıklama geçiren, Alt+Tab'da görünmeyen üstteki pencere + DXGI çevirme zinciri |
 | Ölçekleme gecikmesi | `scaling/gecikme.rs` | ✅ Boru hattının **eklediği** süre. İyileşme alanı taşımıyor, testle korunuyor (karar #15, #32) |
 | Ölçekleme akışı | `scaling/mod.rs` | ✅ İş parçacığı denetimi, rekabetçi mod kapısı, yakalama denemesi |
-| Kare üretimi | `scaling/` | ⬜ Faz 4 — profil dosyasında açılsa bile `dogrula` kapatıyor |
+| Kare üretimi | `scaling/uretim.rs` + `uretim.hlsl` | ✅ Faz 4a — varsayılan kapalı, rekabetçi modda kapalı (karar #35) |
+| Çeviri alanı | `ceviri/alan.rs` | ✅ Oran olarak; profil paylaşıldığında başka çözünürlükte de doğru yere düşüyor |
+| Cümlelere ayırma | `ceviri/cumle.rs` | ✅ Her cümle ayrı çevriliyor — karar #29 zaaf 3'ün (sessiz cümle atlama) kaynağındaki çözüm |
+| OCR | `ceviri/ocr.rs` | ✅ `Windows.Media.Ocr`; satır sonları korunuyor çünkü `cumle` onları sınır sayıyor |
+| Çeviri motoru | `ceviri/cevirici.rs` | ✅ ONNX Runtime + SentencePiece. Sayıya çevirme `vocab.json`un işi, parçalama `tokenizer.json`un (karar #29) |
+| Model dosyaları | `ceviri/model.rs` | ✅ Boyut + SHA-256 kodda sabit; ikiliye gömülmediği testle korunuyor |
+| İndirme | `ceviri/indirme.rs` | ✅ WinHTTP — yeni bir HTTP kasası eklenmedi (`png.rs` ile aynı gerekçe) |
+| SHA-256 | `ceviri/sha256.rs` | ✅ Elle yazıldı; testi FIPS 180-4'ün kendi örnekleriyle |
+| Çeviri kısayolu | `ceviri/kisayol.rs` | ✅ `RegisterHotKey`, kendi iş parçacığında. Kaydedilemezse özellik açılmıyor |
+| Çeviri akışı | `ceviri/akis.rs` | ✅ Boru hattının kararları — Windows'suz test edilebiliyor |
+| Çeviri denetleyicisi | `ceviri/denetleyici.rs` | ✅ İş parçacığı, aşama bildirimi, modelin boşta düşürülmesi |
 
 ## Neden bazı satırlar ◐
 
@@ -166,8 +205,10 @@ okusun.
 
 ## Test durumu
 
-331 birim testi geçiyor (`cargo test` ve `cargo test --features demo`), arayüz
-tarafında 57 test (`npm test` — vitest + jsdom, backend mock’lu).
+470 birim testi geçiyor (`cargo test` ve `cargo test --features demo`), arayüz
+tarafında 79 test (`npm test` — vitest + jsdom, backend mock’lu). Ayrıca beş
+test `--ignored`: üçü gerçek model dosyalarına, ikisi gerçek ekrana ihtiyaç
+duyuyor ve CI'da koşamıyor.
 Testlerin bir kısmı **ürün duruşlarını koruyor**,
 yalnızca kodu değil:
 

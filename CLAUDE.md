@@ -13,6 +13,10 @@ altında birleştirir:
 2. **Network Boost** — DNS/route ölçümü, QoS, jitter/packet loss izleme
 3. **Scaling** — post-process upscaling (spatial) + kare üretimi (Faz 4a, ML'siz)
 
+Bunların yanında, üçüne eş sayılmayan bir ek: **ekran çevirisi** (Faz 5).
+Varsayılan kapalı ve modeli ayrı indiriliyor — ürünün kimliği hâlâ "üç
+kategoriyi tek araçta birleştirmek" (karar #37).
+
 Rakip/ilham: Lossless Scaling (Steam), Razer Cortex, WTFast/ExitLag. Boşluk: bu üçünü
 ayrı ayrı satın alıyorlar, biz tek + şeffaf + tersine çevrilebilir bir araçta topluyoruz.
 
@@ -55,6 +59,7 @@ state.rs (Motor)   ← akış: oyun algılandı → profil uygula → kapanınca
    ├── network_boost/    DNS ölçümü, gecikme/jitter, TCP, QoS
    ├── monitor/          şeffaflık günlüğü + ölçüm + oturum geçmişi
    ├── scaling/          ekran yakalama + ölçekleme + kare üretimi + sunum
+   ├── ceviri/           ekran çevirisi: OCR + yerel model + kısayol (Faz 5)
    ├── ledger.rs         geri alma defteri (veri)
    └── revert.rs         geri alma uygulayıcısı (davranış)
 ```
@@ -63,9 +68,11 @@ state.rs (Motor)   ← akış: oyun algılandı → profil uygula → kapanınca
 üzerinden geçer ve **hem deftere hem günlüğe** yazar. Üçünden biri eksik
 kalırsa ya geri alma kaybolur ya kullanıcı ne olduğunu göremez.
 
-Tek istisna `scaling/`: deftere yazmıyor çünkü geri alınacak bir iz
-bırakmıyor — açtığı tek şey sürecin ömrüyle sınırlı bir pencere. Günlüğe
-yazıyor (karar #32).
+İki istisna `scaling/` ve `ceviri/`: deftere yazmıyorlar çünkü geri
+alınacak bir iz bırakmıyorlar — ilkinin açtığı tek şey sürecin ömrüyle
+sınırlı bir pencere, ikincisinin aldığı tek sistem kaynağı yine sürecin
+ömrüyle sınırlı bir klavye kısayolu. İkisi de günlüğe yazıyor
+(kararlar #32, #37).
 
 Detaylı mimari: `docs/ARCHITECTURE.md` · Modül detayı: `docs/MODULES.md`
 
@@ -92,11 +99,11 @@ Detaylı gerekçeler: `docs/DESIGN_PRINCIPLES.md`
 npm run dev        # sadece frontend (Vite, localhost:1420)
 npm run build      # tsc + vite build → dist/
 npm run tauri dev  # tam uygulama (Rust + pencere)
-npm test           # arayüz testleri (vitest + jsdom) — 72 test
+npm test           # arayüz testleri (vitest + jsdom) — 79 test
 ```
 
 ```bash
-cargo test                    # src-tauri/ içinde — 393 test
+cargo test                    # src-tauri/ içinde — 470 test
 cargo test --features demo    # demo ikilisinin kısıtlarıyla
 cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
 
@@ -104,6 +111,11 @@ cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
 # tasks.md → Tamamlandı). `cargo test` onu DERLEMİYOR; derleme hatasının
 # yayın gününe kalmaması için:
 cargo clippy --all-targets --features olcum-yardimcisi -- -D warnings
+
+# Faz 5'in uçtan uca testleri gerçek model dosyalarına ihtiyaç duyuyor ve
+# `cargo test` onları KOŞMUYOR. Model kuruluysa (Çeviri ekranı → "Modeli
+# indir") elle:
+cargo test --release ceviri::cevirici::testler -- --ignored --nocapture
 ```
 
 ```bash
@@ -160,7 +172,7 @@ Muifly/
 ├── src/                     ✅ React arayüzü
 │   ├── App.tsx              ✅ kabuk: kenar çubuğu, başlık çubuğu, yedi ekran
 │   ├── styles.css           ✅ Mui tasarım sistemi (teal, Outfit, koyu zemin)
-│   ├── components/          ✅ 7 panel + 3 diyalog + grafik + mini eğri + ikon + toast
+│   ├── components/          ✅ 8 panel + 3 diyalog + overlay + alan seçici + grafik + ikon + toast
 │   ├── assets/fonts/        ✅ Outfit + LICENSE-OFL.txt (gömülü, CDN yok)
 │   └── lib/                 ✅ api.ts (invoke sarmalayıcıları), types.ts, format.ts
 └── src-tauri/               ✅ Rust çekirdeği
@@ -187,9 +199,12 @@ Muifly/
         ├── network_boost/   ✅ dns, latency, tcp, qos
         ├── profile_engine/  ✅ schema, store, aktarım (içe/dışa), mod seçimi, katalog
         ├── library/         ✅ steam, epic, exe adayları, vdf, ikon, png — hepsi yerel
-        ├── ceviri/          ✅ Faz 5'in yakalamasız katmanı (karar #30):
-        │                       onisleme, sozluk, bellek, ocr_dil.
-        │                       Motor'a BAĞLI DEĞİL, arayüzü yok — bilerek.
+        ├── ceviri/          ✅ Faz 5 tamamlandı (kararlar #30, #37):
+        │                       onisleme, sozluk, bellek, ocr_dil (ilk tur);
+        │                       ocr, alan, cumle, cevirici, model, indirme,
+        │                       sha256, kisayol, akis, denetleyici (ikinci tur).
+        │                       Motor'a BAĞLI; deftere yazmıyor, günlüğe yazıyor.
+        │                       Model ikiliye GİRMİYOR — isteğe bağlı iniyor.
         └── scaling/         ✅ Faz 3 (karar #32) + Faz 4a (karar #35):
                                 yakalama (Desktop Duplication),
                                 olcekleme.hlsl + uretim.hlsl (gerçek zamanlı
@@ -238,12 +253,21 @@ Muifly/
   - **4b (ML)** — ⬜ fizibilite **yapıldı** (`docs/FRAME_GENERATION.md`) ve
     sonucu: şu an açılmıyor. Açılma koşulu 4a'nın sahada denenmiş ve
     kusurlarının listelenmiş olması.
-- **Faz 5** (ekran çevirisi) — 🟡 **kısmen açıldı** (karar #30). İki
-  fizibilite sorusu da cevaplandı ve olumlu: OCR (karar #28), çeviri
-  (karar #29). **Yakalamadan bağımsız katman yazıldı** (`src/ceviri/`:
-  önişleme, terim sözlüğü, çeviri belleği, OCR dil kontrolü).
-  ⬜ Yakalama, overlay, kısayol, model ve arayüz hâlâ Faz 3'ün arkasında —
-  ayrım testi "Faz 3 gelince bu kod yeniden yazılır mı?"
+- **Faz 5** (ekran çevirisi) — 🟡 **kod tamam** (kararlar #30, #37).
+  Faz iki turda yazıldı: karar #30 yakalamaya dokunmayan dört parçayı
+  önceden yazdı, karar #37 kalanını (yakalama, OCR, kısayol, overlay, alan
+  seçici, model indirme, çıkarım, arayüz). Karar #30'un ayrım testi tuttu:
+  eski dört parçanın hiçbiri yeniden yazılmadı.
+  ✅ Model bu makinede uçtan uca koştu (`cargo test --release
+  ceviri::cevirici::testler -- --ignored`): yükleme 1,7 s, cümle başına
+  78-243 ms, karar #29'un üç zaafının üçü de beklenen davranışı gösterdi.
+  ⚠️ Karar #30'un ölçülmemiş varsayımı **çürüdü**: terim işareti `[[0]]`
+  modelden `[0]` olarak çıkıyordu; on beş aday ölçülüp `#0#` seçildi.
+  Ölçüm testi `--ignored` olarak duruyor.
+  ⬜ Gerçek bir oyunla denenmedi — `tasks.md` → Sıradaki 9. Kısayol,
+  overlay, alan seçici ve ürünün kendi indirme yolu hiç çalıştırılmadı.
+  Ekleme bedeli ölçüldü ve saklanmıyor: ikili 8,69 → 31,81 MiB (ONNX
+  Runtime statik bağlı), model indirmesi ~507 MiB ve kuruluma dahil değil.
 
 ## Claude Code için notlar
 

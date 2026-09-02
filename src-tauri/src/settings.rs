@@ -85,6 +85,41 @@ pub struct Ayarlar {
     /// karşılaşabilir.
     #[serde(default)]
     pub olcekleme_ekrani: usize,
+
+    /// Ekran çevirisi açık mı (Faz 5, karar #37).
+    ///
+    /// **Varsayılan kapalı** ve bu, "en az müdahale" kuralının doğrudan
+    /// uygulanışı: açıkken program sistemden bir klavye kısayolu alıyor
+    /// (`ceviri::kisayol`) ve o kombinasyon başka uygulamalara gitmiyor.
+    /// İstenmeden alınan bir kısayol, kullanıcının fark etmesi en zor
+    /// müdahalelerden biri olurdu.
+    #[serde(default)]
+    pub ceviri_acik: bool,
+
+    /// Çevirinin okuyacağı ekran (`scaling::yakalama::Ekran` sırası).
+    ///
+    /// Ölçeklemenin ekranından ayrı: kullanıcı oyunu bir ekranda oynayıp
+    /// ölçeklemeyi başka bir ekranda deniyor olabilir ve iki özelliği tek
+    /// ayara bağlamak, birini değiştirenin diğerini sessizce bozması demek.
+    #[serde(default)]
+    pub ceviri_ekrani: usize,
+
+    /// Çeviri sonucu ekranın üstünde bir pencerede gösterilsin mi.
+    ///
+    /// **Varsayılan açık**: oyunun içindeyken sonucu görmenin başka yolu
+    /// yok. Kapatıldığında sonuç yalnızca Muifly penceresinde duruyor —
+    /// ikinci ekranı olan kullanıcı için makul bir tercih.
+    #[serde(default = "varsayilan_true")]
+    pub ceviri_overlay: bool,
+
+    /// Çeviri modeli kaç saniye boşta kalınca bellekten düşsün.
+    ///
+    /// Karar #22: "model isteğe bağlı indirilir, boştayken bellekten
+    /// düşer." Sayı bir vaat değil bir tercih: küçük değer belleği erken
+    /// bırakır ve sonraki isteği yavaşlatır, büyük değer tersi. `0` =
+    /// hiç düşürme.
+    #[serde(default = "varsayilan_bosta_dusur")]
+    pub ceviri_bosta_dusur_sn: u32,
 }
 
 fn varsayilan_gecikme() -> u32 {
@@ -102,6 +137,9 @@ fn varsayilan_true() -> bool {
 fn varsayilan_tema() -> String {
     "dark".to_string()
 }
+fn varsayilan_bosta_dusur() -> u32 {
+    300
+}
 
 impl Default for Ayarlar {
     fn default() -> Self {
@@ -117,6 +155,10 @@ impl Default for Ayarlar {
             tema: varsayilan_tema(),
             gecmis_tut: varsayilan_true(),
             olcekleme_ekrani: 0,
+            ceviri_acik: false,
+            ceviri_ekrani: 0,
+            ceviri_overlay: varsayilan_true(),
+            ceviri_bosta_dusur_sn: varsayilan_bosta_dusur(),
         }
     }
 }
@@ -135,6 +177,10 @@ impl Ayarlar {
         if self.tema != "dark" && self.tema != "light" {
             self.tema = varsayilan_tema();
         }
+        // Bir saatten uzun bekleyen bir model, pratikte hiç düşmeyen bir
+        // modeldir; elle düzenlenmiş bir dosyadaki büyük sayı sessizce
+        // "hiç düşürme" anlamına gelmemeli.
+        self.ceviri_bosta_dusur_sn = self.ceviri_bosta_dusur_sn.min(3600);
         self
     }
 
@@ -284,11 +330,41 @@ mod testler {
         assert!(defter_yolu().starts_with(&kok));
         assert!(profil_dizini().starts_with(&kok));
         assert!(gecmis_yolu().starts_with(&kok));
-        // Çeviri klasörünün henüz çağıranı yok (`ceviri` modülü Motor’a
-        // bağlı değil, karar #30); yol yine de burada, çünkü kural klasörün
-        // kullanılması değil, veri kökünün dışına çıkılmaması.
+        // Çeviri klasörü artık kullanılıyor (karar #37): çeviri belleği ve
+        // model dosyaları burada. Kural değişmedi — veri kökünün dışına
+        // çıkılmıyor.
         assert!(ceviri_dizini().starts_with(&kok));
         assert_ne!(ceviri_dizini(), profil_dizini());
+    }
+
+    #[test]
+    fn varsayilan_ceviri_kapali() {
+        // Açıkken program sistemden bir klavye kısayolu alıyor. İstenmeden
+        // alınmış bir kısayol, fark edilmesi en zor müdahalelerden biri.
+        assert!(!Ayarlar::default().ceviri_acik);
+    }
+
+    #[test]
+    fn asiri_bosta_suresi_kirpiliyor() {
+        let a = Ayarlar {
+            ceviri_bosta_dusur_sn: 999_999,
+            ..Default::default()
+        }
+        .normalize();
+        assert_eq!(a.ceviri_bosta_dusur_sn, 3600);
+    }
+
+    #[test]
+    fn ceviri_ve_olcekleme_ekranlari_ayri() {
+        // Tek ayara bağlansalardı birini değiştiren diğerini sessizce bozardı.
+        let a = Ayarlar {
+            olcekleme_ekrani: 1,
+            ceviri_ekrani: 0,
+            ..Default::default()
+        }
+        .normalize();
+        assert_eq!(a.olcekleme_ekrani, 1);
+        assert_eq!(a.ceviri_ekrani, 0);
     }
 
     #[test]

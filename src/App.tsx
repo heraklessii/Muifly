@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { AgPaneli } from './components/AgPaneli';
 import { AyarlarPaneli } from './components/AyarlarPaneli';
+import { CeviriPaneli } from './components/CeviriPaneli';
 import { DurumPaneli } from './components/DurumPaneli';
 import { GecmisPaneli } from './components/GecmisPaneli';
 import { GunlukPaneli } from './components/GunlukPaneli';
@@ -31,6 +32,7 @@ import {
   IconAg,
   IconAy,
   IconAyarlar,
+  IconCeviri,
   IconDurum,
   IconGecmis,
   IconGunes,
@@ -71,6 +73,7 @@ type Sekme =
   | 'profiller'
   | 'ag'
   | 'olcekleme'
+  | 'ceviri'
   | 'gunluk'
   | 'gecmis'
   | 'ayarlar';
@@ -108,6 +111,12 @@ const SEKMELER: {
     ad: 'Ölçekleme',
     alt: 'Ekranı okuyup büyütür. Oyuna dokunmaz; eklediği gecikme ölçülüp gösterilir.',
     Ikon: IconOlcekleme,
+  },
+  {
+    id: 'ceviri',
+    ad: 'Çeviri',
+    alt: 'Tuşa basınca ekrandaki yazıyı okur ve bu bilgisayarda çevirir. Hiçbir metin dışarı gitmez.',
+    Ikon: IconCeviri,
   },
   {
     id: 'gunluk',
@@ -526,6 +535,24 @@ export default function App() {
               onBildir={goster}
               onEkranDegistir={(indeks) =>
                 ayarDegistir({ ...durum.ayarlar, olceklemeEkrani: indeks })
+              }
+              onAyarlara={() => setSekme('ayarlar')}
+            />
+          )}
+
+          {sekme === 'ceviri' && (
+            <CeviriPaneli
+              ceviriEkrani={durum.ayarlar.ceviriEkrani}
+              overlayAcik={durum.ayarlar.ceviriOverlay}
+              profiller={profiller}
+              mesgul={mesgul}
+              onIslem={islem}
+              onBildir={goster}
+              onEkranDegistir={(indeks) =>
+                ayarDegistir({ ...durum.ayarlar, ceviriEkrani: indeks })
+              }
+              onOverlayDegistir={(acik) =>
+                ayarDegistir({ ...durum.ayarlar, ceviriOverlay: acik })
               }
               onAyarlara={() => setSekme('ayarlar')}
             />

@@ -5,7 +5,7 @@
 //! arayüzün durum sorgusu bloke olmamalı. Uzun işlemler kilidi hiç almıyor:
 //! saf ağ işleri motorun durumuna dokunmuyor.
 
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 use crate::error::Result;
 use crate::ledger::Kayit;
@@ -29,6 +29,10 @@ pub type MotorState<'a> = State<'a, parking_lot::Mutex<Motor>>;
 pub const OLAY_DURUM: &str = "muifly://durum";
 pub const OLAY_GUNLUK: &str = "muifly://gunluk";
 pub const OLAY_ORNEK: &str = "muifly://ornek";
+/// Yeni bir çeviri sonucu hazır (ya da istek hata verdi).
+pub const OLAY_CEVIRI: &str = "muifly://ceviri";
+/// Model indirmesinin ilerlemesi.
+pub const OLAY_CEVIRI_INDIRME: &str = "muifly://ceviri-indirme";
 
 #[tauri::command]
 pub fn surum() -> String {
@@ -832,4 +836,487 @@ pub async fn olcekleme_denemesi(motor: MotorState<'_>) -> Result<crate::scaling:
         .await
         .map_err(|e| crate::error::Error::Olcum(e.to_string()))?
         .map_err(|e| crate::error::Error::Olcum(e.to_string()))
+}
+
+// ---------------------------------------------------------------------------
+// Ekran çevirisi (Faz 5, karar #37)
+// ---------------------------------------------------------------------------
+
+/// Model indirmesinin iptal bayrağı.
+///
+/// Süreç geneli bir statik: indirme tek seferde bir tane olabilir ve iptal
+/// isteği, indirmeyi başlatan komuttan başka bir komuttan geliyor. Motor'da
+/// tutulsaydı iptal etmek için Motor kilidini almak gerekirdi — oysa indirme
+/// tam da kilidi almadan, ayrı bir iş parçacığında koşuyor.
+static INDIRME_IPTAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Aynı anda ikinci bir indirme başlamasın.
+static INDIRME_SURUYOR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// İndirme ilerlemesi — arayüze giden olay yükü.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndirmeIlerlemesi {
+    pub sira: usize,
+    pub adet: usize,
+    pub ad: String,
+    pub inen: u64,
+    pub toplam: u64,
+    pub bitti: bool,
+    /// Dolu ise indirme durdu ve sebebi bu.
+    pub hata: Option<String>,
+}
+
+#[tauri::command]
+pub fn ceviri_durumu(motor: MotorState<'_>) -> crate::ceviri::CeviriDurumu {
+    motor.lock().ceviri.durum()
+}
+
+/// Son çeviri sonucu. Henüz istek olmadıysa `null`.
+#[tauri::command]
+pub fn ceviri_sonucu(motor: MotorState<'_>) -> Option<crate::ceviri::Sonuc> {
+    motor.lock().ceviri.son_sonuc()
+}
+
+/// Çeviriyi açar: sisteme klavye kısayolu kaydeder.
+///
+/// Ayara da yazılıyor: kullanıcı açık bıraktıysa bir sonraki açılışta da
+/// açık gelmeli. Kısayol kaydedilemezse ayar **yazılmıyor** — kapalı
+/// kalmış bir özelliği açık göstermek, karşılanmamış bir vaat olurdu.
+#[tauri::command]
+pub fn ceviri_ac(motor: MotorState<'_>) -> Result<()> {
+    let mut m = motor.lock();
+    m.ceviriyi_ac()?;
+    m.ayarlar.ceviri_acik = true;
+    let _ = m.ayarlari_kaydet();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn ceviri_kapat(motor: MotorState<'_>) {
+    let mut m = motor.lock();
+    m.ceviriyi_kapat("kullanıcı kapattı");
+    m.ayarlar.ceviri_acik = false;
+    let _ = m.ayarlari_kaydet();
+}
+
+/// Kısayola basmakla aynı şey. Kullanıcı özelliği pencereden deneyebilsin.
+#[tauri::command]
+pub fn ceviri_simdi(motor: MotorState<'_>) -> Result<()> {
+    motor.lock().ceviri.simdi_cevir()
+}
+
+/// Kaynak dilin OCR paketi kurulu mu (karar #28 ürün gereği).
+#[tauri::command]
+pub fn ceviri_dil_durumu(motor: MotorState<'_>) -> Result<crate::ceviri::DilDurumu> {
+    let istenen = motor.lock().ceviri_yapilandirmasi().kaynak_dil;
+    let mevcut = crate::ceviri::ocr_dil::mevcut_diller()?;
+    Ok(crate::ceviri::ocr_dil::durumu_belirle(&istenen, mevcut))
+}
+
+// --- Model dosyaları -------------------------------------------------------
+
+#[tauri::command]
+pub fn ceviri_model_durumu() -> crate::ceviri::ModelDurumu {
+    crate::ceviri::model::durum()
+}
+
+/// Modeli indirir. Yarım gigabayt; ayrı iş parçacığında ve iptal edilebilir.
+///
+/// İlerleme olayla akıyor, komutun dönüşüyle değil: yarım saatlik bir
+/// indirmede tek bir `await`in dönmesini beklemek, kullanıcıya donmuş bir
+/// ekran göstermek olurdu.
+#[tauri::command]
+pub async fn ceviri_model_indir(uygulama: tauri::AppHandle) -> Result<()> {
+    use std::sync::atomic::Ordering;
+
+    if INDIRME_SURUYOR.swap(true, Ordering::SeqCst) {
+        return Err(crate::error::Error::Indirme("indirme zaten sürüyor".into()));
+    }
+    INDIRME_IPTAL.store(false, Ordering::SeqCst);
+
+    let kol = uygulama.clone();
+    let sonuc = tauri::async_runtime::spawn_blocking(move || {
+        crate::ceviri::model::indir(&INDIRME_IPTAL, |adim| {
+            let _ = kol.emit(
+                OLAY_CEVIRI_INDIRME,
+                IndirmeIlerlemesi {
+                    sira: adim.sira,
+                    adet: adim.adet,
+                    ad: adim.ad.to_string(),
+                    inen: adim.inen,
+                    toplam: adim.toplam,
+                    bitti: false,
+                    hata: None,
+                },
+            );
+        })
+    })
+    .await;
+
+    INDIRME_SURUYOR.store(false, Ordering::SeqCst);
+
+    let sonuc = match sonuc {
+        Ok(s) => s,
+        Err(e) => Err(crate::error::Error::Indirme(e.to_string())),
+    };
+
+    let toplam = crate::ceviri::model::toplam_bayt();
+    let hata = sonuc.as_ref().err().map(|e| e.to_string());
+    let _ = uygulama.emit(
+        OLAY_CEVIRI_INDIRME,
+        IndirmeIlerlemesi {
+            sira: 0,
+            adet: 0,
+            ad: String::new(),
+            inen: if hata.is_none() { toplam } else { 0 },
+            toplam,
+            bitti: true,
+            hata,
+        },
+    );
+    sonuc
+}
+
+#[tauri::command]
+pub fn ceviri_model_indirmeyi_durdur() {
+    INDIRME_IPTAL.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Model dosyalarını siler. Çeviri belleğine dokunmuyor.
+#[tauri::command]
+pub fn ceviri_model_sil(motor: MotorState<'_>) -> Result<()> {
+    // Model bellekteyken dosyaları silmek, bir sonraki isteği anlaşılmaz bir
+    // hataya düşürürdü: önce çeviri kapatılıyor.
+    let acikti = {
+        let mut m = motor.lock();
+        let acikti = m.ceviri.acik();
+        if acikti {
+            m.ceviriyi_kapat("model siliniyor");
+        }
+        acikti
+    };
+    let sonuc = crate::ceviri::model::sil();
+    if acikti {
+        // Kısayol kullanıcının açık bıraktığı bir şeydi; geri veriliyor.
+        let _ = motor.lock().ceviriyi_ac();
+    }
+    sonuc
+}
+
+/// Diskteki dosyaların özetini beklenenle karşılaştırır.
+///
+/// Yarım gigabayt okunuyor, o yüzden ayrı iş parçacığında ve yalnızca
+/// kullanıcı isteyince.
+#[tauri::command]
+pub async fn ceviri_model_dogrula() -> Result<()> {
+    tauri::async_runtime::spawn_blocking(crate::ceviri::model::dogrula)
+        .await
+        .map_err(|e| crate::error::Error::Indirme(e.to_string()))?
+}
+
+// --- Alan seçimi -----------------------------------------------------------
+
+/// Alan seçme penceresi için ekranın o anki görüntüsü (PNG, `data:` adresi).
+///
+/// Donmuş bir görüntü üzerinde seçim yaptırmak, canlı ekranın üstüne
+/// saydam bir pencere açmaktan iyi: kullanıcı tam olarak neyin
+/// okunacağını görüyor ve seçerken oyunun görüntüsü değişmiyor.
+#[tauri::command]
+pub async fn ceviri_ekran_goruntusu(motor: MotorState<'_>) -> Result<String> {
+    let ekran = motor.lock().ayarlar.ceviri_ekrani;
+    tauri::async_runtime::spawn_blocking(move || crate::ceviri::ekran_goruntusu(ekran))
+        .await
+        .map_err(|e| crate::error::Error::Ceviri(e.to_string()))?
+}
+
+/// Seçilen alanı profile yazar.
+///
+/// Alan profile ait (karar #22). Profil yoksa yazılacak yer de yok ve bu
+/// bir hata değil bir durum: kullanıcıya önce profil oluşturması söyleniyor.
+#[tauri::command]
+pub fn ceviri_alani_kaydet(
+    motor: MotorState<'_>,
+    kimlik: String,
+    alan: Option<crate::ceviri::Alan>,
+) -> Result<Vec<String>> {
+    let profil = {
+        let m = motor.lock();
+        m.profiller
+            .iter()
+            .find(|p| p.profile_id == kimlik)
+            .cloned()
+            .ok_or_else(|| crate::error::Error::ProfileNotFound(kimlik.clone()))?
+    };
+    let mut profil = profil;
+    profil.ceviri.region = alan;
+    profil.ceviri.enabled = alan.is_some() || profil.ceviri.enabled;
+    let duzeltmeler = profil_kaydet(motor.clone(), profil)?;
+    motor.lock().ceviriyi_tazele();
+    Ok(duzeltmeler)
+}
+
+// --- Çeviri belleği --------------------------------------------------------
+
+/// Öndeki oyunun çeviri belleği.
+#[tauri::command]
+pub fn ceviri_bellegi(motor: MotorState<'_>) -> Result<crate::ceviri::CeviriBellegi> {
+    let oyun = motor.lock().ceviri_oyunu();
+    let yol = crate::ceviri::bellek::yolu(&crate::settings::ceviri_dizini(), &oyun);
+    crate::ceviri::bellek::yukle(
+        &yol,
+        &oyun,
+        crate::ceviri::denetleyici::KAYNAK_DIL,
+        crate::ceviri::denetleyici::HEDEF_DIL,
+    )
+}
+
+/// Belleği okuyup değiştirip yazar.
+///
+/// Her komut dosyayı yeniden okuyor: çeviri iş parçacığı da aynı dosyayı
+/// kullanıyor ve elde tutulan bir kopya, ikisinden birinin diğerini
+/// ezmesi demek olurdu (`ceviri::denetleyici` modül belgesi).
+fn bellegi_degistir(
+    motor: &MotorState<'_>,
+    degistir: impl FnOnce(&mut crate::ceviri::CeviriBellegi),
+) -> Result<()> {
+    let oyun = motor.lock().ceviri_oyunu();
+    let yol = crate::ceviri::bellek::yolu(&crate::settings::ceviri_dizini(), &oyun);
+    let mut bellek = crate::ceviri::bellek::yukle(
+        &yol,
+        &oyun,
+        crate::ceviri::denetleyici::KAYNAK_DIL,
+        crate::ceviri::denetleyici::HEDEF_DIL,
+    )?;
+    degistir(&mut bellek);
+    bellek.kaydet(&yol)
+}
+
+/// Kullanıcının düzelttiği çeviri.
+///
+/// Karar #22: asıl olan "Düzelt", "Reddet" değil — reddetme yalnızca yanlış
+/// olduğunu söyler, doğrusunu söylemez. Kayıt `Kullanici` kökeniyle
+/// giriyor ve bir daha makine çevirisiyle ezilmiyor.
+#[tauri::command]
+pub fn ceviri_duzelt(motor: MotorState<'_>, metin: String, ceviri: String) -> Result<()> {
+    bellegi_degistir(&motor, |b| {
+        b.ekle(&metin, &ceviri, crate::ceviri::Koken::Kullanici);
+    })
+}
+
+/// Bir kaydı siler — "Reddet"in karşılığı (karar #22).
+#[tauri::command]
+pub fn ceviri_kaydi_sil(motor: MotorState<'_>, metin: String) -> Result<()> {
+    bellegi_degistir(&motor, |b| {
+        b.sil(&metin);
+    })
+}
+
+#[tauri::command]
+pub fn ceviri_terim_ekle(motor: MotorState<'_>, terim: String, karsilik: String) -> Result<()> {
+    bellegi_degistir(&motor, |b| b.terim_ekle(&terim, &karsilik))
+}
+
+#[tauri::command]
+pub fn ceviri_terim_sil(motor: MotorState<'_>, terim: String) -> Result<()> {
+    bellegi_degistir(&motor, |b| {
+        b.terim_sil(&terim);
+    })
+}
+
+/// Makine kayıtlarını temizler; kullanıcının düzeltmelerine dokunmaz.
+#[tauri::command]
+pub fn ceviri_bellegini_temizle(motor: MotorState<'_>) -> Result<()> {
+    bellegi_degistir(&motor, |b| b.makine_kayitlarini_temizle())
+}
+
+// --- Çeviri pencereleri ----------------------------------------------------
+
+/// Sonucu ekranın üstünde gösteren pencerenin etiketi.
+pub const PENCERE_CEVIRI_OVERLAY: &str = "ceviri-overlay";
+/// Alan seçme penceresinin etiketi.
+pub const PENCERE_CEVIRI_ALAN: &str = "ceviri-alan";
+
+/// Overlay'in ekranın altında kapladığı yer.
+///
+/// Altta ve ekranın dörtte biri kadar: oyun metni çoğunlukla altta olur ve
+/// üstüne binen bir çeviri penceresi, çevrilen şeyi kapatırdı. Genişlik tam
+/// ekran değil — kenarlarda kalan boşluk, pencerenin nerede bittiğini
+/// gösteriyor ve panelin "ekranı ele geçirdiği" hissini kaldırıyor.
+const OVERLAY_GENISLIK_ORANI: f64 = 0.72;
+const OVERLAY_YUKSEKLIK_ORANI: f64 = 0.26;
+/// Ekranın alt kenarından boşluk (fiziksel piksel).
+const OVERLAY_ALT_BOSLUK: i32 = 48;
+
+/// Seçili ekranın fiziksel yerleşimi.
+fn ceviri_ekrani(indeks: usize) -> Option<crate::scaling::Ekran> {
+    let ekranlar = crate::scaling::yakalama::ekranlar().ok()?;
+    ekranlar
+        .iter()
+        .find(|e| e.indeks == indeks)
+        .or_else(|| ekranlar.first())
+        .cloned()
+}
+
+/// Overlay penceresini kurar (yoksa) ve sonucu göstermek üzere açar.
+///
+/// # Kaçış yolu
+///
+/// Karar #34, ölçekleme penceresinin kapatılacak hiçbir yolu olmadığında
+/// makineyi kullanılamaz hâle getirdiğini anlatıyor. Bu pencere o hatayı
+/// tekrarlamıyor ve tekrarlamamasının sebebi tek tek sayılabilir: ekranın
+/// tamamını kaplamıyor, tıklamaları geçirmiyor (yani üstündeki kapatma
+/// düğmesi çalışıyor), görev çubuğunda görünmüyor ama kendi kapatma düğmesi
+/// var, ve çeviri kapatıldığında pencere de kapanıyor.
+pub fn overlay_goster(uygulama: &tauri::AppHandle, ekran: usize) {
+    use tauri::{LogicalSize, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+
+    if let Some(pencere) = uygulama.get_webview_window(PENCERE_CEVIRI_OVERLAY) {
+        let _ = pencere.show();
+        return;
+    }
+
+    let Some(e) = ceviri_ekrani(ekran) else {
+        log::warn!("çeviri overlay'i için ekran bulunamadı");
+        return;
+    };
+    let genislik = (e.genislik as f64 * OVERLAY_GENISLIK_ORANI) as u32;
+    let yukseklik = (e.yukseklik as f64 * OVERLAY_YUKSEKLIK_ORANI) as u32;
+
+    let sonuc = WebviewWindowBuilder::new(
+        uygulama,
+        PENCERE_CEVIRI_OVERLAY,
+        WebviewUrl::App("index.html?pencere=ceviri-overlay".into()),
+    )
+    .title("Muifly — çeviri")
+    .inner_size(genislik as f64, yukseklik as f64)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    .focused(false)
+    .visible(false)
+    .build();
+
+    let pencere = match sonuc {
+        Ok(p) => p,
+        Err(err) => {
+            log::warn!("çeviri overlay'i açılamadı: {err}");
+            return;
+        }
+    };
+
+    // Boyut ve konum fiziksel piksel: ekran listesi DXGI'dan geliyor ve orası
+    // mantıksal (ölçeklenmiş) koordinat bilmiyor. Mantıksal boyut verilseydi
+    // %150 ölçekli bir ekranda pencere ekranın dışına taşardı.
+    let _ = pencere.set_size(PhysicalSize::new(genislik, yukseklik));
+    let _ = pencere.set_position(PhysicalPosition::new(
+        e.x + ((e.genislik - genislik) / 2) as i32,
+        e.y + e.yukseklik as i32 - yukseklik as i32 - OVERLAY_ALT_BOSLUK,
+    ));
+    // Kullanılmayan içe aktarmayı önlemek için değil, okunurluk için:
+    // mantıksal boyut yalnızca en küçük ölçüyü söylemekte kullanılıyor.
+    let _ = pencere.set_min_size(Some(LogicalSize::new(320.0, 120.0)));
+    let _ = pencere.show();
+}
+
+/// Overlay'i kapatır. Çeviri kapatıldığında ve kullanıcı istediğinde.
+#[tauri::command]
+pub fn ceviri_overlay_kapat(uygulama: tauri::AppHandle) {
+    if let Some(p) = uygulama.get_webview_window(PENCERE_CEVIRI_OVERLAY) {
+        let _ = p.close();
+    }
+}
+
+/// Alan seçme penceresini açar.
+///
+/// Tam ekran ve **odaklı**: kullanıcı burada fare ile bir dikdörtgen
+/// çiziyor, yani tıklamaları alması gerekiyor. Overlay'den farkı bu ve
+/// tehlikeli olmamasının sebebi de aynı: pencere kullanıcının açtığı,
+/// Esc ile kapanan ve görev çubuğunda görünen bir pencere.
+#[tauri::command]
+pub fn ceviri_alan_secici_ac(
+    uygulama: tauri::AppHandle,
+    motor: MotorState<'_>,
+    kimlik: String,
+) -> Result<()> {
+    use tauri::{PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+
+    if let Some(p) = uygulama.get_webview_window(PENCERE_CEVIRI_ALAN) {
+        let _ = p.set_focus();
+        return Ok(());
+    }
+
+    let ekran = motor.lock().ayarlar.ceviri_ekrani;
+    let e = ceviri_ekrani(ekran)
+        .ok_or_else(|| crate::error::Error::Ceviri("alan seçilecek ekran bulunamadı".into()))?;
+
+    let pencere = WebviewWindowBuilder::new(
+        &uygulama,
+        PENCERE_CEVIRI_ALAN,
+        WebviewUrl::App(
+            format!("index.html?pencere=ceviri-alan&kimlik={}", urlencode(&kimlik)).into(),
+        ),
+    )
+    .title("Muifly — çevrilecek alanı seç")
+    .decorations(false)
+    .always_on_top(true)
+    .resizable(false)
+    .build()
+    .map_err(|err| crate::error::Error::Ceviri(format!("alan seçici açılamadı: {err}")))?;
+
+    let _ = pencere.set_size(PhysicalSize::new(e.genislik, e.yukseklik));
+    let _ = pencere.set_position(PhysicalPosition::new(e.x, e.y));
+    let _ = pencere.set_focus();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn ceviri_alan_secici_kapat(uygulama: tauri::AppHandle) {
+    if let Some(p) = uygulama.get_webview_window(PENCERE_CEVIRI_ALAN) {
+        let _ = p.close();
+    }
+}
+
+/// Adres satırına konacak dizeyi kaçırır.
+///
+/// Profil kimliği kullanıcının yazdığı bir dize ve pencere adresine
+/// giriyor. Tam bir URL kodlayıcı değil; alfasayısal olmayan her şeyi
+/// yüzdeyle yazan en dar hâli — geçirilen şey bir kimlik, bir adres değil.
+fn urlencode(ham: &str) -> String {
+    let mut cikti = String::with_capacity(ham.len());
+    for b in ham.as_bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+            cikti.push(*b as char);
+        } else {
+            cikti.push_str(&format!("%{b:02X}"));
+        }
+    }
+    cikti
+}
+
+#[cfg(test)]
+mod ceviri_testleri {
+    use super::*;
+
+    #[test]
+    fn urlencode_kimligi_bozmuyor() {
+        assert_eq!(urlencode("skyrim-se_1.0"), "skyrim-se_1.0");
+    }
+
+    #[test]
+    fn urlencode_adres_kacisi_birakmiyor() {
+        // Kimlik pencere adresine giriyor; sorgu ayracı ya da kod
+        // çalıştırabilecek bir karakter olduğu gibi geçmemeli.
+        let kotu = urlencode("a&pencere=x #<script>");
+        for yasak in ['&', '=', ' ', '#', '<', '>'] {
+            assert!(!kotu.contains(yasak), "kaçırılmadı: {yasak} → {kotu}");
+        }
+    }
+
+    #[test]
+    fn urlencode_turkce_harfleri_kacirilyor() {
+        let s = urlencode("çğüş");
+        assert!(s.starts_with('%'));
+        assert!(s.is_ascii());
+    }
 }

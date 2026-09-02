@@ -31,6 +31,10 @@ export const AYARLAR = {
   tema: 'dark' as const,
   gecmisTut: true,
   olceklemeEkrani: 0,
+  ceviriAcik: false,
+  ceviriEkrani: 0,
+  ceviriOverlay: true,
+  ceviriBostaDusurSn: 300,
 };
 
 export function durum(kismi: Partial<Durum> = {}): Durum {

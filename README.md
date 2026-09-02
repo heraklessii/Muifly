@@ -3,7 +3,8 @@
 **Windows için oyun performans aracı — ne yaptığını gösteren, her adımı geri
 alınabilen türden.**
 
-Sistem optimizasyonu, ağ ölçümü ve (ileride) görüntü ölçekleme tek uygulamada.
+Sistem optimizasyonu, ağ ölçümü ve görüntü ölçekleme tek uygulamada.
+Yanında, isteyen için ekran çevirisi.
 Abonelik yok, reklam yok, telemetri yok.
 
 > Bu depo tanıtım sayfası ve demo dağıtımı içindir. Muifly kapalı kaynaklı,
@@ -34,6 +35,15 @@ Abonelik yok, reklam yok, telemetri yok.
 - Bunların hepsi **senin diskinden** okunur: hiçbir servise sorulmaz, hangi
   oyunlara sahip olduğun hiçbir yere gönderilmez
 
+**Ekran çevirisi** (isteğe bağlı, varsayılan kapalı)
+- Tuşa basınca seçtiğin ekran alanındaki İngilizce yazıyı okur ve
+  **bu bilgisayarda** Türkçeye çevirir — hiçbir metin dışarı gönderilmez
+- Çeviri her zaman özgün metinle birlikte gösterilir; makine çevirisi
+  olduğu saklanmaz
+- Düzelttiğin çeviriler oyun başına bir dosyada birikir ve bir daha aynen
+  kullanılır; oyuna özel terim sözlüğü tanımlayabilirsin
+- Çeviri modeli kuruluma dahil değildir, isteyen ayrıca indirir
+
 **Şeffaflık**
 - Yapılan her değişiklik günlüğe yazılır: ne, ne zaman, hangi değerden hangi değere
 - Her değişiklik tek tıkla geri alınabilir
@@ -47,6 +57,8 @@ Bunlar eksik özellik değil, bilinçli sınırlar:
 |---|---|
 | Oyun sürecine kod enjekte etmez | DLL injection ve bellek hook'lama anti-cheat riski taşır. Yalnızca resmi Windows API'leri kullanılır. |
 | Ağ trafiğini kendi sunucularına yönlendirmez | VPN tüneli çoğu zaman ping'i kötüleştirir, abonelik modeline zorlar ve trafiğini görebileceğimiz bir konuma geçmemizi gerektirir. |
+| Ekran çevirisinde kalite garantisi vermez | Model bu bilgisayarda çalışan küçük bir çeviri modeli; bir cümleyi atlayabilir ya da oyun terimini bilmeyebilir. Bu yüzden özgün metin her zaman yanında durur ve düzeltmen kalıcı olarak kaydedilir. |
+| Çeviri penceresi münhasır tam ekranda görünmez | Üstte duran bir pencere, oyun münhasır tam ekrandayken çizilemez. Kenarlıksız pencere modu gerekir; bu bir eksiklik değil, işletim sisteminin sınırı. |
 | DNS ayarını kendiliğinden değiştirmez | Adaptör DNS'ini programın değiştirmesi, yanlış gittiğinde seni internetsiz bırakır. Ölçüp öneriyoruz. |
 | Süreçleri kapatmaz | Dondurma tersine çevrilebilir, kapatma değil. |
 | Bellek "temizlemez" | Standby list temizlemenin ölçülebilir bir faydası gösterilemiyor. |

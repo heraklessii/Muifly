@@ -1489,3 +1489,145 @@ temiz. `gercek_ekranda_bir_tur` yeniden koştu ve yukarıdaki iki satırlık
 Birinci ve ikinci madde yalnızca gerçek bir oyun açılırken ortaya çıkan
 yollar; ikisi de hâlâ elle denenmedi. `tasks.md` → Sıradaki 7 ve 8'e
 birer madde eklendi.
+
+## Oturum 16 — 2 Eylül 2026 · Faz 5 tamamlandı: ekran çevirisi
+
+Faz 5'in kalan her parçası yazıldı: ekran yakalama, OCR, cümlelere ayırma,
+model indirme ve doğrulama, çıkarım, klavye kısayolu, sonuç penceresi, alan
+seçici ve Çeviri sekmesi. Karar #37.
+
+Karar #30'un altı ay değil altı oturum sonra cevaplanan açık sorusu da
+kapandı: **ekran çevirisi ayrı bir ürün değil, Muifly'ın varsayılan kapalı
+bir modülü.**
+
+Rust 470 test, arayüz 79 test, clippy temiz. Beş test `--ignored`: üçü gerçek
+model dosyalarına, ikisi gerçek ekrana ihtiyaç duyuyor.
+
+### Ayrım testi tuttu
+
+Karar #30, Faz 5'i ikiye bölerken tek bir soru sormuştu: *"Faz 3'ün yakalama
+katmanı geldiğinde bu kod yeniden yazılır mı?"* Cevabı hayır olan dört parça
+(`onisleme`, `sozluk`, `bellek`, `ocr_dil`) önceden yazılmıştı.
+
+Bu oturumda dördü de **olduğu gibi kullanıldı**. Yakalama için `scaling`'in
+katmanı yeniden kullanıldı; ikinci bir Desktop Duplication sarmalayıcısı
+yazılmadı. Ayrım testi, altı oturum önce verilmiş bir kararı doğruladı.
+
+### En öğretici bulgu: adı konmuş bir varsayım çürüdü
+
+Karar #30 şu cümleyi bilerek yazmıştı:
+
+> `sozluk` terimleri `[[0]]` biçiminde bir işaretle koruyor ve bu işaretin
+> SentencePiece tokenizer'ından ve greedy çözümlemeden sağ çıkacağı
+> **varsayım**, ölçüm değil — model bağlandığında ilk sınanacak şey bu.
+
+Model bağlandı ve varsayım ilk çalıştırmada çöktü:
+
+```text
+girdi : Take the [[0]].
+çıktı : [0]'ı seçin.        → işaret bozuldu, terim "kayıp" sayıldı
+```
+
+On beş aday, dört kalıpta ölçüldü. Sağ kalanlar: `#0#`, `@0@`, `XX0XX`,
+`Zqx0`. Hiç çıkmayanlar arasında köşeli, süslü ve açılı parantezler var;
+çoğu `<unk>`e düşüyor. Seçilen biçim en kısası: `#0#`. Sonra:
+
+```text
+Take the Longsword.  →  Uzun Kılıç'ı al.     (kayıp terim yok)
+```
+
+Buradaki asıl ders kod değil **tasarım**: karar #30 `geri_koy`u toleranslı
+değil **katı** yazmıştı ve kaybolan işaretleri raporluyordu. Toleranslı bir
+eşleşme `[0]`ı kabul eder, terimi yanlış yere koyar ve kimse fark etmezdi.
+Bir varsayımı adıyla koymak, onu ölçülebilir kıldı.
+
+Ölçüm testi silinmedi: `isaret_adaylari` `--ignored` olarak duruyor. Model
+ya da tokenizer değişirse aynı soru yeniden sorulacak.
+
+### Karar #29'un üçüncü zaafı kaynağında kapandı
+
+Sondanın en tehlikeli bulgusu şuydu — model bir cümleyi **hata vermeden**
+düşürüyor ve çıktı akıcı göründüğü için fark edilmiyor:
+
+```text
+"Keep your guard up. This one bites back." → "Bu seferki ısırıyor."
+```
+
+Aynı külliyat bu oturumda tekrar koşturuldu ve cümle **yine düştü** ("Bu
+seferki geri ısırıyor."), yani rastlantı değil. Çözüm modeli değiştirmek
+değil, ona tek cümle vermek oldu (`ceviri::cumle`):
+
+```text
+Keep your guard up.   → Korumanı koru.
+This one bites back.  → Bu da ısırıyor.
+```
+
+Bölücü ucuz: noktalama ve satır sonu. Ondalık sayıyı (`Weight 6.5`),
+kısaltmayı (`Dr. Vahlen`) ve baş harfi (`J. Walker`) bölmüyor; satır sonunu
+her zaman sınır sayıyor, çünkü OCR iki ayrı arayüz öğesini ayrı satırlar
+hâlinde veriyor ve birleştirmek modele hiç var olmamış bir cümle vermek olurdu.
+
+Zaaf kapandı ama `akis` boş birimi **hâlâ** işaretliyor. Kapanmış bir zaafın
+bir daha açılmayacağını varsaymak, tam da bu oturumun çürüttüğü türden bir
+varsayım olurdu.
+
+### İki bağımlılık eklendi, bir tanesi eklenmedi
+
+`ort` (ONNX Runtime) ve `tokenizers` girdi; üçüncü taraf bildirimleri 258 →
+301 bileşen.
+
+**HTTP kasası eklenmedi.** Yarım gigabaytlık indirme WinHTTP ile yapılıyor:
+TLS, sertifika deposu, vekil ayarı ve yönlendirme takibi işletim sisteminin
+işi. `library::png`'nin gerekçesi burada da tuttu. Aynı sebeple SHA-256 de
+elle yazıldı — testi FIPS 180-4'ün kendi örnekleriyle.
+
+SHA-256'yı yazarken **gerçek bir hata** çıktı ve testi yakaladı: kısmi
+tampon dolmadığında `ekle` kendi tamponunu sıfırlıyordu, yani 64 bayta
+bölünmeyen parçalarla beslendiğinde özet sessizce yanlış çıkıyordu. Tam da
+indirme sırasında olacak şey. Belirtisi de sinsi olurdu: özet yine 64
+karakter, sadece yanlış.
+
+### Ölçülen bedel: ikili 8,69 → 31,81 MiB
+
+ONNX Runtime derleme zamanında indirilip **statik** bağlandı. Alternatif
+`load-dynamic`ti — DLL de model gibi çalışma zamanında inerdi ve ikili küçük
+kalırdı. Üç sebeple reddedildi: indirilen şey veri değil kod olurdu (imzalı
+bir kurulumun yanına imzasız bir ikili), arşiv açmak gerekirdi, ve karar
+#1'in asıl argümanı disk değil RAM'di.
+
+Bu yine de küçük bir sayı değil ve saklanmıyor: `Cargo.toml`'daki "ikili
+boyutu önemli" cümlesi hâlâ duruyor. `tasks.md` → Değerlendirilecek'e
+yeniden bakılacak bir madde olarak yazıldı.
+
+Model dosyalarının kendisi (~507 MiB) kuruluma **girmiyor**. Her dosyanın
+boyutu ve SHA-256'sı kodda sabit; bunlar bu makinede indirilip çeviri
+kalitesi sınanmış dosyaların özetleri.
+
+### Karar #34'ün dersi iki yeni pencerede uygulandı
+
+Ölçekleme penceresi bir kez makineyi kullanılamaz hâle getirmişti: tam
+ekran, tıklanamaz, Alt+Tab'da görünmez, kapatma yolu yok. İki yeni pencere o
+listeyi tek tek kırıyor — overlay ekranın bir bölümünü kaplıyor ve kapatma
+düğmesi gerçekten tıklanabiliyor; alan seçici kullanıcının açtığı, Esc ile
+kapanan bir pencere ve Esc dinleyicisi ekran görüntüsü gelmeden önce de
+duruyor.
+
+Çeviri kısayolu kaydedilemezse özellik **hiç açılmıyor**. Kısayolsuz bir
+ekran çevirisi, oyunun içindeyken tetiklenemediği için çalışmayan bir
+özelliktir.
+
+### Rekabetçi modda kapatılmadı — ve bu bilinçli bir fark
+
+Ölçekleme ve kare üretimi rekabetçi modda kapalı, çünkü ikisi de her karede
+gecikme ekliyor. Çeviri eklemiyor: kullanıcı tuşa bastığında bir kez
+çalışıyor. Açıkça istenen bir işi reddetmek, kapının koruduğu şeyi
+korumazdı. Mod değişiminde çeviri kapatılmıyor, yalnızca tazeleniyor.
+
+### Kalan
+
+Hiçbiri gerçek bir oyunda denenmedi. Kısayol, overlay, alan seçici ve
+ürünün kendi indirme yolu (bu oturumda dosyalar `curl` ile indirildi) hiç
+çalıştırılmadı. OCR külliyatı hâlâ sentetik. `tasks.md` → Sıradaki 9.
+
+Ve Faz 1'in saha doğrulaması **üçüncü kez** ertelendi. Karar #33 bunu
+"emsal değil" diye kayda geçirmişti; üçüncü tekrarda artık bir borç.

@@ -103,6 +103,8 @@ Yukarıdaki şema hedefi, aşağısı kurulmuş olanı anlatıyor.
 | `muifly://durum` | Mod değiştiğinde, ayar yazıldığında | Tam `Durum` |
 | `muifly://gunluk` | Mod değiştiğinde | Son 20 satır (arayüz tam listeyi ayrıca çekiyor) |
 | `muifly://ornek` | Her ölçümde | Tek `Ornek` |
+| `muifly://ceviri` | Çeviri isteği bittiğinde (başarılı ya da değil) | `(CeviriDurumu, Sonuc?)` |
+| `muifly://ceviri-indirme` | Model indirilirken, her tamponda | `IndirmeIlerlemesi` |
 
 Arayüz kendiliğinden yoklama (polling) yapmıyor.
 
@@ -175,3 +177,38 @@ sürecin ömrüyle sınırlı bir pencere. Günlüğe başlangıç, algoritma ve
 sebebi** yazılıyor. Oyun kapandığında (`oturumu_kapat`), rekabetçi moda
 geçildiğinde (`mod_guncelle`) ve "her şeyi geri al" düğmesinde ölçekleme
 duruyor.
+
+
+## Çeviri boru hattı (Faz 5 — uygulanmış)
+
+Karar #37. Yakalama katmanı Faz 3'ünkiyle **aynı** — ikinci bir yakalama
+yazılmadı.
+
+```text
+RegisterHotKey ──► yakalama ──► alan kesme ──► Windows.Media.Ocr ──► önişleme
+  (kendi iş                (scaling::                              (BÜYÜK HARF,
+   parçacığı)               yakalama)                               şüpheler)
+                                                                        │
+        overlay ◄── akış sonucu ◄── sözlük geri koy ◄── model ◄── cümlelere ayır
+     (üstteki pencere)                              (ONNX, 2 çekirdek)
+```
+
+**Üç iş parçacığı, üçü de ayrı sebeple.** Kısayolun kendi kuyruğu var
+(`RegisterHotKey` pencere sahibi olmadan çağrıldığında mesaj iş parçacığına
+düşüyor ve kaydı yapanla kaldıran aynı olmak zorunda). Çeviri kendi iş
+parçacığında koşuyor (bir istek saniyeler sürebiliyor). Arka plan döngüsü
+sonucu günlüğe yazıp arayüze yayınlıyor — iş parçacığının Motor'a erişimi yok.
+
+**Kısayol geri çağrısı hiçbir iş yapmıyor**, yalnızca bir kanala haber
+veriyor. Orada çeviri yapılsaydı, çeviri sürerken ikinci bir tuş basışı
+kuyrukta bekler ve kullanıcı "kısayol çalışmıyor" sanırdı.
+
+**Çeviri belleği her istekte diskten okunuyor.** Elde tutulan bir kopya,
+kullanıcı arayüzden bir çeviriyi düzelttiğinde ikisinden birinin diğerini
+ezmesi demek olurdu — üstelik ezilen taraf çoğu zaman kullanıcının kendi
+emeği olurdu.
+
+**Bu yol da deftere yazmıyor.** Kaydedilen tek sistem kaynağı klavye kısayolu
+ve o da sürecin ömrüyle sınırlı. Günlüğe açılma, kapanma ve her isteğin
+sonucu yazılıyor: bu program o an ekranı okumuş oluyor ve bunun görünür
+olması gerekiyor.

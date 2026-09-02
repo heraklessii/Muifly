@@ -98,6 +98,12 @@ satın alma engeli "acaba placebo mu" şüphesidir.
 - Sınırsız profil, profil içe/dışa aktarma
 - Sistem açılışı modu (otomatik başlatma)
 
+**Henüz karara bağlanmadı**: Ölçekleme (Faz 3) ve ekran çevirisi (Faz 5) şu an
+demo ikilisinde de **açık** — `surum.rs`teki kısıt listesine eklenmediler.
+İkisi de bilinçli bir bekletme, unutma değil: demo kapsamı bir ürün kararı ve
+listeye bir özellik eklemek onu geri almaktan kolay. `tasks.md` →
+Değerlendirilecek.
+
 **Demoda asla olmayacak**: zaman sınırı (7 gün deneme), kapanma sayacı, nag
 ekranı. Demo süresiz çalışır. Sınır özellik seviyesindedir, zaman seviyesinde
 değil — çünkü zaman sınırı, ürünün "geri alınabilirlik" vaadiyle çelişen bir
@@ -133,7 +139,12 @@ farkı, kullanıcının sistemine bırakılan izi hiçbir koşulda artırmamalı
   aktivasyon/lisans sunucusu yok. itch.io sürümü tamamen DRM'siz.
 - Program çalışmak için **hiçbir zaman** ağa çıkmak zorunda değildir. Ağ
   erişimi yalnızca kullanıcının açıkça başlattığı işlemlerde olur (DNS/route
-  testi, sürüm kontrolü) ve bu her seferinde loglanır.
+  testi, sürüm kontrolü, ekran çevirisi modelinin indirilmesi) ve bu her
+  seferinde loglanır.
+- **Çeviri modeli** (Faz 5) tek istisna gibi görünebilir ama değil: kuruluma
+  dahil değil, yalnızca kullanıcı "indir" dediğinde iniyor, adresi kodda
+  sabit ve inen her dosya SHA-256 ile doğrulanıyor. İndirilmezse ekran
+  çevirisi dışındaki her şey aynen çalışır.
 - Lisans anahtarı doğrulama sunucusu kurulmaz. Solo geliştirici için bakım
   yükü, engellediği korsanlıktan büyük.
 
@@ -152,6 +163,14 @@ FPS artışı gelmedi" en hızlı puan düşüren şikayettir.
 - [ ] "Ne yapmaz" bölümü var: ping'i garanti etmez, oyun motoruna dokunmaz,
       internet hızını artırmaz
 - [ ] İade politikası Steam varsayılanı (2 saat / 14 gün) — özel kısıt yok
+- [ ] Ekran çevirisi (Faz 5) anlatılırken **üç sınır** açıkça yazılı:
+      (1) çeviri modeli ayrı bir indirme, ~507 MiB; (2) yalnızca
+      İngilizce → Türkçe; (3) sonucu gösteren pencere münhasır tam ekranda
+      görünmez, kenarlıksız pencere modu gerekir. Üçü de satın alma kararını
+      etkileyen sınırlar ve sonradan öğrenilirse iade sebebi olur
+- [ ] Ekran çevirisi "dördüncü modül" gibi sunulmuyor: ürünün kimliği üç
+      kategoriyi tek araçta birleştirmek (`PRODUCT_VISION.md`), çeviri bunun
+      yanına konan varsayılan kapalı bir ek (karar #37)
 - [ ] Kod imzalama sertifikası alındı (SmartScreen uyarısı satışı doğrudan
       öldürür; bu kodla çözülmüyor)
 - [x] Üçüncü taraf lisans bildirimleri uygulama içinde (EULA madde 8'in vaadi;

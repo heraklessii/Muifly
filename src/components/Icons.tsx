@@ -89,6 +89,17 @@ export const IconOlcekleme = ({ className }: P) => (
   </svg>
 );
 
+/** Çeviri: iki dil arasında gidip gelen bir metin. */
+export const IconCeviri = ({ className }: P) => (
+  <svg {...ortak} className={className}>
+    <path d="M3 5h8" />
+    <path d="M7 5v2c0 3-1.6 5.4-4 6.5" />
+    <path d="M5 9.5c1 2.2 2.9 3.6 5 4.3" />
+    <path d="M12.5 21l4-10 4 10" />
+    <path d="M14 17.6h5" />
+  </svg>
+);
+
 export const IconAyarlar = ({ className }: P) => (
   <svg {...ortak} className={className}>
     <circle cx="12" cy="12" r="3.2" />

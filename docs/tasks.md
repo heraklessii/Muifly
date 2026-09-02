@@ -163,6 +163,52 @@ nasıl durduğunu göremez. Sırayla:
 - [ ] **Kusur listesi.** Görülen her kusur yazılacak — `FRAME_GENERATION.md`
       §5'e göre Faz 4b'nin (ML) açılma koşulu bu listenin varlığı.
 
+### 9. Ekran çevirisinin gerçek bir oyunda denenmesi (Faz 5)
+
+Kod, testler ve arayüz tamam (karar #37). Model bu makinede yüklendi,
+çeviri kalitesi ölçüldü ve üç zaafın üçü de beklenen davranışı gösterdi.
+Ama **hiçbiri gerçek bir oyunda denenmedi** ve bu özelliğin asıl sınavı
+orada. Sırayla:
+
+- [x] Model yükleniyor ve makul Türkçe üretiyor
+      (`ceviri::cevirici::testler::gercek_modelle_uctan_uca`)
+- [x] Boru hattının tamamı sentetik metinle koşuyor
+      (`gercek_modelle_akis`) — ön işleme, bölme, sözlük, bellek
+- [x] Terim işaretinin modelden sağ çıktığı ölçüldü (`isaret_adaylari`)
+- [ ] **Kısayol gerçekten çalışıyor mu.** Çeviri açıkken
+      `Ctrl+Alt+T`. Asıl sınav oyun fareyi yakalamışken: kısayolun işi tam
+      da başka hiçbir şeyin çalışmadığı andır. Kombinasyon başka bir
+      uygulamada kayıtlıysa sıradaki adaya düşmeli ve arayüzde **hangisinin**
+      alındığı yazmalı.
+- [ ] **Overlay gerçekten görünüyor mu.** Kenarlıksız pencere modunda bir
+      oyun açıkken kısayola bas: pencere ekranın altında belirmeli, oyunun
+      üstünde durmalı, kapatma düğmesi tıklanabilmeli. Münhasır tam ekranda
+      **görünmemesi beklenen** davranış — arayüz bunu baştan söylüyor,
+      doğrulanmalı.
+- [ ] **Alan seçici.** Profiller ekranından bir profil için "Alanı seç":
+      donmuş görüntü gelmeli, dikdörtgen çizilebilmeli, Esc kapatmalı.
+      Kaydedilen alan profil JSON'ında oran olarak görünmeli.
+- [ ] **Gerçek oyun metniyle OCR.** Karar #28'in külliyatı sentetikti ve bu
+      bilinen bir sınır. Gerçek bir oyunun altyazısında okuma ne kadar
+      doğru, `onisleme`nin uyarıları ne sıklıkta yanlış alarm veriyor?
+      Eşikler sentetik örneklere göre seçildi.
+- [ ] **Duran ekran sorunu.** Masaüstü çoğaltması yalnızca DEĞİŞİKLİK
+      veriyor. Oyunlar sürekli çizdiği için sorun beklenmiyor ama duraklatılmış
+      bir oyunda "ekrandan yeni bir kare gelmedi" hatası çıkabilir; çıkarsa
+      metin kullanıcıya ne yapacağını söylüyor mu?
+- [ ] **Model indirmesi uçtan uca.** Bu oturumda dosyalar `curl` ile
+      indirildi; ürünün kendi WinHTTP yolu (`ceviri::indirme`) **hiç
+      çalıştırılmadı**. İlerleme çubuğu, iptal ve yarım kalan indirmenin
+      `.yarim` dosyası bırakmadığı görülmeli.
+- [ ] **Vekil sunucu / kurumsal ağ.** WinHTTP otomatik vekil ayarını
+      kullanıyor ama bu makinede vekil yok; denenmedi.
+- [ ] **Çeviri sırasında oyunun takılıp takılmadığı.** Çıkarım iki
+      çekirdekle sınırlı ve istek tek seferlik; yine de kare süresine etkisi
+      `monitor::olcum` ile ölçülebilir. Kabul kriteri "çeviri isteği oyunun
+      akışını kesmiyor" ancak böyle doğrulanır.
+- [ ] **Kusur listesi.** Görülen her kusur yazılacak — hem OCR hem çeviri
+      tarafında. Karar #29'un üç zaafı bu listeye göre yeniden okunmalı.
+
 ## Değerlendirilecek
 
 - **Ölçekleme demo ikilisinde açık kalsın mı?** Şu an açık: `surum.rs`'teki
@@ -179,23 +225,31 @@ nasıl durduğunu göremez. Sırayla:
   olarak duruyor. Yakalama artık ekranı süren adaptörü buluyor; ölçeklemeyi
   başka bir adaptöre taşımak ayrı bir paylaşımlı doku işi ve ölçülmeden
   girilmemeli.
-- **Ekran çevirisi (Faz 5)** — karar #22, #30, `ROADMAP.md` → Faz 5.
-  **Yakalamadan bağımsız katman yazıldı** (`src-tauri/src/ceviri/`: `onisleme`,
-  `sozluk`, `bellek`, `ocr_dil`). Kalan her şey — yakalama, overlay,
-  `RegisterHotKey`, model indirme ve çıkarım, arayüz — hâlâ Faz 3'ün
-  yakalama katmanının ve Faz 1'in saha doğrulamasının arkasında.
-  "Muifly modülü mü ayrı ürün mü" sorusu bilinçli olarak açık bırakıldı;
-  fizibilite bu soruya bir veri ekledi: ~512 MB model indirmesi, bir oyun
-  optimizasyon aracının içinde ayrıca gerekçe isteyecek bir ağırlık.
-- **`sozluk`'ün işaretinin modelden sağ çıktığının ÖLÇÜLMESİ.** Terim koruma
-  `[[0]]` biçiminde bir işaret koyuyor ve bu işaretin SentencePiece
-  tokenizer'ından ve greedy çözümlemeden bozulmadan geçeceği bir varsayım,
-  ölçüm değil (karar #30). Model bağlandığında **ilk** sınanacak şey bu.
-  `geri_koy` kaybı zaten raporluyor; ölçüm, kaybın ne sıklıkta olduğunu
-  söyleyecek. Bozulursa yedek yol: çeviri sonrası terim zorlaması.
+- ~~Ekran çevirisi (Faz 5)~~ **Yazıldı** (karar #37). "Muifly modülü mü ayrı
+  ürün mü" sorusu da kapandı: Muifly'ın varsayılan kapalı bir modülü. Kalan
+  iş kod değil, saha denemesi — Sıradaki 9.
+- **Çeviri demo ikilisinde açık kalsın mı?** Ölçeklemeyle aynı soru, aynı
+  durum: `surum.rs`teki kısıt listesine eklenmedi. Çevirinin lehine bir
+  ayrıntı var — modeli indirmek zaten kullanıcının açık bir adımı, yani
+  demoda "açık" olması otomatik bir bedel getirmiyor. Karar verilirse hem
+  `surum.rs`e hem `DISTRIBUTION.md`ye hem de o kararı koruyan bir teste
+  yazılmalı.
+- **ONNX Runtime statik bağlı ve ikili 8,69 → 31,81 MiB büyüdü** (karar #37).
+  Kabul edilen bir bedel ama küçük değil ve `Cargo.toml`'daki "ikili boyutu
+  önemli" cümlesi hâlâ duruyor. Alternatif `load-dynamic`ti: DLL de model
+  gibi çalışma zamanında inerdi. Reddedilme gerekçesi kararda (imzalama,
+  arşiv açma, indirilen şeyin veri değil kod olması). Yeniden bakılacaksa
+  ölçülecek şey şu: kurulum boyutunun satın almaya etkisi mi büyük, imzasız
+  bir DLL'in SmartScreen riski mi?
+- ~~`sozluk`'ün işaretinin modelden sağ çıktığının ÖLÇÜLMESİ.~~ **Ölçüldü ve
+  varsayım çürüdü** (karar #37): `[[0]]` çıktıda `[0]` oluyordu, yani her
+  terim kayıp sayılıyordu. On beş aday sınandı, biçim `#0#` oldu. Ölçüm
+  testi `--ignored` olarak duruyor (`isaret_adaylari`) — model ya da
+  tokenizer değişirse aynı soru yeniden sorulmalı.
 - **OCR'ın gerçek ekran görüntüleriyle tekrar ölçülmesi.** Karar #28'in
-  külliyatı sentetik; bu makinede hiç oyun ekran görüntüsü yoktu. Faz 5'in
-  yakalama tarafı açılırsa ilk iş bu. `onisleme`'nin sezgisel uyarıları
+  külliyatı sentetik; bu makinede hiç oyun ekran görüntüsü yoktu. Yakalama
+  tarafı artık açık (karar #37), yani bu artık bir engel değil bir iş —
+  Sıradaki 9'a bağlı. `onisleme`'nin sezgisel uyarıları
   (bitişik kelime, noktalama şüphesi) da o külliyatta yanlış alarm oranıyla
   birlikte ölçülmeli — eşikler şu an sentetik örneklere göre seçildi.
 - **Tarayıcıda arayüz önizlemesi.** Oturum 5'te arayüzü gözle doğrulamak için
@@ -204,6 +258,23 @@ nasıl durduğunu göremez. Sırayla:
   derlemeden çalışan bir arayüz verir; bedeli, komut yüzeyiyle senkron
   tutulması gereken ikinci bir dosya. Arayüzde çok çalışılacaksa değer,
   yoksa borç.
+- **OCR'a giden kesitin büyütülmesi ölçülmedi.** Küçük punto yazıda OCR'ı
+  büyütülmüş bir görüntüyle beslemek doğruluğu artırabilir. Şu an kesit
+  olduğu gibi gidiyor ve bu **bilinçli**: karar #28 ölçümünü 1:1 görüntüyle
+  yaptı, ölçülmemiş bir dönüşüm eklemek doğruluğu artırdığı kadar
+  azaltabilir. Önce gerçek ekran görüntüleriyle ölçülmeli.
+- **Model boştayken düşüyor ama ne kadar bellek bıraktığı ölçülmedi.**
+  Varsayılan beş dakika (`ceviri_bosta_dusur_sn`). Yüklüyken tutulan
+  bellek bu makinede ölçülmedi; `RISKS.md`'deki "yüzlerce MB" tahmini hâlâ
+  tahmin.
+
+- **`site/` tanıtım sayfası iki fazdır geride.** Sayfa hâlâ "Üç şey yapar"
+  diyor ve Sistem / Ağ / Şeffaflık listeliyor; ölçekleme (Faz 3), kare
+  üretimi (Faz 4a) ve ekran çevirisi (Faz 5) hiç geçmiyor. Bu **şimdilik
+  doğru bir eksiklik**: üçü de sahada denenmedi ve tanıtım sayfasına
+  yazılan her satır bir vaattir (ilke 4). Saha denemeleri bitince üçü
+  birden eklenmeli — ekran çevirisi için üç sınırıyla birlikte (indirme
+  boyutu, tek yönlü dil çifti, münhasır tam ekranda görünmemesi).
 - **Katalogun büyütülmesi.** Şu an 142 oyun (`src-tauri/katalog.json`).
   Kapsam arttıkça değeri artıyor ve riski düşük: eşleşmeyen satır sessizce
   atlanıyor. Hazır ayar EKLENMEMELİ — karar #26. Yeni satır eklerken tek

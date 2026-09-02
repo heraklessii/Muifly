@@ -1,6 +1,6 @@
 [package]
 name = "muifly"
-version = "0.4.1"
+version = "0.5.0"
 description = "Windows icin oyun performans optimizasyon araci"
 authors = ["Muifly"]
 license = "LicenseRef-Muifly-EULA"
@@ -60,17 +60,35 @@ tauri-plugin-log = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 parking_lot = "0.12"
 
+# Ekran cevirisi (Faz 5, karar #37). Ikisi de yalnizca `ceviri::cevirici`
+# icinde kullaniliyor ve modelin kendisi ikiliye GIRMIYOR (karar #1).
+#
+# `ort` = ONNX Runtime baglamalari. `download-binaries` calisma zamaninda
+# degil DERLEME zamaninda indiriyor ve statik bagliyor. Bunun bedeli ikili
+# boyutu, kazanci calisma zamaninda indirilen bir DLL'in hic olmamasi:
+# indirilen tek sey modelin agirliklari, yani veri. Olculen buyume ve
+# reddedilen alternatif (load-dynamic) karar #37'de.
+#
+# `tokenizers` = SentencePiece Unigram parcalamasi. Sayiya cevirmeyi bu kasa
+# YAPMIYOR, biz yapiyoruz (`cevirici::Sozluk`): deponun tokenizer.json'unun
+# id uzayi modelin gomme matrisiyle ayni degil, olculen tablo karar #29'da.
+ort = { version = "2.0.0-rc.13", features = ["download-binaries"] }
+tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+
 # Yalnizca Windows API cagrilari icin. Bu urun Windows'a ozel: sistem
 # optimizasyonunun tamami platform API'lerine dayaniyor, capraz platform bir
 # soyutlama katmani yazmak bos emek olurdu (bkz. docs/decisions.md #2).
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
-  # WinRT tarafi: yalnizca OCR dil paketi sorgusu icin (ceviri::ocr_dil).
-  # Karar #28: OCR icin ikiliye gomulen ya da indirilen model YOK, bunlar
-  # Windows'un kendi bilesenlerinin baglanmasi.
+  # WinRT tarafi: OCR dil paketi sorgusu (ceviri::ocr_dil) ve karenin OCR
+  # motoruna verilmesi (ceviri::ocr). Karar #28: OCR icin ikiliye gomulen ya
+  # da indirilen model YOK, bunlar Windows'un kendi bilesenlerinin baglanmasi.
   "Foundation",
   "Globalization",
   "Media_Ocr",
+  "Graphics_Imaging",
+  "Storage_Streams",
+  "Win32_System_WinRT",
 
   "Win32_Foundation",
   "Win32_Security",
@@ -88,8 +106,9 @@ windows = { version = "0.62", features = [
   "Win32_System_Memory",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Shell",
-  # Kacis kisayolu (karar #34): RegisterHotKey. Klavye kancasi DEGIL -
-  # tus basislari okunmuyor, tek bir kombinasyon sisteme kaydediliyor.
+  # Kacis kisayolu (karar #34) ve ceviri kisayolu (karar #37):
+  # RegisterHotKey. Klavye kancasi DEGIL - tus basislari okunmuyor, tek bir
+  # kombinasyon sisteme kaydediliyor.
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_Graphics_Gdi",
 
@@ -104,6 +123,11 @@ windows = { version = "0.62", features = [
   "Win32_Graphics_Dxgi_Common",
   "Win32_NetworkManagement_IpHelper",
   "Win32_Networking_WinSock",
+  # Ceviri modelinin indirilmesi (karar #37). Yeni bir HTTP kasasi
+  # EKLENMEDI: WinHTTP isletim sisteminin kendi yigini, sertifika deposu da
+  # oyle. `library::png`teki gerekce burada da gecerli - tek bir indirme icin
+  # onlarca kasa bagimliligi tasimak bos emek.
+  "Win32_Networking_WinHttp",
 ] }
 
 [dev-dependencies]

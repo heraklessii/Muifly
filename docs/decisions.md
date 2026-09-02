@@ -828,6 +828,18 @@ tutarlı.
 
 ---
 
+**Tamamlandı — karar #37 (bkz. aşağıda).** Bu kararın bekleyen tarafı
+(yakalama, overlay, kısayol, model) yazıldı ve açık sorusu kapandı. İki
+tespiti kayda değer:
+
+- **Ayrım testi tuttu.** Buradaki dört parçanın hiçbiri yeniden yazılmadı.
+- **Ölçülmemiş varsayım çürüdü.** Yukarıda "model bağlandığında ilk
+  sınanacak şey bu" diye işaretlenen işaret biçimi (`[[0]]`) modelden sağ
+  çıkmıyordu. Varsayımı adıyla koymanın karşılığı buydu: hata ilk
+  çalıştırmada göründü, çünkü `geri_koy` kaybı zaten raporluyordu.
+
+---
+
 ## #31 — Oturum geçmişi diske yazılıyor, varsayılanı açık; ama iddia taşımıyor
 
 **Karar**: Biten her oyun oturumu `oturum-gecmisi.json`'a yazılıyor
@@ -1299,3 +1311,220 @@ Bunların hiçbiri gerçek bir oyunla denenmedi; birinci ve ikinci madde
 zaten yalnızca oyun açılırken ortaya çıkan yollar. Boru hattının bu
 makinede uçtan uca koştuğu ve ölçümün düzeldiği `gercek_ekranda_bir_tur`
 ile görüldü, o kadar.
+
+---
+
+## #37 — Faz 5 tamamlandı: ekran çevirisi Muifly'ın modülü oldu
+
+**Karar**: Faz 5'in kalan parçası yazıldı — ekran yakalama, OCR, klavye
+kısayolu, overlay penceresi, alan seçici, model indirme ve çıkarım. Karar
+#30'un açık bıraktığı soru ("Muifly modülü mü, ayrı bir Mui ürünü mü")
+**Muifly modülü** diye kapandı.
+
+Karar #22'nin bütün sınırları korundu: sürekli çeviri yok, kısayol
+`RegisterHotKey` ile, overlay ayrı bir pencere, model ikiliye girmiyor,
+öğrenme ince ayar değil bellek + sözlük.
+
+### Ayrı ürün değil, çünkü ölçülen maliyet asimetrik
+
+Karar #22 iki tarafı da yazmıştı. Faz 3 gelince tartışmanın zemini değişti:
+çeviri modülünün ihtiyaç duyduğu her altyapı parçası **zaten yazılmıştı**.
+
+| Parça | Ayrı üründe | Muifly'ın içinde |
+|---|---|---|
+| Ekran yakalama | baştan yazılır | `scaling::yakalama` (karar #32) |
+| Ekran listesi, çok ekran, DPI | baştan yazılır | aynı yerde |
+| Kısayol + kaçış disiplini | baştan yazılır | karar #34'ün deneyimi |
+| Profil/oyun eşleştirme | baştan yazılır | `profile_engine` (karar #9) |
+| Günlük, ayar dosyası, kurulum | baştan yazılır | var |
+| Yeni ürün: mağaza sayfası, EULA, imzalama | tamamı | — |
+
+Ayrı ürün lehine olan argüman (PRODUCT_VISION farklılaşma maddesi #1: "üç
+kategoriyi tek araçta birleştirme") hâlâ geçerli ve **kabul ediliyor**:
+ekran çevirisi dördüncü ve alakasız bir kategori. Cevabı ürün metninde
+verilecek — çeviri, üç ana modülün yanına konan bir eş değil, varsayılan
+kapalı bir ek. Sekmenin adı ve mağaza sayfasındaki yeri bunu yansıtmalı.
+
+### Faz disiplini: bu sefer bir emsal DEĞİL
+
+Karar #33 Faz 3'e Faz 1 sahada doğrulanmadan başlanmasını "emsal değil"
+diye kayda geçirmişti. Aynısı burada da geçerli ve bu üçüncü kez taşınan
+risk: **Faz 1 hâlâ sahada denenmedi.** Faz 5'in yazılması onu daha da
+erteledi ve bu bir borç, bir başarı değil. `tasks.md` → Sıradaki 1 yerinde
+duruyor.
+
+Karar #30'un "ayrım testi" ise **tuttu**: Faz 3 öncesi yazılan dört parça
+(`onisleme`, `sozluk`, `bellek`, `ocr_dil`) yeniden yazılmadı, dördü de
+olduğu gibi kullanılıyor. Testi geçen tek şey `sozluk`un işaret biçimiydi
+ve o da kodun değil bir **sabitin** değişmesiyle çözüldü (aşağıda).
+
+### Karar #30'un ölçülmemiş varsayımı çürüdü
+
+Karar #30 şunu açıkça yazmıştı: *"`sozluk` terimleri `[[0]]` biçiminde bir
+işaretle koruyor ve bu işaretin SentencePiece tokenizer'ından ve greedy
+çözümlemeden sağ çıkacağı **varsayım**, ölçüm değil — model bağlandığında
+ilk sınanacak şey bu."*
+
+Ölçüldü. Varsayım yanlıştı:
+
+```text
+girdi : Take the [[0]].
+çıktı : [0]'ı seçin.        → işaret kayboldu, terim "kayıp" sayıldı
+```
+
+On beş aday, dört kalıpta ölçüldü
+(`ceviri::cevirici::testler::isaret_adaylari`, `--ignored`):
+
+| işaret | sağkalım | işaret | sağkalım |
+|---|---|---|---|
+| `#0#` | 4/4 | `[[0]]` | 0/4 |
+| `@0@` | 4/4 | `{0}` | 0/4 |
+| `XX0XX` | 4/4 | `<0>` | 0/4 |
+| `Zqx0` | 4/4 | `«0»` | 0/4 |
+| `[0]` | 2/4 | `⟦0⟧` | 0/4 |
+| `((0))` | 1/4 | `__0__` | 0/4 |
+
+Köşeli, süslü ve açılı parantezlerin çoğu `<unk>`e düşüyor. Seçilen biçim
+sağ kalanların en kısası: `#0#`. Ölçüm testi **silinmedi**; model ya da
+tokenizer değişirse aynı soru yeniden sorulmalı ve cevabı yine tahminle
+değil ölçümle verilmeli.
+
+Bu, karar #30'un tasarımını doğruladı: `geri_koy` kaybolan işaretleri
+döndürdüğü için hata **ilk çalıştırmada göründü**. Toleranslı bir eşleşme
+yazılmış olsaydı `[0]` kabul edilir ve kimse fark etmezdi.
+
+### Karar #29'un üç zaafının üç karşılığı — ve biri gerçekten kapandı
+
+| Zaaf (ölçülmüş) | Karşılığı | Sonuç |
+|---|---|---|
+| TAMAMI BÜYÜK HARF girdi çöküyor | `onisleme` cümle düzenine indiriyor | `MISSION FAILED - RETURN TO CHECKPOINT` → "Görev başarısız - kontrol noktasına geri dön" |
+| Oyun terimleri yanlış | `sozluk` terimi modelden gizliyor | `Take the Longsword.` → "Uzun Kılıç'ı al." |
+| Cümle sessizce düşüyor | `cumle` her cümleyi ayrı gönderiyor | aşağıda |
+
+Üçüncüsü en önemlisi. Sondanın bulgusu şuydu:
+
+```text
+"Keep your guard up. This one bites back." → "Bu seferki ısırıyor."
+```
+
+Birinci cümle hata vermeden düşüyordu. Model ürüne bağlanırken aynı cümle
+tekrar koşturuldu ve **yine düştü** ("Bu seferki geri ısırıyor.") — yani
+rastlantı değil. Cümle cümle gönderildiğinde:
+
+```text
+Keep your guard up.   → Korumanı koru.
+This one bites back.  → Bu da ısırıyor.
+```
+
+Zaaf kaynağında kapandı: tek cümlelik bir girdide düşecek ikinci cümle yok.
+Buna rağmen `akis` boş birimi hâlâ işaretliyor — kapanmış bir zaafın bir
+daha açılmayacağı varsayımı, tam da bu kararın çürüttüğü türden bir
+varsayım olurdu.
+
+### Model: statik bağlama, isteğe bağlı indirme
+
+ONNX Runtime **derleme zamanında** indirilip statik bağlandı
+(`ort`, `download-binaries`). Alternatif `load-dynamic`ti: DLL de model
+gibi çalışma zamanında inerdi ve ikili küçük kalırdı. Reddedildi, üç
+sebeple:
+
+1. **İndirilen şey veri değil kod olurdu.** Çalışma zamanında indirilip
+   yüklenen bir DLL, imzalı bir kurulumun yanına imzasız bir ikili koymak
+   demek (`ROADMAP.md` M3, kod imzalama).
+2. **Paketi açmak gerekirdi.** Dağıtılan arşivler zip/tgz; deflate
+   çözücüsü yazmak ya da bir kasa daha eklemek gerekirdi.
+3. **Bedel RAM değil disk.** Karar #1'in argümanı "~120 MB RAM tabanı"
+   idi. Statik kod, kullanılmadığı sürece belleğe alınmıyor; çeviri hiç
+   açılmazsa ONNX Runtime'ın çalışma zamanı bedeli sıfır.
+
+Ölçülen büyüme ikili boyutunda **8,69 MiB → 31,81 MiB (9.114.112 → 33.350.144 bayt, aynı `profile.release` ayarlarıyla)**.
+Bu bir bedel ve saklanmıyor: `Cargo.toml`'un `profile.release` bölümünde
+"ikili boyutu önemli" yazıyor ve o cümle hâlâ doğru. Kabul edilme sebebi
+yukarıdaki üçüncü madde — büyüyen şey diskte duran kod, çalışırken tutulan
+bellek değil.
+
+Model dosyalarının kendisi (~507 MiB) **indiriliyor**, ikiliye girmiyor
+(karar #1, #22). Her dosyanın boyutu ve SHA-256'sı kodda sabit; bunlar bu
+makinede indirilip çeviri kalitesi sınanmış dosyaların özetleri. Depo bir
+gün dosyaları yeniden yüklerse özet tutmaz ve kullanıcı **denenmemiş bir
+modelle** sessizce çalışmaz.
+
+### Yeni bağımlılıklar ve yeni bir bağımlılık daha OLMAMASI
+
+Eklenen iki kasa: `ort` (ONNX Runtime bağlamaları) ve `tokenizers`
+(SentencePiece parçalaması). Üçüncü taraf bildirimleri yeniden üretildi:
+258 → 301 bileşen (karar #21).
+
+**HTTP kasası eklenmedi.** İndirme WinHTTP ile yapılıyor
+(`ceviri::indirme`): TLS, sertifika deposu, vekil sunucu ayarları ve
+yönlendirme takibi işletim sisteminin işi ve kullanıcının Windows'ta
+yaptığı ağ ayarlarına uyuyor. `library::png`'deki gerekçenin aynısı —
+tek bir indirme için onlarca kasalık bir ağaç taşımanın karşılığı yok.
+Aynı sebeple SHA-256 de elle yazıldı (`ceviri::sha256`, testi FIPS
+180-4'ün kendi örnekleriyle).
+
+### Oyunun çekirdeklerini almıyor
+
+ONNX Runtime varsayılan olarak bütün çekirdeklere yayılıyor. Kimliği
+"oyununu daha iyi çalıştırır" olan bir araçta, çeviri isteği sırasında
+bütün çekirdekleri doldurmak karar #22'nin kendi kaygısını (frame hitch)
+gerçekleştirmek olurdu. İş parçacığı sayısı ikiyle sınırlı
+(`cevirici::IS_PARCACIGI`), model boştayken bellekten düşüyor (varsayılan
+beş dakika).
+
+### Rekabetçi modda KAPATILMIYOR — ölçeklemeden farklı
+
+Ölçekleme ve kare üretimi rekabetçi modda kapalı, çünkü ikisi de **her
+karede** gecikme ekliyor. Çeviri eklemiyor: kullanıcı tuşa bastığında bir
+kez çalışıyor ve o an ne istediğini biliyor. Açıkça istenen bir işi
+reddetmek, kapının koruduğu şeyi korumazdı. Mod değişiminde çeviri
+kapatılmıyor, yalnızca **tazeleniyor** (yeni oyunun alanı ve belleği).
+
+### Kaçış yolu: karar #34'ün dersi iki pencerede de uygulandı
+
+Karar #34, ölçekleme penceresinin makineyi kullanılamaz hâle getirdiğini
+anlatıyor: tam ekran, tıklanamaz, Alt+Tab'da görünmez, kapatma yolu yok.
+İki yeni pencere o listeyi tek tek kırıyor:
+
+- **Overlay**: ekranın bir bölümünü kaplıyor (tamamını değil), tıklamaları
+  geçirmiyor (yani kapatma düğmesi gerçekten çalışıyor), çeviri
+  kapatıldığında kendisi de kapanıyor.
+- **Alan seçici**: kullanıcının açtığı, odak alan, Esc ile kapanan bir
+  pencere. Esc dinleyicisi ekran görüntüsü gelmeden önce de duruyor —
+  yakalama başarısız olursa kullanıcı kilitlenmiyor.
+
+Çeviri kısayolu kaydedilemezse özellik **hiç açılmıyor** ve hata çağırana
+dönüyor. Kısayolsuz bir ekran çevirisi, oyunun içindeyken tetiklenemediği
+için çalışmayan bir özelliktir; açık görünmesi karşılanmamış bir vaat
+olurdu (tasarım ilkesi 4).
+
+### Alan profile yazılıyor, oran olarak
+
+Karar #22 alanı profile koymuştu; sebebi somut — diyalog kutusunun yeri
+oyuna göre değişiyor, makineye göre değil. Piksel yerine **oran**
+saklanıyor: 1080p'de seçilen bir alan 1440p bir makinede yanlış yere
+düşerdi, üstelik sessizce, çünkü hâlâ geçerli bir dikdörtgen olurdu.
+
+Alan seçmek **şart değil**: seçilmezse ekranın tamamı okunuyor. Karar #28
+tam 1080p kare için 74 ms ölçmüştü; "alan seçmeden hiç çalışmayan" bir
+özellik yapmak için sebep yok.
+
+### Deftere yazmıyor, günlüğe yazıyor
+
+`monitor` ve `scaling` gibi bu modül de yalnızca okuyor ve kendi
+dosyalarına yazıyor (`%APPDATA%\Muifly\ceviri`). Geri alınacak bir sistem
+değişikliği üretmediği için deftere yazacak bir şeyi yok. Kaydedilen tek
+sistem kaynağı klavye kısayolu ve o da sürecin ömrüyle sınırlı — program
+kapanınca kombinasyon sisteme geri dönüyor.
+
+### Ne ölçüldü, ne ölçülmedi
+
+**Bu makinede ölçüldü** (`--ignored` testler):
+model yükleme 1,7 s · cümle başına 78-243 ms · üç zaafın üçü de beklenen
+davranışı gösterdi · işaret biçimi on beş adayla sınandı.
+
+**Ölçülmedi ve `tasks.md`de duruyor**: hiçbiri gerçek bir oyunda
+denenmedi. OCR külliyatı hâlâ sentetik (karar #28'in kendi sınırı), gerçek
+oyun ekran görüntüleriyle tekrar ölçülmesi gerekiyor. Overlay ve alan
+seçici pencereleri gerçek bir pencerede bir kez açılmadı. Kısayolun oyun
+fareyi yakalamışken çalıştığı görülmedi.

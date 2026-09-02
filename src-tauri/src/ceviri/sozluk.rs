@@ -21,18 +21,31 @@
 //!
 //! İkisi de aynı eşleme: kaynak terim → hedef terim.
 //!
-//! ## İşaretin modelden sağ çıkması ÖLÇÜLMEDİ
+//! ## İşaretin biçimi ÖLÇÜLDÜ — ve ilk seçim yanlıştı
 //!
-//! Bu modül yazıldığında çeviri modeli henüz bağlanmamıştı (Faz 5, yakalama
-//! katmanından sonra). İşaretin bir SentencePiece Unigram tokenizer'ından ve
-//! greedy çözümlemeden geçerken bozulmayacağı bir **varsayım**, ölçüm değil.
-//! Model bağlandığında ilk ölçülecek şey bu.
+//! Bu modül yazıldığında model henüz bağlı değildi ve işaretin
+//! SentencePiece parçalamasından + greedy çözümlemeden bozulmadan geçeceği
+//! **varsayım** olarak yazılmıştı (karar #30 bunu açıkça "ölçülmemiş" diye
+//! işaretlemişti). Model bağlanınca varsayım **çürüdü**: ilk biçim `[[0]]`
+//! çıktıda `[0]` oluyordu, yani her terim kayıp sayılıyordu.
 //!
-//! Bu yüzden [`geri_koy`] kaybolan işaretleri **döndürüyor** ve arayüz onları
-//! göstermek zorunda. Karar #29'un üçüncü zaafı sessiz cümle atlama; işaret
-//! kaybını sessizce yutan bir tasarım, aynı zaafı bir kez daha üretirdi.
-//! Kaybolan işaret aynı zamanda ucuz bir tespit aracı: model bir cümleyi
-//! düşürdüyse o cümledeki işaret de düşer.
+//! On beş aday ölçüldü (`cevirici::testler::isaret_adaylari`, karar #37).
+//! Dört kalıpta dört kere sağ çıkanlar: `#0#`, `@0@`, `XX0XX`, `Zqx0`.
+//! Hiç çıkmayanlar arasında köşeli/süslü/açılı parantezler ve tek yönlü
+//! tırnaklar var; çoğu `<unk>`e düşüyor. Seçilen biçim en kısası:
+//! [`isaret`].
+//!
+//! Ölçüm testi silinmedi, `--ignored` olarak duruyor: model ya da tokenizer
+//! değişirse aynı soru yeniden sorulmalı ve cevabı yine tahminle değil
+//! ölçümle verilmeli.
+//!
+//! ## Kayıp yine de raporlanıyor
+//!
+//! İşaret artık sağ çıkıyor ama [`geri_koy`] kaybolanları **döndürmeye
+//! devam ediyor** ve arayüz onları göstermek zorunda. Sebep değişmedi:
+//! karar #29'un üçüncü zaafı sessiz cümle atlama ve model bir cümleyi
+//! düşürdüyse o cümledeki işaret de düşer. Kaybı sessizce yutan bir
+//! tasarım, ölçülmüş bir zaafı görünmez kılardı.
 
 use std::collections::BTreeMap;
 
@@ -49,13 +62,16 @@ pub struct Yerlesim {
 
 /// Terimin yerine konan işaretin biçimi.
 ///
-/// ASCII, kısa ve oyun diyaloğunda geçmesi beklenmeyen bir kalıp. Köşeli
-/// parantez seçildi çünkü metnin kendisinde bulunma ihtimali düşük; ama
-/// "düşük" garanti değil, o yüzden [`koru`] önce metinde zaten böyle bir
-/// kalıp olup olmadığına bakmıyor — bakması gerekse bile sonucu değiştirmez,
-/// çünkü geri koyma birebir eşleşme arıyor ve tutmayan her şey rapor ediliyor.
+/// `#0#`, `#1#`… Biçim **ölçülerek** seçildi (modül belgesi): köşeli
+/// parantezli ilk biçim modelden `[0]` olarak çıkıyordu ve her terim kayıp
+/// sayılıyordu. Sağ çıkan dört adaydan en kısası bu.
+///
+/// Oyun metninde `#` ile çevrili bir sayının geçmesi beklenmiyor ama
+/// "beklenmiyor" garanti değil. [`koru`] metinde zaten böyle bir kalıp olup
+/// olmadığına **bakmıyor**: baksa bile sonucu değiştirmezdi, çünkü geri
+/// koyma birebir eşleşme arıyor ve tutmayan her şey rapor ediliyor.
 fn isaret(sira: usize) -> String {
-    format!("[[{sira}]]")
+    format!("#{sira}#")
 }
 
 /// Sözlükteki terimleri metinden çıkarır, yerlerine işaret koyar.
@@ -240,6 +256,25 @@ mod testler {
         assert_ne!(y[0].isaret, y[1].isaret);
     }
 
+
+    /// İşaret biçimi ölçümle seçildi; kazara değişmesin.
+    ///
+    /// Bu testin koruduğu şey bir davranış değil bir **ölçüm sonucu**:
+    /// köşeli/süslü/açılı parantezli biçimler modelden sağ çıkmıyor
+    /// (`cevirici::testler::isaret_adaylari`). Biçim değiştirilecekse önce
+    /// o test yeniden koşturulmalı.
+    #[test]
+    fn isaret_bicimi_olculmus_olan() {
+        assert_eq!(isaret(0), "#0#");
+        assert_eq!(isaret(12), "#12#");
+        for kotu in ["[", "]", "{", "}", "<", ">", "«", "⟦"] {
+            assert!(
+                !isaret(0).contains(kotu),
+                "modelden sağ çıkmayan bir karakter işarete girdi: {kotu}"
+            );
+        }
+    }
+
     #[test]
     fn bos_sozluk_metne_dokunmuyor() {
         let metin = "Nothing to protect here.";
@@ -264,7 +299,8 @@ mod testler {
         let s = sozluk(&[("Stamina", "Dayanıklılık")]);
         let (_, y) = koru("Stamina", &s);
         // Model işareti bozdu; toleranslı eşleşme bunu görünmez kılardı.
-        let (_, kayip) = geri_koy("[[ 0 ]]", &y);
+        // Bu tam olarak ilk ölçümde yaşanan şey: `[[0]]` → `[0]` (karar #37).
+        let (_, kayip) = geri_koy("# 0 #", &y);
         assert_eq!(kayip.len(), 1);
     }
 }

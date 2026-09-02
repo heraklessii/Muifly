@@ -99,6 +99,13 @@ pub struct Motor {
     /// rekabetçi moda geçildiğinde ya da oyun kapandığında açık kalan bir
     /// ölçekleme penceresi, kullanıcının istemediği tek şey olurdu.
     pub olcekleyici: crate::scaling::Olcekleyici,
+    /// Ekran çevirisinin denetleyicisi (`ceviri`, karar #37).
+    ///
+    /// Motor'un içinde duruyor çünkü çevrilecek alan ve çeviri belleği
+    /// **öndeki oyuna** bağlı (karar #22) ve öndeki oyunu Motor biliyor.
+    /// Karar #30 bu modülü bilerek Motor'a bağlamamıştı; o kararın açık
+    /// sorusu ("Muifly modülü mü, ayrı ürün mü") karar #37'de kapandı.
+    pub ceviri: crate::ceviri::Ceviri,
     ornekler: Tampon,
     ornekleyici: Ornekleyici,
     /// Optimizasyon uygulandığı an — karşılaştırma ve geçmiş kaydı için.
@@ -134,6 +141,7 @@ impl Motor {
             mod_: Mod::Bosta,
             gecmis: Gecmis::yukle(settings::gecmis_yolu()),
             olcekleyici: crate::scaling::Olcekleyici::yeni(),
+            ceviri: crate::ceviri::Ceviri::yeni(),
             ornekler: Tampon::yeni(monitor::ORNEK_KAPASITESI),
             ornekleyici: Ornekleyici::yeni(),
             acik_oturum: None,
@@ -604,6 +612,139 @@ impl Motor {
         Ok(())
     }
 
+    // -----------------------------------------------------------------
+    // Ekran çevirisi (Faz 5, karar #37)
+    // -----------------------------------------------------------------
+
+    /// Çevirinin o anki yapılandırması: öndeki oyun + ayarlar.
+    ///
+    /// Alan ve dil **profilden** geliyor (karar #22), ekran ve boşta düşme
+    /// süresi ayarlardan: ilki oyuna, ikincisi makineye ait bir tercih.
+    /// Profil yoksa ekranın tamamı okunuyor — alan seçmeden hiç çalışmayan
+    /// bir özellik yapmak için sebep yok (karar #28 tam kare için 74 ms
+    /// ölçtü).
+    pub fn ceviri_yapilandirmasi(&self) -> crate::ceviri::Yapilandirma {
+        let profil = self.aktif_profil();
+        let bolum = profil.as_ref().map(|p| &p.ceviri);
+        crate::ceviri::Yapilandirma {
+            ekran: self.ayarlar.ceviri_ekrani,
+            alan: bolum
+                .and_then(|b| b.region)
+                .unwrap_or_else(crate::ceviri::Alan::tam_ekran),
+            oyun: self.ceviri_oyunu(),
+            kaynak_dil: bolum
+                .and_then(|b| b.source_language.clone())
+                .unwrap_or_else(|| crate::ceviri::denetleyici::KAYNAK_DIL.to_string()),
+            bosta_dusur_sn: self.ayarlar.ceviri_bosta_dusur_sn as u64,
+        }
+    }
+
+    /// Çeviri belleğinin bağlanacağı ad.
+    ///
+    /// Profil kimliği tercih ediliyor: aynı oyunun iki farklı
+    /// çalıştırılabilir dosyası (launcher + oyun) tek bir belleği
+    /// paylaşmalı. Profil yoksa süreç adı; o da yoksa "genel" — hiçbir oyun
+    /// önde değilken yapılan denemeler bir oyunun belleğini kirletmesin.
+    pub fn ceviri_oyunu(&self) -> String {
+        if let Some(p) = self.aktif_profil() {
+            return p.profile_id.clone();
+        }
+        match self.mod_.surec() {
+            Some(s) if !s.trim().is_empty() => s.to_string(),
+            _ => "genel".to_string(),
+        }
+    }
+
+    /// Öndeki oyunun profili (varsa).
+    fn aktif_profil(&self) -> Option<&Profil> {
+        let kimlik = match &self.mod_ {
+            Mod::OyunProfili { profil_id, .. }
+            | Mod::Rekabetci {
+                profil_id: Some(profil_id),
+                ..
+            } => profil_id.as_str(),
+            _ => return None,
+        };
+        self.profiller.iter().find(|p| p.profile_id == kimlik)
+    }
+
+    /// Çeviriyi açar (kısayolu kaydeder).
+    ///
+    /// Hata **çağırana** dönüyor: kısayol kaydedilemediyse kullanıcı bunu
+    /// hemen görmeli, yoksa tuşa basıp hiçbir şey olmamasını izler.
+    pub fn ceviriyi_ac(&mut self) -> Result<()> {
+        let y = self.ceviri_yapilandirmasi();
+        self.ceviri.ac(y)?;
+        let kisayol = self
+            .ceviri
+            .durum()
+            .kisayol
+            .unwrap_or_else(|| "-".to_string());
+        self.gunluk.bilgi(
+            Kategori::Uygulama,
+            format!("ekran çevirisi açıldı (kısayol {kisayol})"),
+        );
+        Ok(())
+    }
+
+    /// Çeviriyi kapatır ve kısayolu sisteme geri bırakır.
+    pub fn ceviriyi_kapat(&mut self, sebep: &str) {
+        if !self.ceviri.acik() {
+            return;
+        }
+        self.ceviri.kapat();
+        self.gunluk.bilgi(
+            Kategori::Uygulama,
+            format!("ekran çevirisi kapatıldı ({sebep})"),
+        );
+    }
+
+    /// Öndeki oyun değiştiğinde çevirinin alanını ve belleğini tazeler.
+    ///
+    /// Yeniden başlatma yok: kısayol elde kalıyor. Başka türlüsü, oyun
+    /// değiştiği her an kombinasyonu bırakıp yeniden istemek olurdu ve
+    /// aradaki boşlukta başka bir uygulama onu kapabilirdi.
+    pub fn ceviriyi_tazele(&mut self) {
+        if !self.ceviri.acik() {
+            return;
+        }
+        let y = self.ceviri_yapilandirmasi();
+        self.ceviri.yapilandir(y);
+    }
+
+    /// Yeni bir çeviri sonucu geldiyse günlüğe yazar.
+    ///
+    /// Ölçeklemenin kaçış bayrağıyla aynı yapı (karar #34): iş parçacığının
+    /// Motor'a erişimi yok, günlük satırı burada düşüyor. Şeffaflık ilkesi
+    /// çeviri için de geçerli — hangi metnin ne zaman okunduğu görünür
+    /// olmalı, çünkü bu program o an ekranı okumuş oluyor.
+    ///
+    /// Dönüş: bu turda bir sonuç işlendi mi (arayüze olay yayınlamak için).
+    pub fn ceviri_sonucunu_isle(&mut self) -> bool {
+        if !self.ceviri.sonucu_devral() {
+            return false;
+        }
+        let durum = self.ceviri.durum();
+        match durum.son_hata {
+            Some(hata) => {
+                self.gunluk
+                    .uyari(Kategori::Uygulama, format!("ekran çevirisi: {hata}"));
+            }
+            None => {
+                let sonuc = self.ceviri.son_sonuc();
+                let birim = sonuc.as_ref().map(|s| s.birimler.len()).unwrap_or(0);
+                let bellekten = sonuc.as_ref().map(|s| s.bellekten).unwrap_or(0);
+                self.gunluk.bilgi(
+                    Kategori::Uygulama,
+                    format!(
+                        "ekran çevirisi: {birim} birim okundu ({bellekten} tanesi bellekten)"
+                    ),
+                );
+            }
+        }
+        true
+    }
+
     pub fn gecmis_ozeti(&self) -> GecmisOzeti {
         self.gecmis.ozet()
     }
@@ -714,6 +855,15 @@ impl Motor {
         if !crate::scaling::moda_uygun(&self.mod_) {
             self.olceklemeyi_durdur("rekabetçi moda geçildi");
         }
+
+        // Çeviri KAPATILMIYOR, yalnızca tazeleniyor (karar #37).
+        //
+        // Ölçekleme her karede gecikme ekliyor, o yüzden rekabetçi modda
+        // kapanıyor. Çeviri ise kullanıcının tuşa bastığı anda bir kez
+        // çalışıyor; rekabetçi modda kapatmak, kullanıcının açıkça
+        // istediği bir işi reddetmek olurdu. Tazeleme şart: yeni oyunun
+        // alanı ve çeviri belleği başka.
+        self.ceviriyi_tazele();
 
         Some(ModDegisimi { yeni, geri_alinan })
     }
@@ -930,6 +1080,9 @@ mod testler {
             // Başlatılmamış ölçekleyici hiçbir iş parçacığı açmıyor: saf
             // mantık testleri ekrana ve D3D11'e dokunmuyor.
             olcekleyici: crate::scaling::Olcekleyici::yeni(),
+            // Aynı gerekçe çeviri için de geçerli: açılmamış bir denetleyici
+            // ne kısayol kaydediyor ne iş parçacığı açıyor.
+            ceviri: crate::ceviri::Ceviri::yeni(),
             ornekler: Tampon::yeni(100),
             ornekleyici: Ornekleyici::yeni(),
             acik_oturum: None,

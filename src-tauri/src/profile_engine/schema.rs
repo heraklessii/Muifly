@@ -106,6 +106,30 @@ impl OlceklemeBolumu {
     }
 }
 
+/// Ekran çevirisi (Faz 5, karar #37).
+///
+/// Alan burada duruyor, ayarlarda değil: karar #22 "alan seçimi oyun
+/// profiline kaydedilir" diyor ve gerekçesi somut — diyalog kutusunun
+/// yeri oyuna göre değişiyor, makineye göre değil. Oran olarak saklanması
+/// ([`crate::ceviri::Alan`]) profilin başka çözünürlükte de doğru yere düşmesini
+/// sağlıyor.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CeviriBolumu {
+    #[serde(default)]
+    pub enabled: bool,
+    /// Çevrilecek ekran parçası. `null` = ekranın tamamı.
+    #[serde(default)]
+    pub region: Option<crate::ceviri::Alan>,
+    /// OCR'ın okuyacağı dil (BCP-47). `null` = varsayılan.
+    ///
+    /// Çeviri yönü sabit (EN→TR) ve bu alan onu değiştirmiyor; yalnızca
+    /// Windows'un hangi OCR paketiyle okuyacağını söylüyor. `en-GB`
+    /// paketi kurulu bir makinede `en-US` istemek boşuna hata olurdu.
+    #[serde(default)]
+    pub source_language: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Profil {
@@ -122,6 +146,8 @@ pub struct Profil {
     pub network: AgBolumu,
     #[serde(default)]
     pub scaling: OlceklemeBolumu,
+    #[serde(default)]
+    pub ceviri: CeviriBolumu,
     #[serde(default = "varsayilan_olusturan")]
     pub created_by: String,
     /// İleride topluluk paylaşımı için ayrılmış alan.
@@ -145,6 +171,7 @@ impl Profil {
             system: SistemBolumu::default(),
             network: AgBolumu::default(),
             scaling: OlceklemeBolumu::default(),
+            ceviri: CeviriBolumu::default(),
             created_by: varsayilan_olusturan(),
             shared: false,
         }
@@ -273,6 +300,33 @@ impl Profil {
                 duzeltmeler.push(format!(
                     "'{ad}' diye bir ölçekleme algoritması yok, varsayılana dönüldü"
                 ));
+            }
+        }
+
+        // Çeviri alanı (Faz 5, karar #37). Oran olarak saklanıyor ve elle
+        // düzenlenmiş bir dosyadan her şey gelebilir; ekranın içine
+        // çekiliyor. Kırpma sonrası hiçbir şey kalmadıysa alan düşürülüyor
+        // ve düşürüldüğü SÖYLENIYOR: sessizce tüm ekrana dönmek,
+        // kullanıcının seçtiğini sandığı yerden başka bir yeri okumak olurdu.
+        if let Some(alan) = self.ceviri.region {
+            let kirpilmis = alan.kirp();
+            if kirpilmis.width <= 0.0 || kirpilmis.height <= 0.0 {
+                self.ceviri.region = None;
+                duzeltmeler.push("çeviri alanı boştu, ekranın tamamına dönüldü".into());
+            } else {
+                if kirpilmis != alan {
+                    duzeltmeler.push("çeviri alanı ekranın içine çekildi".into());
+                }
+                self.ceviri.region = Some(kirpilmis);
+            }
+        }
+
+        // Boş bir dil etiketi, OCR motorunu "" ile açmaya çalışmak demek.
+        if let Some(dil) = self.ceviri.source_language.clone() {
+            if dil.trim().is_empty() {
+                self.ceviri.source_language = None;
+            } else {
+                self.ceviri.source_language = Some(dil.trim().to_string());
             }
         }
 

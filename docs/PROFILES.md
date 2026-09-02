@@ -38,6 +38,11 @@ log event'i olarak bildirilir (şeffaflık ilkesi, bkz. `DESIGN_PRINCIPLES.md`).
     "algorithm": null,
     "frame_generation": false
   },
+  "ceviri": {
+    "enabled": false,
+    "region": { "left": 0.2, "top": 0.72, "width": 0.6, "height": 0.22 },
+    "source_language": null
+  },
   "created_by": "user",
   "shared": false
 }
@@ -51,6 +56,19 @@ Notlar:
   Tanınmayan bir ad `dogrula` içinde düşürülüyor ve kullanıcıya söyleniyor;
   sessizce başka bir algoritma çalıştırmak, seçtiğini sandığından başkasını
   vermek olurdu.
+- `ceviri.region`: çevrilecek ekran parçası, **oran** olarak (0..1). Piksel
+  değil, çünkü profil paylaşılabilir bir dosya: 1080p'de seçilen bir alan
+  1440p bir makinede yanlış yere düşerdi ve bu sessizce olurdu, çünkü hâlâ
+  geçerli bir dikdörtgen olurdu. `null` = ekranın tamamı okunur — alan
+  seçmek şart değil, kaliteyi artıran bir tercih (karar #37).
+- `ceviri.source_language`: OCR'ın okuyacağı dilin BCP-47 etiketi. Çeviri
+  **yönünü değiştirmiyor** (model tek yönlü, EN→TR); yalnızca Windows'un
+  hangi metin tanıma paketiyle okuyacağını söylüyor. `en-GB` paketi kurulu
+  bir makinede `en-US` istemek boşuna hata olurdu.
+- `ceviri` bölümü rekabetçi modda **kapatılmıyor** — `scaling`den farkı bu.
+  Ölçekleme her karede gecikme ekliyor; çeviri kullanıcı tuşa bastığında bir
+  kez çalışıyor. Açıkça istenen bir işi reddetmek, kapının koruduğu şeyi
+  korumazdı (karar #37).
 - `competitive: true` olan profillerde `scaling.frame_generation` zorla `false`
   olmalı — UI seviyesinde de engellenmeli, sadece config'e güvenilmemeli.
 - `competitive: true` olan profillerde `scaling.enabled` de zorla `false`:

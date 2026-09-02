@@ -246,7 +246,11 @@ pub fn gorsel(kimlik: &str) -> Option<String> {
 }
 
 /// `data:<tur>;base64,<...>` adresi kurar.
-fn veri_adresi(tur: &str, bayt: &[u8]) -> String {
+///
+/// Kasa içine açık: çeviri alanı seçici de ekran görüntüsünü aynı biçimde
+/// arayüze veriyor (`ceviri::ekran_goruntusu`). İkinci bir kopya yazmak,
+/// aynı base64 tablosunu iki yerde tutmak olurdu.
+pub(crate) fn veri_adresi(tur: &str, bayt: &[u8]) -> String {
     format!("data:{tur};base64,{}", base64_kodla(bayt))
 }
 

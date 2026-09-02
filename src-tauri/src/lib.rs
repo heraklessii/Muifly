@@ -11,6 +11,7 @@
 //!    ├── network_boost    DNS ölçümü, gecikme/jitter, TCP, QoS
 //!    ├── monitor          şeffaflık günlüğü + ölçüm
 //!    ├── scaling          ekran yakalama + ölçekleme + sunum (Faz 3)
+//!    ├── ceviri           ekran çevirisi: OCR + yerel model (Faz 5)
 //!    ├── ledger           geri alma defteri (veri)
 //!    └── revert           geri alma uygulayıcısı
 //! ```
@@ -100,6 +101,27 @@ pub fn run() {
                 }
             }
 
+            // Ekran çevirisi kullanıcının açık bıraktığı gibi geri geliyor
+            // (karar #37). Kısayol kaydedilemezse açılış **durmuyor**:
+            // çeviri Muifly'ın çalışması için gerekli değil ve kombinasyonu
+            // başka bir uygulama almış olabilir. Sebep günlüğe düşüyor,
+            // ayar da kapatılıyor ki arayüz açık göstermesin.
+            {
+                let kilit = uygulama.state::<parking_lot::Mutex<Motor>>();
+                let istendi = kilit.lock().ayarlar.ceviri_acik;
+                if istendi {
+                    let mut motor = kilit.lock();
+                    if let Err(e) = motor.ceviriyi_ac() {
+                        motor.ayarlar.ceviri_acik = false;
+                        let _ = motor.ayarlari_kaydet();
+                        motor.gunluk.uyari(
+                            monitor::log::Kategori::Uygulama,
+                            format!("ekran çevirisi açılamadı: {}", crate::error::tek_satir(&e)),
+                        );
+                    }
+                }
+            }
+
             pencere_kapanisini_bagla(uygulama.handle());
 
             arka_plan_dongusu(uygulama.handle().clone());
@@ -164,6 +186,28 @@ pub fn run() {
             commands::olcekleme_algoritma,
             commands::olcekleme_uretimi,
             commands::olcekleme_denemesi,
+            commands::ceviri_durumu,
+            commands::ceviri_sonucu,
+            commands::ceviri_ac,
+            commands::ceviri_kapat,
+            commands::ceviri_simdi,
+            commands::ceviri_dil_durumu,
+            commands::ceviri_model_durumu,
+            commands::ceviri_model_indir,
+            commands::ceviri_model_indirmeyi_durdur,
+            commands::ceviri_model_sil,
+            commands::ceviri_model_dogrula,
+            commands::ceviri_ekran_goruntusu,
+            commands::ceviri_alani_kaydet,
+            commands::ceviri_bellegi,
+            commands::ceviri_duzelt,
+            commands::ceviri_kaydi_sil,
+            commands::ceviri_terim_ekle,
+            commands::ceviri_terim_sil,
+            commands::ceviri_bellegini_temizle,
+            commands::ceviri_overlay_kapat,
+            commands::ceviri_alan_secici_ac,
+            commands::ceviri_alan_secici_kapat,
         ])
         .build(tauri::generate_context!())
         .expect("Muifly başlatılamadı")
@@ -310,7 +354,38 @@ fn arka_plan_dongusu(uygulama: tauri::AppHandle) {
                 let _ = uygulama.emit(commands::OLAY_GUNLUK, satirlar);
             }
 
-            // 3. Ölçüm — kullanıcının seçtiği aralıkta.
+            // 3. Ekran çevirisi — her turda.
+            //
+            // İş parçacığı sonucu üretiyor ama günlüğe yazamıyor (Motor'a
+            // erişimi yok); ölçeklemenin kaçış bayrağıyla aynı yapı. Arayüz
+            // olayı buradan alıyor: kullanıcı oyunun içindeyken kısayola
+            // basıyor ve Muifly penceresine döndüğünde sonucu hazır bulmalı.
+            if kilit.lock().ceviri_sonucunu_isle() {
+                let (durum, sonuc, satirlar) = {
+                    let motor = kilit.lock();
+                    (
+                        motor.ceviri.durum(),
+                        motor.ceviri.son_sonuc(),
+                        motor.gunluk.son(20),
+                    )
+                };
+                let _ = uygulama.emit(commands::OLAY_CEVIRI, (durum, &sonuc));
+                let _ = uygulama.emit(commands::OLAY_GUNLUK, satirlar);
+
+                // Overlay yalnızca gösterilecek bir sonuç varsa açılıyor.
+                // Hata durumunda açmak, oyunun üstüne kullanıcının
+                // okuyamayacağı bir kutu koymak olurdu; hata Muifly
+                // penceresinde ve günlükte duruyor.
+                let (overlay_acik, ekran) = {
+                    let motor = kilit.lock();
+                    (motor.ayarlar.ceviri_overlay, motor.ayarlar.ceviri_ekrani)
+                };
+                if overlay_acik && sonuc.is_some() {
+                    commands::overlay_goster(&uygulama, ekran);
+                }
+            }
+
+            // 4. Ölçüm — kullanıcının seçtiği aralıkta.
             //
             // Ping, Motor kilidinin DIŞINDA atılıyor (karar #36). Kilit
             // altında ölçülseydi, cevap vermeyen bir hedefte arayüzün her

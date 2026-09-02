@@ -85,6 +85,33 @@
 - Sayısal vaat yasağı (ilke 4) burada da geçerli: "%X doğruluk" gibi bir iddia
   kullanılmaz.
 
+**Faz 5 yazıldıktan sonraki durum (karar #37)**: boyut tahmini tuttu ama
+büyük çıktı — indirme ~507 MiB, tahminin (100–300 MB) üstünde. Azaltmalar
+uygulandı: model kuruluma girmiyor, boştayken bellekten düşüyor (varsayılan
+beş dakika), çıkarım iki çekirdekle sınırlı. **Yeni ve kabul edilen bir
+bedel** ONNX Runtime'ın statik bağlanması: ikili büyüdü, gerekçesi ve
+ölçülen rakam karar #37'de.
+
+Kalite riski **azalmadı, yalnızca ölçüldü**. Karar #29'un üç zaafının
+üçünün de kodda bir karşılığı var ve ikisi ölçülerek doğrulandı; ama
+külliyat hâlâ sentetik ve hiçbiri gerçek bir oyunda denenmedi. Kullanıcının
+kıyas noktasının DeepL olması riski aynen duruyor — bunun tek yapısal
+panzehiri hâlâ çeviri belleği.
+
+## Klavye Kısayolunun Sistemden Alınması (Ekran Çevirisi, Faz 5)
+
+- Ekran çevirisi açıkken program sistemden bir klavye kombinasyonu alıyor
+  (`RegisterHotKey`) ve o kombinasyon başka uygulamalara gitmiyor. Bu,
+  kullanıcının fark etmesi en zor müdahalelerden biri: bir oyunda ya da başka
+  bir programda "tuş çalışmıyor" diye görünür.
+- **Azaltma**: Varsayılan kapalı. Açıkken hangi kombinasyonun alındığı
+  Çeviri ekranında yazılı. Kayıt başarısızsa özellik hiç açılmıyor —
+  kısayolu sessizce başka bir kombinasyona kaydırmak, kullanıcının bilmediği
+  bir tuşu almak olurdu. Program kapanınca kombinasyon sisteme geri
+  dönüyor (`Drop`).
+- Kanca (`SetWindowsHookEx`) **kullanılmıyor**: tuş basışları okunmuyor.
+  Anti-cheat açısından kritik olan ayrım bu (tasarım ilkesi 3).
+
 ## Sayısal Vaat Riski (Pazarlama/UI Metni)
 
 - Geliştirme sırasında "kolay satış" cazibesiyle sayısal iddialar UI'a sızabilir
