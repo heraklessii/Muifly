@@ -169,43 +169,8 @@ Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
   gerçek bir dosya seçme penceresiyle bir kez denenmedi (dosya süzgeci, iptal,
   yazma izni olmayan klasör).
 
-- **Kurulum ölçüm yardımcısının iki kopyasını taşıyor — ve bu MSI hedefini
-  KIRIYOR.** Tahmin 2 Eylül 2026'da doğrulandı; sebep tam olarak
-  `externalBin` ile cargo'nun ürettiği ikinci ikilinin çakışması.
-
-  Üretilen `installer.nsi`'de aynı hedef iki kez yazılıyor:
-
-  ```nsis
-  File /a "/oname=muifly-olcum.exe" "...\src-tauri\binaries\muifly-olcum-x86_64-pc-windows-msvc.exe"
-  File /a "/oname=muifly-olcum.exe" "...\src-tauri\target\release\muifly-olcum.exe"
-  ```
-
-  NSIS buna katlanıyor (ikincisi birincinin üstüne yazıyor, yani kuruluma
-  **cargo'nun ürettiği** ikili giriyor — sidecar değil). WiX katlanmıyor:
-
-  ```text
-  error LGHT0204 : ICE30: The target file 'muifly-olcum.exe' is installed in
-  '[ProgramFiles64Folder]\Muifly\' by two different components on an LFN
-  system: 'muifly_olcum.exe' and 'muifly_olcum'.
-  ```
-
-  Bu yüzden `tauri.conf.json` `targets` listesinde `"msi"` yazdığı halde
-  **hiç MSI üretilmedi** — 0.2.0 da yalnızca NSIS ile çıkmış. Üç yol var,
-  seçim ürün kararı:
-
-  1. **`externalBin`i kaldır.** Tek satır. Tauri paketin bütün cargo `bin`
-     hedeflerini zaten yanına koyuyor (yukarıdaki ikinci satır) ve
-     `olcum::yardimci_yolu` ana ikilinin yanına baktığı için çalışmaya devam
-     eder. `arac/olcum-yardimcisi-hazirla.mjs` gereksizleşir; CLAUDE.md'deki
-     "çalıştırılmazsa tauri build kırılır" notu ve imzalama uyarısı
-     `target/release`'i gösterecek şekilde güncellenmeli. **Riski**: cargo
-     bin'lerinin paketlenmesi belgelenmiş bir sözleşme değil, gözlenen bir
-     davranış; Tauri sürümü değişince sessizce kaybolabilir.
-  2. **Yardımcıyı ayrı bir crate'e taşı.** `externalBin` (desteklenen yol)
-     kalır, çakışma kalkar. Daha çok iş ama sözleşmeye dayanıyor.
-  3. **`"msi"`yi hedeflerden çıkar.** Ürün NSIS ile dağıtılıyor
-     (`installMode: currentUser` zaten NSIS ayarı, site Releases'e bakıyor).
-     Çakışma sürer, ~200 KB fazla kurulum boyutu kalır.
+- ~~Kurulum ölçüm yardımcısının iki kopyasını taşıyor.~~ **Çözüldü**
+  (2 Eylül 2026) — ayrıntı `Tamamlandı` bölümünde.
 
 - **GitHub Actions Node 20 uyarısı.** `actions/checkout@v4`,
   `setup-node@v4`, `configure-pages@v5`, `deploy-pages@v4` ve
@@ -228,6 +193,24 @@ Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
 
 ## Tamamlandı
 
+- [x] **MSI paketlemesini kıran yardımcı ikili çakışması** (2 Eylül 2026).
+      `tauri build` paketin bütün cargo `bin` hedeflerini kuruluma koyuyordu;
+      `externalBin` sidecar'ı da aynı dosyayı koyunca `muifly-olcum.exe` iki
+      kez yazılıyordu. NSIS üstüne yazıp geçiyordu, WiX `ICE30` ile
+      reddediyordu — `targets` listesinde `"msi"` yazdığı halde 0.3.0'a
+      kadar **hiç MSI üretilmemişti**.
+
+      Çözüm: yardımcı ikili `required-features = ["olcum-yardimcisi"]`
+      arkasına alındı. Normal `cargo build` onu üretmiyor, dolayısıyla tauri
+      de paketlemeye almıyor; kuruluma giren tek kopya sidecar'ın kendisi —
+      yani imzalanması gereken dosya. Desteklenen yol (`externalBin`)
+      korundu. `olcum::testler::yardimci_ikili_ozellik_arkasinda` düzeltmenin
+      sessizce geri alınmasını engelliyor: sorun derleme zamanında değil,
+      yalnızca paketleme gününde görünürdü.
+
+      Yan etki: `cargo test` artık yardımcıyı derlemiyor. Derleme hatasının
+      yayın gününe kalmaması için `cargo clippy --all-targets --features
+      olcum-yardimcisi` komutu CLAUDE.md'ye eklendi.
 - [x] Ticari model kararı ve belgelerin düzeltilmesi (31 Ağustos 2026)
 - [x] Proje iskeleti: Tauri v2 + React + Rust
 - [x] Faz 1: sistem optimizasyonu, geri alma defteri, profil motoru

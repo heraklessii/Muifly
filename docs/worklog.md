@@ -1201,3 +1201,32 @@ tek taraflı değiştirmek doğru olmazdı.
 Bir bekleyen madde kapandı: yardımcı ikilinin kurulumda ana ikilinin yanına
 düştüğü, üretilen kurulum betiğinden doğrulandı. Kurulumun kendisi
 çalıştırılmadı.
+
+### Paketleme düzeltmesi — MSI ilk kez üretildi
+
+Teşhis edilen çakışma düzeltildi. Yardımcı ikili
+`required-features = ["olcum-yardimcisi"]` arkasına alındı: normal
+`cargo build` onu üretmiyor, dolayısıyla `tauri build` de paketlemeye
+almıyor. Kuruluma giren tek kopya `externalBin` sidecar'ı — yani
+`arac/olcum-yardimcisi-hazirla.mjs`nin ürettiği, imzalanması gereken dosya.
+
+Üç seçenek arasından bu seçildi çünkü **desteklenen yolu koruyor**.
+`externalBin`i kaldırmak tek satırdı ama cargo bin'lerinin paketlenmesi
+belgelenmiş bir sözleşme değil, gözlenen bir davranış; Tauri sürümü
+değişince sessizce kaybolabilirdi ve kaybolduğunda kare ölçümü yayın
+sürümünde ölürdü. `"msi"`yi hedeflerden çıkarmak da sorunu çözmeyip
+saklardı.
+
+Sonuç: `tauri build` iki paketi birden üretiyor —
+`Muifly_0.3.0_x64-setup.exe` (NSIS, 2.2 MB) ve
+`Muifly_0.3.0_x64_en-US.msi` (3.3 MB). Üretilen `installer.nsi`'de yardımcı
+artık tek satır.
+
+Düzeltme testle bağlandı (`yardimci_ikili_ozellik_arkasinda`): Cargo.toml'daki
+`required-features` satırı kaldırılırsa test düşüyor. Gerekçesi, bu sorunun
+derleme zamanında değil **yalnızca paketleme gününde** görünmesi — 0.2.0
+boyunca fark edilmemesinin sebebi de buydu.
+
+Yan etki ve bedeli: `cargo test` artık yardımcıyı derlemiyor. Karşılığında
+CLAUDE.md'ye `cargo clippy --all-targets --features olcum-yardimcisi`
+komutu eklendi.

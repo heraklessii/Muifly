@@ -96,9 +96,14 @@ npm test           # arayüz testleri (vitest + jsdom) — 67 test
 ```
 
 ```bash
-cargo test                    # src-tauri/ içinde — 372 test
+cargo test                    # src-tauri/ içinde — 373 test
 cargo test --features demo    # demo ikilisinin kısıtlarıyla
 cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
+
+# Ölçüm yardımcısı `required-features` arkasında (paketleme çakışması,
+# tasks.md → Tamamlandı). `cargo test` onu DERLEMİYOR; derleme hatasının
+# yayın gününe kalmaması için:
+cargo clippy --all-targets --features olcum-yardimcisi -- -D warnings
 ```
 
 ```bash

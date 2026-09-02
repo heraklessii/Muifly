@@ -341,6 +341,35 @@ fn oku_ve_sil(yol: &Path) -> Result<Sonuc, OlcumHatasi> {
 mod testler {
     use super::*;
 
+    /// Yardımcı ikili `required-features` arkasında kalmalı.
+    ///
+    /// Kaldırılırsa normal `cargo build` yardımcıyı da üretiyor, `tauri
+    /// build` onu `externalBin` sidecar'ının yanına ikinci kez kuruluma
+    /// koyuyor ve **MSI hedefi kırılıyor** (WiX ICE30: aynı dosya iki farklı
+    /// bileşenden). NSIS buna katlanıp üstüne yazdığı için sorun yalnızca
+    /// MSI üretilirken görünüyordu — 0.3.0'a kadar hiç MSI çıkmamasının
+    /// sebebi buydu.
+    ///
+    /// Bu test o düzeltmenin sessizce geri alınmasını engelliyor: sorun
+    /// derleme zamanında değil, yalnızca paketleme gününde ortaya çıkardı.
+    #[test]
+    fn yardimci_ikili_ozellik_arkasinda() {
+        let manifest = include_str!("../../Cargo.toml");
+        let bin = manifest
+            .split("[[bin]]")
+            .nth(1)
+            .expect("yardımcı için [[bin]] bölümü yok");
+        assert!(
+            bin.contains("name = \"muifly-olcum\""),
+            "ilk [[bin]] bölümü yardımcıya ait değil"
+        );
+        assert!(
+            bin.contains("required-features = [\"olcum-yardimcisi\"]"),
+            "yardımcı ikilisi required-features arkasında değil — \
+             bu kaldırılırsa MSI paketlemesi kırılır"
+        );
+    }
+
     #[test]
     fn arguman_gidip_geliyor() {
         let i = Istek::yeni(1234, 20, PathBuf::from(r"C:\gecici\ozet.json"));

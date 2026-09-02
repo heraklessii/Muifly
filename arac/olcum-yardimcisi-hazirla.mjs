@@ -34,10 +34,15 @@ const hedef = ucluk();
 console.log(`hedef üçlü: ${hedef}`);
 
 console.log("yardımcı derleniyor (release)...");
-execFileSync("cargo", ["build", "--release", "--bin", "muifly-olcum"], {
-  cwd: srcTauri,
-  stdio: "inherit",
-});
+// `olcum-yardimcisi` özelliği şart: yardımcı ikili `required-features`
+// arkasında duruyor ki normal `cargo build` onu üretmesin. Üretseydi
+// `tauri build` hem cargo'nun ikilisini hem sidecar'ı kuruluma koyar,
+// ikisi aynı ada yazılır ve MSI hedefi ICE30 ile kırılırdı.
+execFileSync(
+  "cargo",
+  ["build", "--release", "--bin", "muifly-olcum", "--features", "olcum-yardimcisi"],
+  { cwd: srcTauri, stdio: "inherit" },
+);
 
 const kaynak = join(srcTauri, "target", "release", "muifly-olcum.exe");
 if (!existsSync(kaynak)) {

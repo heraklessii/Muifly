@@ -16,11 +16,31 @@ default-run = "muifly"
 name = "muifly_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+# Olcum yardimcisi yalnizca kendi ozelligiyle derleniyor.
+#
+# Sebep paketleme: `tauri build` paketin BUTUN bin hedeflerini kuruluma
+# koyuyor, `externalBin` sidecar'i da ayni dosyayi koyuyor ve ikisi ayni ada
+# yaziliyordu. NSIS ustune yazip geciyordu, WiX ICE30 ile reddediyordu -
+# yani `targets` listesinde "msi" yazdigi halde hic MSI uretilmiyordu.
+#
+# `required-features` ile normal `cargo build` bu ikiliyi URETMIYOR, dolayisi
+# ile tauri de paketlemeye almiyor. Kuruluma giren tek kopya sidecar'in
+# kendisi - yani `arac/olcum-yardimcisi-hazirla.mjs`nin urettigi, imzalanmasi
+# gereken dosya. Desteklenen yol (externalBin) korunuyor.
+[[bin]]
+name = "muifly-olcum"
+path = "src/bin/muifly-olcum.rs"
+required-features = ["olcum-yardimcisi"]
+
 [features]
 # Demo ikilisi: `cargo build --features demo`. Kapsam ve gerekcesi
 # docs/DISTRIBUTION.md'de, uygulanmasi src/surum.rs'de. Zaman sinirli deneme
 # DEGIL - sinir ozellik seviyesinde.
 demo = []
+
+# Olcum yardimcisini derler. Yalnizca `arac/olcum-yardimcisi-hazirla.mjs`
+# kullaniyor; elle acilmasi gerekmiyor.
+olcum-yardimcisi = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
