@@ -194,12 +194,68 @@ impl Ayarlar {
     }
 
     pub fn kaydet(&self, yol: &Path) -> Result<()> {
-        if let Some(ust) = yol.parent() {
+        atomik_yaz(yol, &serde_json::to_string_pretty(self)?)
+    }
+}
+
+/// Bir metin dosyasını **ya tamamen ya hiç** yazar.
+///
+/// ## Neden gerekli
+///
+/// `std::fs::write` önce dosyayı sıfırlıyor, sonra dolduruyor. Arada program
+/// ölürse (çökme, elektrik, Görev Yöneticisi'nden sonlandırma) diskte yarım
+/// bir JSON kalıyor. Bunun en pahalı hâli geri alma defteri: karar #3'ün
+/// tamamı "program çökerse bekleyen değişiklikler bir sonraki açılışta geri
+/// alınsın" üzerine kurulu, ama bozuk bir defter `.bozuk` uzantısıyla
+/// kenara konup boş defterle devam ediliyor — yani dondurulmuş süreçler
+/// dondurulmuş, güç planı değişmiş kalıyor ve bunu geri alacak kayıt
+/// kayboluyor. Çökme sonrası temizliğin en çok gerektiği an, tam da yazma
+/// anında ölen bir program.
+///
+/// Aynı gerekçe ayarlar, oturum geçmişi, çeviri belleği ve profiller için de
+/// geçerli; hepsi buradan geçiyor.
+///
+/// ## Nasıl
+///
+/// Geçici bir dosyaya yazılıyor, diske indiriliyor (`sync_all`), sonra
+/// hedefin üstüne taşınıyor. `std::fs::rename` Windows'ta var olan dosyanın
+/// üstüne yazıyor ve bu taşıma dosya sistemi seviyesinde atomik: okuyan
+/// taraf ya eski ya yeni içeriği görüyor, yarısını asla görmüyor.
+///
+/// Geçici ad hedefin **yanında** duruyor: `%TEMP%`e yazıp taşımak, iki ayrı
+/// birim arasında kopyalama olurdu ve orada atomiklik iddiası düşerdi.
+pub fn atomik_yaz(yol: &Path, icerik: &str) -> Result<()> {
+    use std::io::Write;
+
+    if let Some(ust) = yol.parent() {
+        if !ust.as_os_str().is_empty() {
             std::fs::create_dir_all(ust)?;
         }
-        std::fs::write(yol, serde_json::to_string_pretty(self)?)?;
-        Ok(())
     }
+
+    let mut gecici = yol.as_os_str().to_os_string();
+    // Süreç kimliği ekleniyor: iki Muifly aynı anda yazmaya kalkarsa
+    // (tek örnek kuralı var ama çökme sonrası bir an çakışabilirler)
+    // birbirinin yarım dosyasını taşımasınlar.
+    gecici.push(format!(".{}.yeni", std::process::id()));
+    let gecici = PathBuf::from(gecici);
+
+    let sonuc = (|| -> std::io::Result<()> {
+        let mut dosya = std::fs::File::create(&gecici)?;
+        dosya.write_all(icerik.as_bytes())?;
+        // Taşımadan önce diske inmesi şart: aksi halde taşıma tamamlanmış
+        // ama içerik hâlâ önbellekte olabilir ve elektrik kesintisi boş bir
+        // dosya bırakabilirdi.
+        dosya.sync_all()?;
+        drop(dosya);
+        std::fs::rename(&gecici, yol)
+    })();
+
+    if sonuc.is_err() {
+        let _ = std::fs::remove_file(&gecici);
+    }
+    sonuc?;
+    Ok(())
 }
 
 /// Uygulama veri klasörü: `%APPDATA%\Muifly`.
@@ -242,6 +298,48 @@ pub fn ceviri_dizini() -> PathBuf {
 #[cfg(test)]
 mod testler {
     use super::*;
+
+    #[test]
+    fn atomik_yaz_ustune_yaziyor_ve_iz_birakmiyor() {
+        let dizin = tempfile::tempdir().unwrap();
+        let yol = dizin.path().join("alt").join("a.json");
+
+        atomik_yaz(&yol, "birinci").unwrap();
+        assert_eq!(std::fs::read_to_string(&yol).unwrap(), "birinci");
+
+        atomik_yaz(&yol, "ikinci").unwrap();
+        assert_eq!(std::fs::read_to_string(&yol).unwrap(), "ikinci");
+
+        // Geçici dosya taşındı, geride kalmadı: aksi halde her yazma bir
+        // çöp dosya bırakırdı ve profil klasöründe bunlar `.json` olmasa da
+        // kullanıcının gözüne çarpardı.
+        let kalanlar: Vec<_> = std::fs::read_dir(yol.parent().unwrap())
+            .unwrap()
+            .flatten()
+            .map(|g| g.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(kalanlar, vec!["a.json".to_string()]);
+    }
+
+    /// Yazma sırasında ölen bir program yarım dosya bırakmamalı: hedef
+    /// dosyaya ancak tamamlanmış içerik taşınıyor. Ölümü taklit edemiyoruz,
+    /// ama taşınmadan önce hedefin **eski içeriğinin durduğunu** ölçebiliriz.
+    #[test]
+    fn yazma_bitene_kadar_eski_icerik_duruyor() {
+        let dizin = tempfile::tempdir().unwrap();
+        let yol = dizin.path().join("a.json");
+        atomik_yaz(&yol, "eski").unwrap();
+
+        // Geçici dosya elle oluşturuluyor: `atomik_yaz`ın yarıda kaldığı an.
+        let gecici = dizin.path().join(format!("a.json.{}.yeni", std::process::id()));
+        std::fs::write(&gecici, "yarim").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&yol).unwrap(),
+            "eski",
+            "hedef dosya yarım yazma sırasında bozulmamalı"
+        );
+        std::fs::remove_file(&gecici).unwrap();
+    }
 
     #[test]
     fn varsayilan_otomatik_uygulama_kapali() {

@@ -1631,3 +1631,78 @@ Hiçbiri gerçek bir oyunda denenmedi. Kısayol, overlay, alan seçici ve
 
 Ve Faz 1'in saha doğrulaması **üçüncü kez** ertelendi. Karar #33 bunu
 "emsal değil" diye kayda geçirmişti; üçüncü tekrarda artık bir borç.
+
+---
+
+## Oturum 17 — 3 Eylül 2026 · Denetim turu (karar #38)
+
+Yeni özellik yok. Amaç tek bir soruydu: **bu makinede görünmeyen ne var?**
+Sekiz kusur bulundu, sekizi de düzeltildi ve her biri bir testle bağlandı.
+Test sayısı 473 → 487.
+
+Turun başında `cargo test` yeşil, `cargo clippy --all-targets -D warnings`
+sıfır uyarıydı. Bulunanların hiçbiri o iki aracın baktığı yerde değildi —
+ve bu, turun asıl bulgusu.
+
+### En pahalı bulgu: kare ölçümü kullanıcı adında boşluk varsa hiç çalışmıyor
+
+`ShellExecuteEx`e giden şey argüman dizisi değil tek bir komut satırı; kod
+argümanları boşlukla birleştiriyordu. `%TEMP%` yolu `C:\Users\Ada
+Lovelace\...` ise `--cikti` orada kesiliyor, yükseltilmiş yardımcı
+"bilinmeyen argüman" ile kapanıyor ve kullanıcı "özet okunamadı" görüyor.
+
+Var olan test kusuru göremiyordu ve **neden göremediği öğretici**:
+`argumanlar()` dizisini gidip geliyordu, oysa hata o dizinin tek satıra
+dönüştüğü yerdeydi. Test doğru şeyi ölçüyordu ama yanlış katmanda. Yenisi
+komut satırının kendisini `CommandLineToArgvW` kurallarıyla geri çözüyor —
+o çözücü de `tirnakla`nın yanında duruyor, çünkü kaçırmanın doğruluğu ancak
+"Windows bunu nasıl okuyor" sorusunun cevabıyla ölçülebilir.
+
+Bu makinede kullanıcı adı `ilker`. Kusur bir tasarım hatası değil, bir
+**ölçüm kör noktası**: yazan da çalıştıran da aynı makinedeydi.
+
+### En sinsi bulgu: defterin kendisi çökmeye dayanıklı değildi
+
+Karar #3'ün tamamı "program çökerse bekleyen değişiklikler bir sonraki
+açılışta geri alınsın" üzerine kurulu. Ama defter `std::fs::write` ile
+yazılıyordu: önce sıfırla, sonra doldur. Arada ölürsen diskte yarım bir
+JSON kalıyor, o da `.bozuk` diye kenara konuyor ve **bekleyen geri almalar
+onunla birlikte gidiyor**. Dondurulmuş süreçler dondurulmuş, güç planı
+değişmiş kalıyor.
+
+Çökme sonrası temizliğin en çok gerektiği an, tam da yazma anında ölen bir
+program. Mekanizma tam o anda kendini kaybediyordu.
+
+`settings::atomik_yaz` — geçici dosya, `sync_all`, üstüne taşı. Defter,
+ayarlar, oturum geçmişi, çeviri belleği ve profiller buradan geçiyor.
+
+### Güvenlik: yükseltilmiş yazmanın hedefi tahmin edilebilirdi
+
+Özet dosyasının adı `muifly-kare-<pid>-<zaman>.json` idi ve onu
+**yükseltilmiş** bir süreç yazıyordu, kullanıcının kendi `%TEMP%`ine. Aynı
+kullanıcı olarak çalışan bir süreç adı önceden bir junction olarak yaratıp
+yazmayı başka bir yere yönlendirebilirdi.
+
+Üç önlem: ad tahmin edilemiyor, klasör `create_dir` ile açılıyor (var olanın
+içine yazılmıyor), dosya yardımcı başlamadan önce `create_new` ile burada
+açılıyor. Kalan sınır kodda yazılı — `%TEMP%` üzerinde aynı kullanıcı tam
+yetkili ve bu, dosya izinlerine dokunmadan kapanmıyor.
+
+### Kalanlar
+
+`store::dosya_adi` tek yönlü olduğu için farklı kimlikli iki profil aynı
+dosyaya yazabiliyordu (`oyun 1` ve `oyun.1` → `oyun_1.json`). Biriken çeviri
+istekleri sıraya giriyor, kullanıcı üç kez basınca üç eski kare
+çevriliyordu. `GetMessageW`in -1 dönüşü "mesaj var" sayılıyor, hata
+durumunda bir çekirdek sonsuza kadar dönüyordu. İlk CPU örneği "açılıştan bu
+yana ortalama"ydı, belgesi "0" diyordu. `with_extension("yarim")` iki model
+dosyasını aynı geçici ada indirebilirdi — bugün böyle bir çift yok, yani
+kurulmuş bir tuzaktı.
+
+Sekizinin de ayrıntısı karar #38'de.
+
+### Değişmeyen
+
+Saha denemeleri hâlâ yapılmadı ve bu tur onların yerine geçmiyor. Faz 1'in
+saha doğrulaması **dördüncü kez** ertelendi. `tasks.md` → Sıradaki 1-9
+olduğu gibi duruyor.

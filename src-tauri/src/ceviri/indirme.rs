@@ -92,6 +92,16 @@ pub fn iptal_hatasi() -> Error {
     Error::Indirme("indirme durduruldu".into())
 }
 
+/// Yarım inen dosyanın adı: hedefin adına `.yarim` **eklenir**.
+///
+/// Uzantıyı değiştirmek (`with_extension`) yeterli değil — `vocab.json` ve
+/// `vocab.txt` aynı geçici ada düşerdi.
+pub fn gecici_yol(hedef: &Path) -> std::path::PathBuf {
+    let mut ad = hedef.as_os_str().to_os_string();
+    ad.push(".yarim");
+    std::path::PathBuf::from(ad)
+}
+
 #[cfg(windows)]
 pub use win::indir;
 
@@ -205,7 +215,14 @@ mod win {
             let toplam = sayisal_baslik(istek.0, WINHTTP_QUERY_CONTENT_LENGTH);
 
             // Yarım dosya kalıcı olmasın diye ayrı ad; doğrulama `model`de.
-            let gecici = hedef.with_extension("yarim");
+            //
+            // Ad EKLENEREK türetiliyor, uzantı değiştirilerek değil:
+            // `with_extension` `vocab.json` ve `vocab.txt`i aynı geçici
+            // dosyaya indirirdi. Şu anki dört dosyada böyle bir çift yok
+            // ama bir gün eklenirse iki indirme birbirinin üstüne yazar ve
+            // belirtisi "SHA-256 tutmuyor" olurdu — sebebi hiçbir yerde
+            // görünmeden.
+            let gecici = gecici_yol(hedef);
             if let Some(dizin) = gecici.parent() {
                 std::fs::create_dir_all(dizin)?;
             }
@@ -362,5 +379,16 @@ mod testler {
     #[test]
     fn bos_sunucu_reddediliyor() {
         assert!(ayristir("https:///yol").is_none());
+    }
+
+    /// Yalnızca uzantısıyla ayrılan iki dosya aynı geçici ada düşmemeli:
+    /// düşerse ikisi birbirinin üstüne iner ve belirtisi, sebebi hiçbir
+    /// yerde görünmeyen bir "SHA-256 tutmuyor" olur.
+    #[test]
+    fn gecici_ad_uzantiyi_ezmiyor() {
+        let a = gecici_yol(Path::new(r"C:\m\vocab.json"));
+        let b = gecici_yol(Path::new(r"C:\m\vocab.txt"));
+        assert_ne!(a, b);
+        assert!(a.to_string_lossy().ends_with("vocab.json.yarim"));
     }
 }

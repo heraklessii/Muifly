@@ -186,8 +186,17 @@ mod win {
 
         unsafe {
             let mut mesaj = MSG::default();
-            // `GetMessageW` 0 döndüğünde `WM_QUIT` gelmiş demektir.
-            while GetMessageW(&mut mesaj, None, 0, 0).as_bool() {
+            loop {
+                // `GetMessageW` üç şey döndürüyor: 0 = `WM_QUIT`, -1 = hata,
+                // başka = mesaj var. `.as_bool()` ikisini ayırmıyor ve -1'i
+                // "mesaj var" sayardı — o durumda `mesaj` bir öncekinden
+                // kalma olur, döngü hiç uyumadan dönerdi. Bir çekirdeği
+                // sonsuza kadar meşgul eden bu döngü, tam da "sistemini
+                // hafifleten araç" iddiasının tersi olurdu.
+                let sonuc = GetMessageW(&mut mesaj, None, 0, 0).0;
+                if sonuc <= 0 {
+                    break;
+                }
                 if dur.load(Ordering::Relaxed) {
                     break;
                 }

@@ -221,14 +221,13 @@ impl CeviriBellegi {
     }
 
     /// Diske yazar.
+    ///
+    /// Atomik: dosyada kullanıcının kendi düzeltmeleri var ve yarım yazılmış
+    /// bir dosya onların hepsini birden kaybettirirdi.
     pub fn kaydet(&self, yol: &Path) -> Result<()> {
-        if let Some(dizin) = yol.parent() {
-            std::fs::create_dir_all(dizin)?;
-        }
         // `to_string_pretty`: dosya kullanıcı tarafından okunabilir olmak
         // zorunda (kabul kriteri), tek satırlık JSON o vaadi tutmaz.
-        std::fs::write(yol, serde_json::to_string_pretty(self)?)?;
-        Ok(())
+        crate::settings::atomik_yaz(yol, &serde_json::to_string_pretty(self)?)
     }
 }
 

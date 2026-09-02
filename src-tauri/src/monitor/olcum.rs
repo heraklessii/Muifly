@@ -131,6 +131,26 @@ impl Istek {
         ]
     }
 
+    /// Argümanların **tek bir komut satırı** hâli.
+    ///
+    /// `ShellExecuteEx` argüman dizisi değil tek bir dize alıyor; yardımcı
+    /// ise onu `std::env::args()` ile, yani Windows'un kendi ayrıştırmasıyla
+    /// geri çözüyor. Boşlukla birleştirmek bu yüzden yetmiyor: `%TEMP%`
+    /// yolunda bir boşluk varsa — `C:\Users\Ada Lovelace\...`, Windows'ta
+    /// kural dışı değil — `--cikti` yarıda kesiliyor, yardımcı argüman
+    /// hatasıyla kapanıyor ve ölçüm hiç çalışmıyor. Belirtisi de sinsi:
+    /// kullanıcı "özet okunamadı" görüyor ve sebebin kendi kullanıcı adında
+    /// olduğu hiçbir yerde yazmıyor.
+    ///
+    /// Bu yüzden her argüman [`tirnakla`] ile kaçırılıyor.
+    pub fn komut_satiri(&self) -> String {
+        self.argumanlar()
+            .iter()
+            .map(|a| tirnakla(a))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     pub fn ayristir<I: IntoIterator<Item = String>>(args: I) -> Result<Self, String> {
         let a: Vec<String> = args.into_iter().collect();
         let mut pid = None;
@@ -177,6 +197,103 @@ impl Istek {
             cikti.ok_or_else(|| "--cikti eksik".to_string())?,
         ))
     }
+}
+
+/// Bir argümanı Windows komut satırı kuralına göre kaçırır.
+///
+/// Kural `CommandLineToArgvW`'nin (ve dolayısıyla `std::env::args()`'ın)
+/// tersi: ters bölü dizileri yalnızca bir tırnaktan hemen önce ikileniyor,
+/// başka yerde olduğu gibi kalıyor. Ayrıntı gerçek, çünkü Windows yolları
+/// `\` ile bitebiliyor (`...\Temp\`): ikilenmezse kapanış tırnağı kaçırılmış
+/// sayılır ve argüman bir sonrakiyle birleşir.
+fn tirnakla(arg: &str) -> String {
+    if !arg.is_empty() && !arg.contains([' ', '\t', '"']) {
+        return arg.to_string();
+    }
+    let mut cikti = String::with_capacity(arg.len() + 2);
+    cikti.push('"');
+    let mut ters_bolu = 0usize;
+    for c in arg.chars() {
+        match c {
+            '\\' => {
+                ters_bolu += 1;
+                cikti.push(c);
+            }
+            '"' => {
+                // Tırnaktan önceki ters bölüler ikileniyor, sonra tırnağın
+                // kendisi kaçırılıyor.
+                for _ in 0..ters_bolu {
+                    cikti.push('\\');
+                }
+                ters_bolu = 0;
+                cikti.push('\\');
+                cikti.push('"');
+            }
+            _ => {
+                ters_bolu = 0;
+                cikti.push(c);
+            }
+        }
+    }
+    // Kapanış tırnağı da bir tırnak: öncesindeki ters bölüler ikilenmeli.
+    for _ in 0..ters_bolu {
+        cikti.push('\\');
+    }
+    cikti.push('"');
+    cikti
+}
+
+/// Bir komut satırını `CommandLineToArgvW` kurallarıyla argümanlara böler.
+///
+/// Yalnızca testte kullanılıyor ve bilerek [`tirnakla`]'nın yanında duruyor:
+/// kaçırmanın doğruluğu ancak "Windows bunu nasıl geri okuyor" sorusunun
+/// cevabıyla ölçülebilir. İkisi ayrı dosyalarda olsaydı biri diğerinden
+/// habersiz değişebilirdi.
+#[cfg(test)]
+fn argv_coz(satir: &str) -> Vec<String> {
+    let mut cikti: Vec<String> = Vec::new();
+    let mut simdiki = String::new();
+    let mut tirnakta = false;
+    let mut basladi = false;
+    let mut ters_bolu = 0usize;
+
+    for c in satir.chars() {
+        match c {
+            '\\' => {
+                ters_bolu += 1;
+                basladi = true;
+            }
+            '"' => {
+                simdiki.push_str(&"\\".repeat(ters_bolu / 2));
+                if ters_bolu % 2 == 1 {
+                    simdiki.push('"');
+                } else {
+                    tirnakta = !tirnakta;
+                }
+                ters_bolu = 0;
+                basladi = true;
+            }
+            ' ' | '\t' if !tirnakta => {
+                simdiki.push_str(&"\\".repeat(ters_bolu));
+                ters_bolu = 0;
+                if basladi {
+                    cikti.push(std::mem::take(&mut simdiki));
+                    basladi = false;
+                }
+            }
+            _ => {
+                simdiki.push_str(&"\\".repeat(ters_bolu));
+                ters_bolu = 0;
+                simdiki.push(c);
+                basladi = true;
+            }
+        }
+    }
+    simdiki.push_str(&"\\".repeat(ters_bolu));
+    if basladi {
+        cikti.push(simdiki);
+    }
+    cikti
 }
 
 /// Arayüze dönen tam rapor: ne ölçüldü, ne kadar, ne çıktı.
@@ -250,13 +367,73 @@ pub fn yardimci_yolu() -> Result<PathBuf, OlcumHatasi> {
     Ok(yol)
 }
 
-/// Geçici özet dosyasının yolu.
-pub fn gecici_cikti() -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "muifly-kare-{}-{}.json",
-        std::process::id(),
-        chrono::Utc::now().timestamp_millis()
-    ))
+/// Özet dosyasının klasör içindeki sabit adı.
+const OZET_ADI: &str = "ozet.json";
+
+/// Adın tahmin edilemez parçası.
+///
+/// `RandomState` anahtarını işletim sisteminden alıyor; burada bir karma
+/// fonksiyonu olarak değil, yalnızca **öngörülemez bir sayı** kaynağı
+/// olarak kullanılıyor. Kriptografik bir iddiası yok ve olması da
+/// gerekmiyor — tek işi aşağıdaki klasör adının önceden bilinememesi.
+fn rastgele() -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+    h.write_u32(std::process::id());
+    h.write_i64(chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    h.finish()
+}
+
+/// Geçici özet dosyasını taşıyan, bize ait klasör. Düşerken siliniyor.
+///
+/// ## Neden ayrı bir klasör ve neden rastgele bir ad
+///
+/// Özeti **yükseltilmiş** yardımcı yazıyor, dosya ise kullanıcının kendi
+/// `%TEMP%` klasöründe duruyor. Adı öngörülebilir olsaydı (eski hâli
+/// `muifly-kare-<pid>-<zaman>.json` idi), aynı kullanıcı olarak çalışan
+/// kötü niyetli bir süreç o adı önceden bir bağlantı noktası (junction)
+/// olarak yaratıp yükseltilmiş yazmayı başka bir yere yönlendirebilirdi —
+/// yani yönetici yetkisiyle dosya yazma. Buradaki iki önlem bunu kapatıyor:
+///
+/// 1. Ad tahmin edilemiyor.
+/// 2. Klasör `create_dir` ile açılıyor: aynı adda bir şey **varsa** çağrı
+///    hata veriyor, var olanın içine yazılmıyor.
+///
+/// Kalan sınır dürüstçe yazılsın: aynı kullanıcı olarak çalışan bir süreç
+/// `%TEMP%` üzerinde tam yetkili. Bu yüzden dosya, yardımcı başlatılmadan
+/// **önce** burada `create_new` ile açılıyor; yardımcının yaptığı tek şey
+/// var olan bir dosyanın üstüne yazmak.
+struct GeciciKlasor(PathBuf);
+
+impl GeciciKlasor {
+    fn ac() -> std::io::Result<Self> {
+        for _ in 0..8 {
+            let yol = std::env::temp_dir().join(format!(
+                "muifly-kare-{:016x}{:016x}",
+                rastgele(),
+                rastgele()
+            ));
+            match std::fs::create_dir(&yol) {
+                Ok(()) => return Ok(Self(yol)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            "geçici klasör açılamadı",
+        ))
+    }
+
+    fn ozet_yolu(&self) -> PathBuf {
+        self.0.join(OZET_ADI)
+    }
+}
+
+impl Drop for GeciciKlasor {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 #[cfg(windows)]
@@ -273,12 +450,26 @@ pub fn yukselterek_olc(pid: u32, saniye: u64) -> Result<Sonuc, OlcumHatasi> {
     }
 
     let yardimci = yardimci_yolu()?;
-    let cikti = gecici_cikti();
+    // Klasör bu kapsamda yaşıyor; hangi yoldan dönersek dönelim düşerken
+    // kendini siliyor. Eski hâlde her erken dönüşte ayrı bir `remove_file`
+    // vardı ve birini unutmak geride dosya bırakmak demekti.
+    let klasor = GeciciKlasor::ac()
+        .map_err(|e| OlcumHatasi::OzetOkunamadi(format!("geçici klasör açılamadı: {e}")))?;
+    let cikti = klasor.ozet_yolu();
+    // Dosyayı yardımcı değil biz açıyoruz (bkz. `GeciciKlasor`): yükseltilmiş
+    // sürecin yaptığı tek şey var olan bir dosyanın üstüne yazmak.
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&cikti)
+        .map_err(|e| OlcumHatasi::OzetOkunamadi(format!("geçici dosya açılamadı: {e}")))?;
     let istek = Istek::yeni(pid, saniye, cikti.clone());
 
     let dosya = utf16(yardimci.as_os_str());
     let fiil = utf16(std::ffi::OsStr::new("runas"));
-    let parametre = utf16(std::ffi::OsStr::new(&istek.argumanlar().join(" ")));
+    // Boşlukla birleştirmek değil, kaçırmak: `%TEMP%` yolunda bir boşluk
+    // varsa `--cikti` yarıda kesilirdi (bkz. `Istek::komut_satiri`).
+    let parametre = utf16(std::ffi::OsStr::new(&istek.komut_satiri()));
 
     let mut bilgi = SHELLEXECUTEINFOW {
         cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
@@ -293,7 +484,6 @@ pub fn yukselterek_olc(pid: u32, saniye: u64) -> Result<Sonuc, OlcumHatasi> {
     // SAFETY: yapı dolduruldu, işaret ettiği tamponlar bu çağrı boyunca yaşıyor.
     let baslatildi = unsafe { ShellExecuteExW(&mut bilgi) };
     if let Err(e) = baslatildi {
-        let _ = std::fs::remove_file(&cikti);
         // UAC reddi hata değil, kullanıcının kararı.
         if e.code().0 as u32 & 0xFFFF == ERROR_CANCELLED.0 {
             return Err(OlcumHatasi::KullaniciReddetti);
@@ -309,7 +499,6 @@ pub fn yukselterek_olc(pid: u32, saniye: u64) -> Result<Sonuc, OlcumHatasi> {
         let _ = CloseHandle(HANDLE(bilgi.hProcess.0));
     }
     if bekleme != WAIT_OBJECT_0 {
-        let _ = std::fs::remove_file(&cikti);
         return Err(OlcumHatasi::ZamanAsimi);
     }
 
@@ -383,6 +572,77 @@ mod testler {
         let i = Istek::yeni(9, 10, PathBuf::from(r"C:\Program Files\a b\ozet.json"));
         let geri = Istek::ayristir(i.argumanlar()).expect("ayrıştırılmalı");
         assert_eq!(i.cikti, geri.cikti);
+    }
+
+    /// Asıl sınav: yardımcıya giden şey argüman DİZİSİ değil, tek bir komut
+    /// satırı. Üstteki test bunu göremiyordu ve gerçek hata tam oradaydı —
+    /// `%TEMP%` yolunda bir boşluk varsa ölçüm hiç çalışmıyordu.
+    #[test]
+    fn bosluklu_yol_komut_satirindan_da_gidip_geliyor() {
+        let i = Istek::yeni(
+            9,
+            10,
+            PathBuf::from(r"C:\Users\Ada Lovelace\AppData\Local\Temp\muifly\ozet.json"),
+        );
+        let geri = Istek::ayristir(argv_coz(&i.komut_satiri())).expect("ayrıştırılmalı");
+        assert_eq!(i, geri);
+    }
+
+    /// Windows yolları `\` ile bitebiliyor; kapanış tırnağından hemen önceki
+    /// ters bölü ikilenmezse tırnak kaçırılmış sayılır ve argüman bir
+    /// sonrakiyle birleşir.
+    #[test]
+    fn ters_bolu_ile_biten_yol_bozulmuyor() {
+        let cozulen = argv_coz(&format!("{} {}", tirnakla(r"C:\a b\"), tirnakla("--sonraki")));
+        assert_eq!(cozulen, vec![r"C:\a b\".to_string(), "--sonraki".into()]);
+    }
+
+    #[test]
+    fn tirnaksiz_arguman_tirnaklanmiyor() {
+        // Gereksiz tırnak bir hata değil ama komut satırını okunmaz yapıyor;
+        // UAC istemi kullanıcıya bu satırı gösteriyor.
+        assert_eq!(tirnakla("--pid"), "--pid");
+        assert_eq!(tirnakla("1234"), "1234");
+    }
+
+    #[test]
+    fn tirnakli_arguman_da_gidip_geliyor() {
+        for ornek in [r#"a "b" c"#, r"C:\yol\", "boşluklu ad", r#"\"#, r#""""#] {
+            assert_eq!(
+                argv_coz(&tirnakla(ornek)),
+                vec![ornek.to_string()],
+                "kaçırma bozuk: {ornek}"
+            );
+        }
+    }
+
+    /// Yükseltilmiş yardımcının yazacağı dosyanın adı tahmin edilebilir
+    /// olmamalı (bkz. `GeciciKlasor`): öngörülebilir bir ad, aynı kullanıcı
+    /// olarak çalışan bir sürece yönetici yetkisiyle yazma imkânı verirdi.
+    #[test]
+    fn gecici_klasor_adi_ongorulemez_ve_tekil() {
+        let a = GeciciKlasor::ac().expect("klasör açılmalı");
+        let b = GeciciKlasor::ac().expect("klasör açılmalı");
+        assert_ne!(a.0, b.0, "iki çağrı aynı adı verdi");
+        assert!(a.0.is_dir() && b.0.is_dir());
+        // Klasör adı süreç kimliğinden ya da saatten türetilebilir olmamalı.
+        let ad = a.0.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(!ad.contains(&std::process::id().to_string()), "ad pid taşıyor: {ad}");
+
+        let yol = a.0.clone();
+        drop(a);
+        assert!(!yol.exists(), "geçici klasör düşerken silinmedi");
+    }
+
+    /// Aynı adda bir şey varsa klasör açılmıyor — var olanın içine yazmak,
+    /// önceden yerleştirilmiş bir bağlantı noktasını takip etmek olurdu.
+    #[test]
+    fn var_olan_klasorun_icine_yazilmiyor() {
+        let k = GeciciKlasor::ac().expect("klasör açılmalı");
+        assert!(
+            std::fs::create_dir(&k.0).is_err(),
+            "aynı ada ikinci kez create_dir başarılı oldu"
+        );
     }
 
     #[test]

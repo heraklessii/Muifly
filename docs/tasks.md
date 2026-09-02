@@ -313,6 +313,22 @@ orada. Sırayla:
 
 ## Tamamlandı
 
+- [x] **Denetim turu: bu makinede görünmeyen sekiz yol** (3 Eylül 2026,
+      karar #38). Tur başlarken `cargo test` yeşil, clippy sıfır uyarıydı;
+      sekizinin hiçbiri o iki aracın baktığı yerde değildi:
+      (1) kare ölçümü, kullanıcı adında boşluk varsa hiç çalışmıyordu —
+      yükseltilmiş yardımcının komut satırı kaçırılmıyordu;
+      (2) o yardımcının yazdığı dosyanın adı tahmin edilebilirdi (yönetici
+      yetkisiyle yazma yönlendirilebilirdi);
+      (3) geri alma defteri yarım yazılabiliyordu — karar #3'ün mekanizması
+      tam da en gerekli anda kendini kaybediyordu;
+      (4) farklı kimlikli iki profil aynı dosyaya yazabiliyordu;
+      (5) biriken çeviri istekleri sıraya giriyordu;
+      (6) `GetMessageW`in hata dönüşü mesaj sayılıyor, bir çekirdek sonsuza
+      kadar dönebiliyordu;
+      (7) ilk CPU örneği "açılıştan bu yana ortalama"ydı;
+      (8) iki model dosyası aynı geçici ada inebilirdi.
+      Test 473 → 487. Hiçbiri saha denemesinin yerine geçmiyor.
 - [x] **Kararlılık turu: sessiz bozulan dört yol** (2 Eylül 2026, karar #36).
       Hiçbiri kullanıcıya hata göstermiyordu:
       (1) ekran modu değişince ölçekleme siyah kalıyordu — `yeniden_ac`

@@ -176,6 +176,13 @@ impl Tampon {
 pub struct Ornekleyici {
     onceki_bos: u64,
     onceki_toplam: u64,
+    /// Elde bir önceki okuma var mı?
+    ///
+    /// Ayrı bir bayrak şart: sıfırdan farkı almak "açılıştan bu yana
+    /// ortalama CPU" demek olurdu. Günlerdir açık bir makinede o sayı
+    /// makul görünür, ama ölçtüğü şey "şu an" değil — kullanıcıya
+    /// gösterilen ilk nokta sessizce yanlış olurdu.
+    okundu: bool,
 }
 
 impl Ornekleyici {
@@ -221,10 +228,14 @@ impl Ornekleyici {
 
         let d_bos = bos.saturating_sub(self.onceki_bos);
         let d_toplam = toplam.saturating_sub(self.onceki_toplam);
+        let ilk = !self.okundu;
         self.onceki_bos = bos;
         self.onceki_toplam = toplam;
+        self.okundu = true;
 
-        if d_toplam == 0 {
+        // İlk çağrıda karşılaştırılacak bir önceki okuma yok; sıfırdan
+        // farkı almak açılıştan bu yana geçen sürenin ortalamasını verirdi.
+        if ilk || d_toplam == 0 {
             return 0.0;
         }
         let mesgul = d_toplam.saturating_sub(d_bos);
@@ -268,6 +279,22 @@ mod testler {
             bellek: 50.0,
             gecikme_ms: gecikme,
         }
+    }
+
+    /// İlk örnek "açılıştan bu yana ortalama CPU" olmamalı.
+    ///
+    /// Windows kümülatif tik veriyor; sıfırdan farkı almak makinenin
+    /// açılışından bu yana geçen sürenin ortalamasını verir ve o sayı
+    /// makul göründüğü için fark edilmezdi. Belge baştan "ilk örnek 0"
+    /// diyordu, kod öyle yapmıyordu.
+    #[test]
+    fn ilk_ornek_sifir() {
+        let mut o = Ornekleyici::yeni();
+        assert_eq!(o.ornek_al(None).cpu, 0.0, "ilk örnek ölçülmüş sayılmamalı");
+        // İkinci örnek gerçek bir aralık ölçüyor; değeri makinenin o anki
+        // yüküne bağlı, o yüzden yalnızca aralığı sınanıyor.
+        let ikinci = o.ornek_al(None).cpu;
+        assert!((0.0..=100.0).contains(&ikinci));
     }
 
     #[test]

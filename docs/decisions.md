@@ -1528,3 +1528,127 @@ denenmedi. OCR külliyatı hâlâ sentetik (karar #28'in kendi sınırı), gerç
 oyun ekran görüntüleriyle tekrar ölçülmesi gerekiyor. Overlay ve alan
 seçici pencereleri gerçek bir pencerede bir kez açılmadı. Kısayolun oyun
 fareyi yakalamışken çalıştığı görülmedi.
+
+---
+
+## #38 — Denetim turu: sekiz sessiz yol kapatıldı
+
+**Tarih**: 3 Eylül 2026
+
+**Karar**: Kod, test ve arayüz eklemeden bir denetim turu yapıldı; bulunan
+sekiz kusur düzeltildi ve her biri bir testle bağlandı. Ortak nitelikleri
+şu: **hiçbiri bu makinede görünmüyordu**. Kimisi yalnızca başka bir
+kullanıcı adında, kimisi yalnızca çökme anında, kimisi yalnızca kullanıcı
+belirli bir kimliği yazdığında ortaya çıkıyordu.
+
+### 1. Kare ölçümü, kullanıcı adında boşluk varsa hiç çalışmıyordu
+
+`ShellExecuteEx` argüman dizisi değil **tek bir komut satırı** alıyor;
+yardımcı ikili onu `std::env::args()` ile, yani Windows'un kendi
+ayrıştırmasıyla geri çözüyor. Kod argümanları boşlukla birleştiriyordu:
+
+```text
+--pid 4212 --saniye 20 --cikti C:\Users\Ada Lovelace\AppData\...\ozet.json
+                                            ^ burada kesiliyor
+```
+
+`C:\Users\Ada Lovelace\...` yolunda `--cikti` yarıda kesiliyor, yardımcı
+"bilinmeyen argüman" ile kapanıyor ve kullanıcı "özet okunamadı" görüyor.
+Sebebin kendi kullanıcı adı olduğu hiçbir yerde yazmıyor.
+
+Bu makinede kullanıcı adı `ilker` — boşluksuz. Var olan test de kusuru
+göremiyordu, çünkü `argumanlar()` **dizisini** gidip geliyordu; asıl hata
+o dizinin tek satıra dönüştüğü yerdeydi. Yeni test komut satırının kendisini
+`CommandLineToArgvW` kurallarıyla geri çözüyor.
+
+`Istek::komut_satiri` her argümanı kaçırıyor. Ters bölü ayrıntısı önemli:
+Windows yolları `\` ile bitebiliyor ve kapanış tırnağından hemen önceki
+ters bölüler ikilenmezse tırnak kaçırılmış sayılır.
+
+### 2. Yükseltilmiş yardımcının yazdığı dosyanın adı tahmin edilebilirdi
+
+Özet dosyası `%TEMP%\muifly-kare-<pid>-<zaman>.json` idi. Yazan süreç
+**yükseltilmiş**, klasör ise kullanıcının kendi klasörü. Aynı kullanıcı
+olarak çalışan kötü niyetli bir süreç bu adı önceden bir bağlantı noktası
+(junction) olarak yaratıp yükseltilmiş yazmayı başka bir yere
+yönlendirebilirdi — yani yönetici yetkisiyle dosya yazma.
+
+Şimdi: ad tahmin edilemiyor, klasör `create_dir` ile açılıyor (aynı adda
+bir şey varsa çağrı hata veriyor, var olanın içine yazılmıyor) ve dosya
+yardımcı başlatılmadan **önce** `create_new` ile burada açılıyor.
+Yardımcının yaptığı tek şey var olan bir dosyanın üstüne yazmak.
+
+Kalan sınır dürüstçe yazıldı (`GeciciKlasor` belgesi): aynı kullanıcı
+olarak çalışan bir süreç `%TEMP%` üzerinde tam yetkili. Buradaki önlemler
+önceden yerleştirmeyi kapatıyor, dosya sistemi izinlerini değiştirmiyor.
+
+### 3. Geri alma defteri yarım yazılabiliyordu
+
+`std::fs::write` önce dosyayı sıfırlıyor, sonra dolduruyor. Arada program
+ölürse diskte yarım bir JSON kalıyor. Bunun en pahalı hâli **defter**:
+karar #3'ün tamamı "program çökerse bekleyen değişiklikler bir sonraki
+açılışta geri alınsın" üzerine kurulu, ama bozuk bir defter `.bozuk`
+uzantısıyla kenara konup boş defterle devam ediliyor. Yani dondurulmuş
+süreçler dondurulmuş, güç planı değişmiş kalıyor ve bunu geri alacak kayıt
+kayboluyor.
+
+İşin ironisi şu: çökme sonrası temizliğin en çok gerektiği an, tam da
+yazma anında ölen bir program.
+
+`settings::atomik_yaz` geçici dosyaya yazıp `sync_all` ile diske indiriyor
+ve hedefin üstüne taşıyor. Defter, ayarlar, oturum geçmişi, çeviri belleği
+ve profiller buradan geçiyor. Bedeli her yazmada bir fsync; hepsi
+kullanıcının başlattığı, zaten yüzlerce milisaniye süren işlemler.
+
+### 4. Farklı kimlikli iki profil aynı dosyaya yazabiliyordu
+
+`store::dosya_adi` kimliği dosya sistemi için temizliyor ve bu temizleme
+**tek yönlü**: `oyun 1`, `oyun/1` ve `oyun.1`in üçü de `oyun_1.json`a
+düşüyor. Çağıranlar kimlikleri karşılaştırdığı için "çakışma yok" diyor,
+ama diskte aynı dosya — yeni profil var olanı sessizce yok ediyordu. Geri
+alınamayan tek işlem tam olarak bu olurdu (tasarım ilkesi 1).
+
+`store::kaydet` ve `store::sil` artık dosyayı açıp içindeki kimliğe
+bakıyor; başkasınınsa dokunmuyor ve hangi profili koruduğunu söylüyor.
+İçe aktarma zaten kimliği kaydırıyordu (`bos_kimlik` dosya adı seviyesinde
+karşılaştırıyor) ama bunu **söylemiyordu**; önizleme artık söylüyor, yoksa
+kullanıcı profilini yazdığı kimlikle arar ve bulamazdı.
+
+### 5. Biriken çeviri istekleri sıraya giriyordu
+
+Bir çeviri isteği saniyeler sürebiliyor (ilk yüklemede model ~2 s). O sırada
+gelen her kısayol basışı kanalda bekliyor ve döngü onları tek tek
+işliyordu: üç kez basan kullanıcı, ekran çevirisinin bir dakika boyunca
+eski kareleri çevirmesini izliyordu — üstelik sonunda gösterilen sonuç en
+bayat olanıydı. Ekran çevirisi "şu andaki ekranı çevir" demek; bekleyenler
+zaten aynı işi istiyor. Biriken istekler artık atılıyor.
+
+### 6. `GetMessageW`nin hata dönüşü mesaj sayılıyordu
+
+Kısayol iş parçacığının döngüsü `GetMessageW(...).as_bool()` ile
+yazılmıştı. Fonksiyon üç şey döndürüyor: 0 = `WM_QUIT`, **-1 = hata**,
+başka = mesaj var. `as_bool()` -1'i "mesaj var" sayardı ve döngü hiç
+uyumadan dönerdi. Bir çekirdeği sonsuza kadar meşgul eden bir döngü, tam da
+"sistemini hafifleten araç" iddiasının tersi.
+
+### 7. İlk CPU örneği "açılıştan bu yana ortalama" idi
+
+Windows kümülatif tik veriyor; yüzde ancak iki okuma arasındaki farktan
+çıkıyor. Örnekleyici ilk çağrıda sıfırdan farkı alıyordu, yani makinenin
+açılışından bu yana geçen sürenin ortalamasını. Günlerdir açık bir
+makinede o sayı makul görünür ve fark edilmezdi. Belge zaten "ilk örnek 0
+dönüyor" diyordu; kod öyle yapmıyordu.
+
+### 8. İki model dosyası aynı geçici ada inebilirdi
+
+`hedef.with_extension("yarim")` uzantıyı **değiştiriyor**: `vocab.json` ve
+`vocab.txt` aynı `vocab.yarim` dosyasına inerdi. Şu anki dört dosyada böyle
+bir çift yok — yani bu bir kusur değil, kurulmuş bir tuzaktı. Belirtisi de
+sebebi göstermeyen bir "SHA-256 tutmuyor" olurdu. Ad artık ekleniyor.
+
+### Bu turun ölçüsü
+
+Denetim öncesi `cargo test` 473, `cargo clippy` sıfır uyarı veriyordu; yani
+bulunan sekiz kusurun hiçbiri var olan testlerin baktığı yerde değildi.
+Sekizinin de ortak sebebi aynı: **bu makinede görünmeyen bir yol**. Sonrası
+487 test.

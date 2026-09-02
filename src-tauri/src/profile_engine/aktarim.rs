@@ -82,14 +82,16 @@ pub fn onizle(yol: &Path, mevcut: &[Profil]) -> Result<Onizleme> {
         .map(|p| p.display_name.clone())
         .collect();
 
+    let bos = bos_kimlik(mevcut, &profil.profile_id);
+
     Ok(Onizleme {
         dosya: yol
             .file_name()
             .map(|a| a.to_string_lossy().to_string())
             .unwrap_or_default(),
         etkiler: etkiler(&profil),
-        uyarilar: uyarilar(&profil, kimlik_cakismasi, &cakisan_profiller),
-        bos_kimlik: bos_kimlik(mevcut, &profil.profile_id),
+        uyarilar: uyarilar(&profil, kimlik_cakismasi, &cakisan_profiller, &bos),
+        bos_kimlik: bos,
         kimlik_cakismasi,
         cakisan_profiller,
         duzeltmeler,
@@ -206,7 +208,12 @@ pub fn etkiler(profil: &Profil) -> Vec<String> {
 ///
 /// Uyarı listesi kısa tutuluyor: her satırı uyarı yapan bir ekran, hiçbirinin
 /// okunmamasıyla sonuçlanır.
-fn uyarilar(profil: &Profil, kimlik_cakismasi: bool, cakisan_profiller: &[String]) -> Vec<String> {
+fn uyarilar(
+    profil: &Profil,
+    kimlik_cakismasi: bool,
+    cakisan_profiller: &[String],
+    bos_kimlik: &str,
+) -> Vec<String> {
     let mut v = Vec::new();
 
     let dondurulacaklar = profil.dondurulacaklar();
@@ -228,6 +235,16 @@ fn uyarilar(profil: &Profil, kimlik_cakismasi: bool, cakisan_profiller: &[String
             "Aynı kimlikte bir profilin zaten var. Üzerine yazmayı seçmezsen yeni bir kimlikle eklenir."
                 .to_string(),
         );
+    } else if bos_kimlik != profil.profile_id {
+        // Kimlikler farklı ama diskte aynı dosyaya düşüyorlar
+        // (`store::dosya_adi` tek yönlü). `ice_aktar` kimliği kaydırarak
+        // veri kaybını zaten önlüyor; söylenmezse kullanıcı profilini
+        // yazdığı kimlikle arar ve bulamaz.
+        v.push(format!(
+            "'{}' kimliği diskte var olan bir profilin dosyasıyla aynı ada düşüyor; \
+             profil '{bos_kimlik}' kimliğiyle eklenecek.",
+            profil.profile_id
+        ));
     }
 
     if !cakisan_profiller.is_empty() {
@@ -264,6 +281,30 @@ mod testler {
         let (okunan, duzeltmeler) = store::yukle(&hedef).unwrap();
         assert_eq!(okunan, p);
         assert!(duzeltmeler.is_empty());
+    }
+
+    /// Kimlikler farklı ama diskte aynı dosyaya düşüyorlar. `ice_aktar`
+    /// kimliği zaten kaydırıyor; önizleme bunu **söylemezse** kullanıcı
+    /// profilini yazdığı kimlikle arar ve bulamaz.
+    #[test]
+    fn ayni_dosyaya_dusen_kimlik_onizlemede_soyleniyor() {
+        let dizin = tempfile::tempdir().unwrap();
+        let kaynak = dizin.path().join("gelen.json");
+        // `oyun 1` ve `oyun.1`in ikisi de `oyun_1.json`a düşüyor.
+        disa_aktar(&dogrulanmis("oyun 1", "a.exe"), &kaynak).unwrap();
+        let mevcut = vec![dogrulanmis("oyun.1", "b.exe")];
+
+        let onizleme = onizle(&kaynak, &mevcut).unwrap();
+        assert!(
+            !onizleme.kimlik_cakismasi,
+            "kimlikler farklı; 'üzerine yaz' seçeneği çıkmamalı"
+        );
+        assert_ne!(onizleme.bos_kimlik, "oyun 1");
+        assert!(
+            onizleme.uyarilar.iter().any(|u| u.contains(&onizleme.bos_kimlik)),
+            "kimliğin değişeceği söylenmedi: {:?}",
+            onizleme.uyarilar
+        );
     }
 
     #[test]

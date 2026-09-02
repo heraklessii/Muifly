@@ -94,9 +94,9 @@ pub fn yukle(yol: &Path) -> Result<(Profil, Vec<String>)> {
 /// gösterilmiyor.
 pub fn kaydet(dizin: &Path, profil: Profil) -> Result<(Profil, Vec<String>)> {
     let (profil, duzeltmeler) = profil.dogrula()?;
-    std::fs::create_dir_all(dizin)?;
     let yol = dizin.join(dosya_adi(&profil.profile_id));
-    std::fs::write(&yol, serde_json::to_string_pretty(&profil)?)?;
+    sahibi_dogru_mu(&yol, &profil.profile_id)?;
+    crate::settings::atomik_yaz(&yol, &serde_json::to_string_pretty(&profil)?)?;
     Ok((profil, duzeltmeler))
 }
 
@@ -105,8 +105,39 @@ pub fn sil(dizin: &Path, kimlik: &str) -> Result<()> {
     if !yol.exists() {
         return Err(Error::ProfileNotFound(kimlik.to_string()));
     }
+    sahibi_dogru_mu(&yol, kimlik)?;
     std::fs::remove_file(yol)?;
     Ok(())
+}
+
+/// Dosya gerçekten bu kimliğin mi?
+///
+/// `dosya_adi` kimliği dosya sistemi için temizliyor ve bu temizleme **tek
+/// yönlü**: `oyun 1`, `oyun/1` ve `oyun.1`in üçü de `oyun_1.json`a düşüyor.
+/// Kimlikler farklı olduğu için çağıranlar (`profil_kaydet`, `aktarim`)
+/// "çakışma yok" diyor, ama diskte aynı dosya. Kontrol olmasaydı yeni bir
+/// profil kaydetmek var olan başka bir profili sessizce yok ederdi — geri
+/// alınamayan tek işlem tam olarak bu olurdu (tasarım ilkesi 1).
+///
+/// Okunamayan bir dosya engel sayılmıyor: bozuk bir profil zaten
+/// `hepsini_yukle` tarafından atlanıyor ve onun üstüne yazmak bir kayıp
+/// değil.
+fn sahibi_dogru_mu(yol: &Path, kimlik: &str) -> Result<()> {
+    let Ok(icerik) = std::fs::read_to_string(yol) else {
+        return Ok(());
+    };
+    let Ok(mevcut) = serde_json::from_str::<Profil>(&icerik) else {
+        return Ok(());
+    };
+    if mevcut.profile_id == kimlik {
+        return Ok(());
+    }
+    Err(Error::ProfileInvalid(format!(
+        "'{kimlik}' kimliği diskte '{}' profilinin dosyasına düşüyor ({}); \
+         kimliği ayırt edilebilir bir şeye değiştirin",
+        mevcut.profile_id,
+        dosya_adi(kimlik)
+    )))
 }
 
 pub fn yolu(dizin: &Path, kimlik: &str) -> PathBuf {
@@ -186,6 +217,46 @@ mod testler {
 
     fn kaddet_yardimci(dizin: &Path, kimlik: &str, exe: &str) {
         kaydet(dizin, ornek(kimlik, exe)).unwrap();
+    }
+
+    /// Güvenlik sınırı: `dosya_adi` tek yönlü, yani farklı kimlikler aynı
+    /// dosyaya düşebiliyor. Kontrol olmasaydı yeni bir profil kaydetmek var
+    /// olan başkasını sessizce yok ederdi (tasarım ilkesi 1).
+    #[test]
+    fn ayni_dosyaya_dusen_baska_kimlik_ezmiyor() {
+        let dizin = tempfile::tempdir().unwrap();
+        kaddet_yardimci(dizin.path(), "oyun.1", "a.exe");
+        // `oyun 1`, `oyun/1` ve `oyun.1`in üçü de `oyun_1.json`a düşüyor.
+        let hata = kaydet(dizin.path(), ornek("oyun 1", "b.exe")).unwrap_err();
+        assert!(
+            hata.to_string().contains("oyun.1"),
+            "hata hangi profili koruduğunu söylemeli: {hata}"
+        );
+
+        let (profiller, _) = hepsini_yukle(dizin.path());
+        assert_eq!(profiller.len(), 1);
+        assert_eq!(profiller[0].executable_names, vec!["a.exe".to_string()]);
+    }
+
+    /// Aynı kimlik yeniden kaydedilebilmeli — kontrol düzenlemeyi engellemez.
+    #[test]
+    fn ayni_kimlik_yeniden_kaydedilebiliyor() {
+        let dizin = tempfile::tempdir().unwrap();
+        kaddet_yardimci(dizin.path(), "oyun", "a.exe");
+        kaydet(dizin.path(), ornek("oyun", "b.exe")).expect("kendi dosyasına yazabilmeli");
+        let (profiller, _) = hepsini_yukle(dizin.path());
+        assert_eq!(profiller.len(), 1);
+        assert_eq!(profiller[0].executable_names, vec!["b.exe".to_string()]);
+    }
+
+    /// Silme de aynı kapıdan geçiyor: `oyun 1`i silmek `oyun.1`i silmemeli.
+    #[test]
+    fn baska_kimligin_dosyasi_silinmiyor() {
+        let dizin = tempfile::tempdir().unwrap();
+        kaddet_yardimci(dizin.path(), "oyun.1", "a.exe");
+        assert!(sil(dizin.path(), "oyun 1").is_err());
+        assert!(yolu(dizin.path(), "oyun.1").exists(), "yanlış profil silindi");
+        sil(dizin.path(), "oyun.1").expect("kendi profili silinebilmeli");
     }
 
     #[test]

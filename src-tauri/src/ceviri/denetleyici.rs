@@ -363,6 +363,17 @@ fn dongu(
                 if b.dur.load(Ordering::Relaxed) {
                     break;
                 }
+                // Biriken istekler **atılıyor**, sıraya alınmıyor.
+                //
+                // Bir istek saniyeler sürebiliyor (ilk yüklemede model ~2 s).
+                // O sırada gelen her kısayol basışı kanalda bekliyordu ve
+                // döngü onları tek tek işliyordu: kullanıcı tuşa üç kez
+                // bastığında ekran çevirisi bir dakika boyunca eski
+                // kareleri çevirmeye devam ediyordu — üstelik gösterilen
+                // sonuç en sondaki, yani en bayat olanıydı. Ekran çevirisi
+                // "şu andaki ekranı çevir" demek; bekleyen istekler zaten
+                // aynı işi istiyor.
+                while alici.try_recv().is_ok() {}
                 let y = b.yapilandirma.lock().clone();
                 let sonuc = bir_istek(&b, &y, &mut cevirici);
                 son_kullanim = Instant::now();

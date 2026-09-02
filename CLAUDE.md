@@ -103,7 +103,7 @@ npm test           # arayüz testleri (vitest + jsdom) — 79 test
 ```
 
 ```bash
-cargo test                    # src-tauri/ içinde — 470 test
+cargo test                    # src-tauri/ içinde — 487 test
 cargo test --features demo    # demo ikilisinin kısıtlarıyla
 cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
 

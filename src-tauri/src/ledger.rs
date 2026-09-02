@@ -238,14 +238,17 @@ impl Defter {
         self.diske_yaz();
     }
 
+    /// Defteri diske yazar.
+    ///
+    /// Yazma **atomik** (`settings::atomik_yaz`): yarım yazılmış bir defter,
+    /// karar #3'ün korumak istediği şeyi tam da en gerekli anda — yazarken
+    /// ölen bir programda — kaybettirirdi. Bozuk defter `.bozuk` diye kenara
+    /// konuyor ve bekleyen geri almalar onunla birlikte gidiyor.
     fn diske_yaz(&self) {
         let Some(yol) = &self.yol else { return };
-        if let Some(ust) = yol.parent() {
-            let _ = std::fs::create_dir_all(ust);
-        }
         match serde_json::to_string_pretty(&self.kayitlar) {
             Ok(metin) => {
-                if let Err(e) = std::fs::write(yol, metin) {
+                if let Err(e) = crate::settings::atomik_yaz(yol, &metin) {
                     log::warn!("geri alma defteri diske yazılamadı: {e}");
                 }
             }
