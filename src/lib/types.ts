@@ -283,6 +283,12 @@ export interface OlceklemeDurumu {
   sonEngel: string | null;
   /** Çalışıyor ama bir kısıt var — hatadan ayrı, çünkü ölçekleme sürüyor. */
   uyari: string | null;
+  /** Ölçeklemeyi klavyeden durduran kısayolun etiketi (karar #34). */
+  durdurmaKisayoli: string | null;
+  /** Ölçekleme açık ama ölçeklenecek pencere önde değil: ekranda bir şey yok. */
+  hedefBekleniyor: boolean;
+  /** Döngü kaçış kısayoluyla mı durdu? Günlüğe arka plan döngüsü yazıyor. */
+  kacislaDurduruldu: boolean;
 }
 
 export interface YakalamaDenemesi {

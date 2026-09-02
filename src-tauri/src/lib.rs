@@ -289,7 +289,21 @@ fn arka_plan_dongusu(uygulama: tauri::AppHandle) {
                 let _ = uygulama.emit(commands::OLAY_GUNLUK, satirlar);
             }
 
-            // 2. Ölçüm — kullanıcının seçtiği aralıkta.
+            // 2. Ölçeklemenin kaçış kısayolu — her turda.
+            //
+            // Kısayola basan kullanıcı ekranı kaplayan pencereyi
+            // kapatıyor; iş parçacığı orada bitiyor ama günlük satırı ve
+            // arayüzün haberi buradan geçiyor. Her tur bakılıyor çünkü bu
+            // yol yalnızca bir şeyler ters gittiğinde kullanılıyor ve o an
+            // gecikme en istenmeyen şey.
+            if kilit.lock().olcekleme_kacisini_isle() {
+                let durum = kilit.lock().durum();
+                let _ = uygulama.emit(commands::OLAY_DURUM, durum);
+                let satirlar = kilit.lock().gunluk.son(20);
+                let _ = uygulama.emit(commands::OLAY_GUNLUK, satirlar);
+            }
+
+            // 3. Ölçüm — kullanıcının seçtiği aralıkta.
             if sayac % olcum_araligi == 0 {
                 let ornek = kilit.lock().ornek_al();
                 let _ = uygulama.emit(commands::OLAY_ORNEK, ornek);

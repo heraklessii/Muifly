@@ -1230,3 +1230,76 @@ boyunca fark edilmemesinin sebebi de buydu.
 Yan etki ve bedeli: `cargo test` artık yardımcıyı derlemiyor. Karşılığında
 CLAUDE.md'ye `cargo clippy --all-targets --features olcum-yardimcisi`
 komutu eklendi.
+
+---
+
+## Oturum 13 — 2 Eylül 2026 · Ölçekleme makineyi kilitledi, kaçış yolu eklendi
+
+### Ne oldu
+
+Ölçekleme masaüstünde denendi. Ekran kaplandı, tıklamalar sonuç vermedi,
+makine yeniden başlatılmak zorunda kalındı. Yani `tasks.md` → Sıradaki
+7'nin sekiz maddesinden hiçbirine sıra gelmeden, listede olmayan bir kusur
+çıktı: **görüntünün doğru olup olmadığından önce, görüntüden çıkılıp
+çıkılamadığı sorulmalıymış.**
+
+### Teşhis
+
+Kod incelendi; yakalama tarafı temiz çıktı. `AcquireNextFrame` ile
+`ReleaseFrame` her yolda eşleşiyor (erken dönen `?` yok), yani masaüstü
+bileşicisini kilitleyen klasik hata burada değil. Arayüz iş parçacığı da
+bloklanmıyor: döngü ayrı bir iş parçacığında, Tauri penceresi ayakta.
+
+Sorun sunum penceresinin **beş özelliğinin birleşimiydi**. Tek tek hepsi
+doğru gerekçeliydi ve dosyanın başındaki belgede gerekçeleri yazılıydı; ama
+birlikte, kapatılmasının hiçbir yolu olmayan bir kutu yapıyorlardı: tam
+ekran + üstte + odak almayan + tıklanamayan + Alt+Tab'da olmayan. "Durdur"
+düğmesi ekranda vardı, kaplamanın altında.
+
+Tetikleyen şey ölçeklenecek pencere yokken devreye giren yedek davranıştı:
+masaüstünün tamamını ölçeklemek. Bu, ekranı ekranın kopyasıyla kaplamak
+demek — hiçbir işe yaramayan, ama kopya tazelenmeyi kestiği anda kullanıcıyı
+donmuş bir resmin arkasında bırakan bir hâl. Kullanıcı tıklıyor, tıklamalar
+gerçekten alttaki pencerelere gidiyor, sonucunu göremiyor.
+
+Bu davranış kod yorumunda bilinçli bir tercih olarak duruyordu ("ekranı
+karartmaktansa ölçeklemeden göstermek doğru"). Tercih, tersine döndü.
+
+### Yapılanlar (karar #34)
+
+1. **Kaçış kısayolu** (`sunum::KacisKisayolu`). `RegisterHotKey` ile
+   `Ctrl+Alt+Shift+S`; meşgulse iki yedek aday. Mesaj, pencerenin zaten
+   döndürdüğü kuyruğa `WM_HOTKEY` olarak düşüyor, `mesajlari_isle` artık
+   `bool` yerine `TurSonucu` dönüyor. **Kaydedilemezse ölçekleme
+   başlamıyor** — yeni `Engel::KacisKisayoluYok`. Klavye kancası değil;
+   tasarım ilkesi 3 duruyor.
+2. **Hedef önde değilken pencere gizli.** `oyun_penceresi` yerine üç
+   durumlu `onplandaki` → `Onplan::{Hedef, Bizim, Yok}`. `Bizim` ayrı bir
+   durum çünkü hedefi hatırlıyor ama çizmiyor: kullanıcı ayar değiştirmek
+   için Muifly'a geçtiğinde artık kendi arayüzünü görüyor, oyunun
+   görüntüsünün altında kalmıyor. Pencere ilk **başarılı** çizimden sonra
+   gösteriliyor.
+3. **Kısayolla durdurma günlüğe yazılıyor.** Döngünün Motor'a erişimi yok;
+   bayrağı `arka_plan_dongusu` her turda devralıp
+   `Motor::olcekleme_kacisini_isle` ile günlüğe geçiriyor ve iş parçacığını
+   topluyor.
+4. **Arayüz** kısayolu ölçekleme açılmadan önce de yazıyor, ve
+   "çalışıyor ama ekranda bir şey yok" hâline ayrı bir açıklama şeridi
+   eklendi (`hedefBekleniyor`).
+
+### Testler
+
+`kacis_kisayolu_kaydedilebiliyor` gerçekten `RegisterHotKey` çağırıyor —
+taklit değil, çünkü bu yol kırılırsa özellik tamamen ölüyor.
+`ikinci_kayit_baska_adaya_dusuyor` aday listesinin işlediğini gösteriyor
+(tek adaya düşülürse test kırılır). `durumda_kacis_yolu_alanlari_var`
+kaçış yolunun arayüze ulaştığını koruyor.
+
+Rust 373 → 376 test, arayüz 67 test, hepsi geçiyor. Clippy
+(`--features olcum-yardimcisi`) temiz.
+
+### Kalan
+
+Değişikliklerin hiçbiri gerçek bir oyunla denenmedi — kilitlenmenin
+kendisi zaten o denemenin ilk adımıydı. `tasks.md` → Sıradaki 7 iki yeni
+maddeyle güncellendi.

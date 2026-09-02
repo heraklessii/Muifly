@@ -173,6 +173,36 @@ export function OlceklemePaneli({
           tam ekrandaysa yakalama yapılamaz — kenarlıksız pencere modu gerekir.
         </p>
 
+        {/*
+          Kaçış kısayolu ölçekleme AÇILMADAN önce de yazıyor. Ekranı
+          kaplayan pencerenin nasıl kapatılacağını ancak kaplandıktan sonra
+          öğrenen kullanıcı için o bilgi yok demektir (karar #34).
+        */}
+        <p className="panel__aciklama">
+          <strong>Durdurma kısayolu:</strong>{' '}
+          <kbd className="kbd">
+            {durum?.durdurmaKisayoli ?? 'Ctrl+Alt+Shift+S'}
+          </kbd>
+          . Ölçekleme
+          penceresi ekranı kaplar, tıklanamaz ve Alt+Tab'da görünmez; her
+          durumda klavyeden kapatılabilmesi için bu kısayol kaydedilir.
+          Kaydedilemezse ölçekleme başlatılmaz.
+        </p>
+
+        {durum?.hedefBekleniyor && calisiyor && (
+          <div className="serit uyari">
+            <IconUyari />
+            <div>
+              <strong>Ölçekleme açık, ekranda henüz bir şey yok.</strong>
+              <p>
+                Ölçeklenecek pencere önde değil. Ölçekleme yalnızca bir oyun
+                ya da uygulama penceresi öndeyken çizer — masaüstünde ve
+                Muifly'a bakarken ekran sana kalır.
+              </p>
+            </div>
+          </div>
+        )}
+
         {rekabetciMod && (
           <div className="serit uyari">
             <IconUyari />

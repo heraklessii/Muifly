@@ -88,6 +88,9 @@ windows = { version = "0.62", features = [
   "Win32_System_Memory",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Shell",
+  # Kacis kisayolu (karar #34): RegisterHotKey. Klavye kancasi DEGIL -
+  # tus basislari okunmuyor, tek bir kombinasyon sisteme kaydediliyor.
+  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_Graphics_Gdi",
 
   # Faz 3 (scaling): Desktop Duplication ile yakalama, D3D11 ile olcekleme

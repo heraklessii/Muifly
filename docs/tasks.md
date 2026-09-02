@@ -87,6 +87,15 @@ Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
 
 - [x] Pencere açılıyor, gölgelendirici derleniyor, kare ölçülüyor
       (`gercek_ekranda_bir_tur`)
+- [ ] **Kaçış kısayolu gerçekten çalışıyor mu** (karar #34). Ölçekleme
+      açıkken `Ctrl+Alt+Shift+S` — pencere kapanmalı, günlükte "ölçekleme
+      durduruldu (kaçış kısayolu)" satırı görünmeli. Oyun fareyi
+      yakalamışken de denenmeli: bu kısayolun asıl işi, başka hiçbir şey
+      çalışmadığı andır.
+- [ ] **Gizlenme kuralı** (karar #34). Masaüstündeyken "Başlat" → ekranda
+      hiçbir şey değişmemeli, panelde "ekranda henüz bir şey yok" şeridi
+      çıkmalı. Oyuna geçilince pencere gelmeli; Muifly'a dönülünce
+      kaybolup arayüz görünmeli; oyuna dönülünce kaldığı yerden sürmeli.
 - [ ] **Görüntü doğru mu.** `npm run tauri dev` → Ölçekleme sekmesi →
       "Yakalamayı dene" → "Başlat". Düşük çözünürlüklü, **pencereli** bir
       oyun/uygulama açıkken denenmeli: ölçeklenmiş görüntü ekranı kaplamalı

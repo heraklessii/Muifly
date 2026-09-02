@@ -59,6 +59,8 @@ generation (Faz 4).
 | Ekran yakalama | Desktop Duplication (`IDXGIOutputDuplication`) | ✅ Kare, yakalamayla aynı D3D11 cihazında kalıyor; CPU'ya inmiyor |
 | Spatial upscaling | D3D11 piksel gölgelendiricileri | ✅ Tam sayı katı, bilinear, Lanczos (a=3), xBR |
 | Sunum | `WS_EX_TOPMOST\|NOACTIVATE\|TRANSPARENT\|TOOLWINDOW` + DXGI çevirme zinciri | ✅ Odak almıyor, tıklama geçiriyor, Alt+Tab'da görünmüyor |
+| Kaçış kısayolu | `RegisterHotKey` (kanca değil) | ✅ Yukarıdaki beş bayrak birlikte kapatılamayan bir kutu yapıyor; kısayol kaydedilemezse ölçekleme başlamıyor (karar #34) |
+| Hedef önde değilken | Sunum penceresi gizleniyor | ✅ Masaüstünde ve Muifly'a bakarken ekran kullanıcıya kalıyor; hedef unutulmuyor (karar #34) |
 | Gecikme ölçümü | Kare başına yakalama/sunum süreleri | ✅ Eklenen bedel; kazanç iddiası taşımıyor |
 | Frame generation (Faz 4) | Özel eğitilmiş ML modeli (LSFG benzeri) | ⬜ Faz 1-3 sahada doğrulanmadan başlanmaz |
 | İkinci GPU offload | Çoklu adaptör (iGPU+dGPU) tespiti ve hesaplama dağıtımı | ⬜ Faz 3/4 sonrası "nice to have" |

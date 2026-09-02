@@ -534,6 +534,29 @@ impl Motor {
         );
     }
 
+    /// Ölçekleme kendi kendine, kaçış kısayoluyla durduysa bunu tamamlar.
+    ///
+    /// Döngü iş parçacığı kısayolu görüp çıkıyor ama günlüğe **yazamıyor**:
+    /// Motor'a erişimi yok. Bu iki adım burada kapanıyor — iş parçacığı
+    /// toplanıyor ve durdurma günlüğe geçiyor. Yazılmasaydı kullanıcının
+    /// ekranı kaplayan pencereyi kapattığı an günlükte iz bırakmazdı;
+    /// şeffaflık ilkesi "kullanıcının kendi yaptığı" için de geçerli.
+    ///
+    /// Dönüş: bu turda bir kaçış işlendi mi (arayüze durum yayınlamak için).
+    pub fn olcekleme_kacisini_isle(&mut self) -> bool {
+        if !self.olcekleyici.kacisi_devral() {
+            return false;
+        }
+        self.olcekleyici.durdur();
+        self.gunluk.yaz(
+            Duzey::GeriAlma,
+            Kategori::Sistem,
+            "ölçekleme durduruldu (kaçış kısayolu)".to_string(),
+            None,
+        );
+        true
+    }
+
     /// Çalışan ölçeklemenin algoritmasını değiştirir.
     pub fn olcekleme_algoritmasi(&mut self, algo: crate::scaling::Algoritma) {
         self.olcekleyici.algoritma_ata(algo);

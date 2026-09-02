@@ -43,6 +43,9 @@ const BOS_DURUM: OlceklemeDurumu = {
   gecikme: null,
   sonEngel: null,
   uyari: null,
+  durdurmaKisayoli: null,
+  hedefBekleniyor: false,
+  kacislaDurduruldu: false,
 };
 
 const ALGORITMALAR = [

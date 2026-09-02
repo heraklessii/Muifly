@@ -211,7 +211,10 @@ Muifly/
   gercek_ekranda_bir_tur -- --ignored`). ⬜ Gerçek bir oyunla ve **gözle**
   denenmedi — `tasks.md` → Sıradaki 7. Birim testleri görüntünün doğru
   göründüğünü gösteremiyor; ilk çalıştırma iki işlevsizlik kusuru
-  gösterdi (karar #32).
+  gösterdi (karar #32). Masaüstünde ilk elle deneme makineyi
+  kullanılamaz hale getirdi: sunum penceresinin kapatılacak hiçbir yolu
+  yoktu. Kaçış kısayolu ve gizlenme kuralı eklendi (karar #34), ikisi de
+  **henüz elle denenmedi**.
 - **Faz 4** (ML frame generation) — ⬜ ayrı fizibilite gerekiyor. Profil
   dosyasında `frame_generation` açılsa bile `dogrula` kapatıyor.
 - **Faz 5** (ekran çevirisi) — 🟡 **kısmen açıldı** (karar #30). İki

@@ -45,7 +45,7 @@ pub fn giris_noktasi(a: Algoritma) -> &'static str {
 }
 
 #[cfg(windows)]
-pub use win::SunumPenceresi;
+pub use win::{KacisKisayolu, SunumPenceresi, TurSonucu};
 
 #[cfg(windows)]
 mod win {
@@ -62,6 +62,10 @@ mod win {
     use windows::Win32::Graphics::Dxgi::Common::*;
     use windows::Win32::Graphics::Dxgi::*;
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
+        MOD_SHIFT, VK_F9, VK_PAUSE, VK_S,
+    };
     use windows::Win32::UI::WindowsAndMessaging::*;
 
     const SINIF_ADI: PCWSTR = windows::core::w!("MuiflyOlceklemePenceresi");
@@ -122,6 +126,100 @@ mod win {
         Ok(ornek)
     }
 
+    /// Kaçış kısayolu adayları: `(değiştirici, tuş, etiket)`.
+    ///
+    /// Sıralı deneniyor — ilki başka bir uygulamada kayıtlıysa sonraki.
+    ///
+    /// `MOD_NOREPEAT` her adaya çağrı anında ekleniyor: tuş basılı
+    /// tutulduğunda tek bir mesaj gelsin, yüzlerce değil.
+    const KACIS_ADAYLARI: [(u32, u32, &str); 3] = [
+        (
+            MOD_CONTROL.0 | MOD_ALT.0 | MOD_SHIFT.0,
+            VK_S.0 as u32,
+            "Ctrl+Alt+Shift+S",
+        ),
+        (
+            MOD_CONTROL.0 | MOD_ALT.0 | MOD_SHIFT.0,
+            VK_F9.0 as u32,
+            "Ctrl+Alt+Shift+F9",
+        ),
+        (MOD_CONTROL.0 | MOD_ALT.0, VK_PAUSE.0 as u32, "Ctrl+Alt+Pause"),
+    ];
+
+    /// Kısayol kimliğinin tabanı. Aynı iş parçacığında başka kısayol yok.
+    const KACIS_KIMLIK: i32 = 0x4D55;
+
+    /// Ölçeklemeyi **klavyeden** durdurma yolu.
+    ///
+    /// # Neden var
+    ///
+    /// Sunum penceresi tam ekran, üstte duran, odak almayan, Alt+Tab'da
+    /// görünmeyen ve tıklamaları geçiren bir pencere. Bu beşi birleşince
+    /// pencereyi kapatmanın **hiçbir fare yolu kalmıyor**: tıklanamıyor,
+    /// öne getirilemiyor, altındaki Muifly penceresi de görünmüyor.
+    /// Çizim herhangi bir sebeple durursa (ekranda donmuş ya da siyah bir
+    /// kare kalırsa) kullanıcının elinde makineyi yeniden başlatmaktan
+    /// başka bir şey kalmıyor. Bu bir kez gerçekten yaşandı — karar #34.
+    ///
+    /// # Tasarım ilkesi 3
+    ///
+    /// `RegisterHotKey` resmi bir Windows API'si, klavye kancası
+    /// (`SetWindowsHookEx`) **değil**: tuş basışları okunmuyor, sisteme tek
+    /// bir kombinasyon kaydediliyor ve yalnızca o kombinasyon bize bir
+    /// mesaj olarak geliyor.
+    ///
+    /// # İş parçacığı
+    ///
+    /// Pencere sahibi olmadan (`None`) kaydediliyor: mesaj **iş parçacığı
+    /// kuyruğuna** düşüyor, pencerenin kuyruğuna değil. Kaydı yapan iş
+    /// parçacığı ile kaldıran aynı olmak zorunda; ikisi de döngü iş
+    /// parçacığı (`dongu`).
+    pub struct KacisKisayolu {
+        kimlik: i32,
+        pub etiket: &'static str,
+    }
+
+    impl KacisKisayolu {
+        /// Adayları sırayla dener; hiçbiri kaydedilemezse `None`.
+        pub fn kaydet() -> Option<Self> {
+            for (sira, (modlar, tus, etiket)) in KACIS_ADAYLARI.iter().enumerate() {
+                let kimlik = KACIS_KIMLIK + sira as i32;
+                let sonuc = unsafe {
+                    RegisterHotKey(
+                        None,
+                        kimlik,
+                        HOT_KEY_MODIFIERS(modlar | MOD_NOREPEAT.0),
+                        *tus,
+                    )
+                };
+                if sonuc.is_ok() {
+                    return Some(Self { kimlik, etiket });
+                }
+            }
+            None
+        }
+    }
+
+    impl Drop for KacisKisayolu {
+        fn drop(&mut self) {
+            // Kaldırılmazsa kombinasyon süreç ömrü boyunca bizde kalır ve
+            // ölçekleme kapalıyken de başka uygulamalardan çalınmış olur.
+            unsafe {
+                let _ = UnregisterHotKey(None, self.kimlik);
+            }
+        }
+    }
+
+    /// Bir mesaj turunun sonucu.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum TurSonucu {
+        Devam,
+        /// Pencere yok edildi (`WM_QUIT`).
+        Kapandi,
+        /// Kullanıcı kaçış kısayoluna bastı.
+        Kacis,
+    }
+
     /// Açık bir sunum penceresi ve boru hattı.
     pub struct SunumPenceresi {
         pencere: HWND,
@@ -138,6 +236,9 @@ mod win {
         ornekleyici_dogrusal: ID3D11SamplerState,
         sabitler: ID3D11Buffer,
         baglam: ID3D11DeviceContext,
+        /// Pencere şu an ekranda mı? `gorunurluk` bunu takip ediyor ki
+        /// her karede gereksiz `ShowWindow` çağrısı yapılmasın.
+        gorunur: bool,
         pub genislik: u32,
         pub yukseklik: u32,
     }
@@ -257,12 +358,15 @@ mod win {
                     ornekleyici_dogrusal,
                     sabitler,
                     baglam: baglam.clone(),
+                    gorunur: false,
                     genislik,
                     yukseklik,
                 };
                 p.hedefi_kur()?;
-                // SW_SHOWNA: göster ama odak verme.
-                let _ = ShowWindow(pencere, SW_SHOWNA);
+                // Pencere **gizli** açılıyor. Görünürlüğe döngü karar
+                // veriyor: ölçeklenecek bir pencere yokken ekranı
+                // kaplamak, kullanıcıyı içinden çıkamadığı bir görüntünün
+                // arkasında bırakıyordu (karar #34).
                 Ok(p)
             }
         }
@@ -285,17 +389,46 @@ mod win {
         /// Mesaj kuyruğu boşaltılmazsa Windows pencereyi "yanıt vermiyor"
         /// sayıp gri bir kopyayla değiştiriyor — ekranın ortasında donmuş
         /// bir görüntü demek.
-        pub fn mesajlari_isle(&self) -> bool {
+        ///
+        /// `WM_HOTKEY` burada yakalanıyor, `DispatchMessageW`ye
+        /// bırakılmıyor: kısayol pencere sahibi olmadan kaydedildiği için
+        /// mesajın `hwnd`si boş ve dağıtılsa hiçbir yere gitmezdi.
+        pub fn mesajlari_isle(&self) -> TurSonucu {
             unsafe {
                 let mut mesaj = MSG::default();
                 while PeekMessageW(&mut mesaj, None, 0, 0, PM_REMOVE).as_bool() {
                     if mesaj.message == WM_QUIT {
-                        return false;
+                        return TurSonucu::Kapandi;
+                    }
+                    if mesaj.message == WM_HOTKEY {
+                        return TurSonucu::Kacis;
                     }
                     let _ = TranslateMessage(&mesaj);
                     DispatchMessageW(&mesaj);
                 }
-                true
+                TurSonucu::Devam
+            }
+        }
+
+        /// Pencereyi gösterir ya da gizler.
+        ///
+        /// Gizlemek, ölçeklenecek bir pencere yokken ekranı **gerçekten**
+        /// serbest bırakmanın tek yolu: pencere görünür kalıp masaüstünün
+        /// birebir kopyasını çizseydi kullanıcı canlı masaüstünü değil,
+        /// onun bir kare gecikmiş ve tazelenmesi altındaki pencerelerin
+        /// çizmeye devam etmesine bağlı bir kopyasını görürdü (karar #34).
+        ///
+        /// `SW_SHOWNA`: göster ama odak verme.
+        pub fn gorunurluk(&mut self, gorunsun: bool) {
+            if self.gorunur == gorunsun {
+                return;
+            }
+            self.gorunur = gorunsun;
+            unsafe {
+                let _ = ShowWindow(
+                    self.pencere,
+                    if gorunsun { SW_SHOWNA } else { SW_HIDE },
+                );
             }
         }
 

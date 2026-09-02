@@ -1033,3 +1033,64 @@ doğrulanmış olsaydı olacağından daha zor.
 ölçümünü ve kendi durma sebebini gösteriyor. İkincisi, sistemde kalıcı iz
 bırakmıyor (karar #32), yani bir hata durumunda temizlenmesi gereken bir
 şey de bırakmıyor.
+
+---
+
+## #34 — Ölçekleme penceresinin kaçış yolu ve gizlenme kuralı
+
+**Ne oldu**: Ölçekleme masaüstünde denendi ve makine kullanılamaz hale
+geldi. Tıklamalar sonuç vermedi, ekran değişmedi; tek çıkış yolu bilgisayarı
+yeniden başlatmak oldu.
+
+**Neden**: Sunum penceresinin beş özelliği tek tek doğruydu ama birlikte
+çıkışsız bir kutu oluşturuyordu — tam ekran (`WS_POPUP` + ekran boyu),
+üstte (`WS_EX_TOPMOST`), odak almayan (`WS_EX_NOACTIVATE`), tıklanamayan
+(`WS_EX_TRANSPARENT`), Alt+Tab'da görünmeyen (`WS_EX_TOOLWINDOW`). Pencereyi
+kapatmanın klavyeden ya da fareden **hiçbir yolu yoktu**; tek düğme
+Muifly'ın kendi penceresindeydi ve o pencere kaplamanın altında kalıyordu.
+
+Bunu tetikleyen şey ölçeklenecek pencere bulunamadığında devreye giren
+yedek davranıştı: masaüstünün tamamını ölçeklemek, yani ekranı ekranın
+birebir kopyasıyla kaplamak. Kopya tazelendiği sürece fark edilmiyor; kopya
+tazelenmeyi kestiği anda kullanıcının önünde donmuş bir resim kalıyor.
+Tıklamalar pencereden geçip altındaki gerçek pencerelere gidiyor ama
+sonucu görünmüyor — yani sistem çalışıyor, kullanıcı göremiyor.
+
+**Karar — üç değişiklik**:
+
+1. **Kaçış kısayolu.** Döngü `RegisterHotKey` ile bir kombinasyon
+   kaydediyor (`Ctrl+Alt+Shift+S`, meşgulse iki yedek). Kısayol
+   `WM_HOTKEY` olarak zaten var olan mesaj kuyruğuna düşüyor.
+   **Kaydedilemezse ölçekleme başlamıyor**: kaçış yolu olmayan bir tam
+   ekran kaplama, kullanıcıya yeniden başlatmaktan başka çıkış bırakmıyor.
+   Kısayolun etiketi arayüzde ölçekleme **açılmadan önce** de yazıyor.
+
+2. **Hedef önde değilken pencere gizleniyor.** "Masaüstünü ölçekle" yedeği
+   kaldırıldı. Sunum penceresi yalnızca ölçeklenecek bir pencere öndeyken
+   görünüyor; kullanıcı masaüstüne ya da Muifly'a geçtiğinde gizleniyor ve
+   ekran kullanıcıya kalıyor. Hedef unutulmuyor — oyuna dönüldüğünde
+   ölçekleme kaldığı yerden sürüyor. Pencere ilk **başarılı** çizimden
+   sonra gösteriliyor, öncesinde değil.
+
+3. **Kısayolla durdurma günlüğe yazılıyor.** Döngü iş parçacığının Motor'a
+   erişimi yok; bayrağı arka plan döngüsü devralıp günlüğe geçiriyor.
+   Şeffaflık ilkesi kullanıcının kendi yaptığı durdurma için de geçerli.
+
+**Reddedilenler**:
+
+- **Klavye kancası (`SetWindowsHookEx`).** Tasarım ilkesi 3'ü ihlal ederdi.
+  `RegisterHotKey` kanca değil: tuş basışları okunmuyor, sisteme tek bir
+  kombinasyon kaydediliyor ve yalnızca o kombinasyon mesaj olarak geliyor.
+- **Kaçış yolu olmadan uyarıyla devam etmek.** Kullanıcıya "bu özellik
+  makineni kilitleyebilir" deyip yine de açmak, uyarıyı sorumluluk
+  aktarımına çevirirdi.
+- **"Yeni kare gelmiyorsa kendini durdur" nöbetçisi.** Duran bir oyun
+  menüsü de kare üretmiyor; nöbetçi çalışan ölçeklemeyi keserdi. Sorun
+  karenin gelmemesi değil, gelmediğinde çıkış olmamasıydı.
+- **Pencereyi tıklanabilir yapmak.** Tıklamaların oyuna geçmesi
+  ölçeklemenin çalışma şartı; bunu bozmak özelliği bitirirdi.
+
+**Kalan risk**: Ölçeklenen oyunun kendisi çizmeyi keserse pencerede son
+kare durmaya devam ediyor. Bu artık kilitlenme değil — kısayol çalışıyor —
+ama "donmuş görüntü" hâlâ mümkün ve gerçek oyunla denemede bakılacak
+(`tasks.md` → Sıradaki 7).

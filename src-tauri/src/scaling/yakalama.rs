@@ -46,6 +46,12 @@ pub enum Engel {
     Desteklenmeyen,
     /// İstenen ekran yok (takılı ekran sayısı değişmiş olabilir).
     EkranYok,
+    /// Ölçeklemeyi durduracak klavye kısayolu kaydedilemedi.
+    ///
+    /// Ölçekleme bu durumda **başlamıyor**: kaçış yolu olmayan bir tam
+    /// ekran kaplama, kullanıcıya makineyi yeniden başlatmaktan başka
+    /// çıkış bırakmıyor (karar #34).
+    KacisKisayoluYok,
     /// Başka bir sistem hatası.
     Sistem(i32),
     /// Windows dışı derleme.
@@ -69,6 +75,12 @@ impl std::fmt::Display for Engel {
                 write!(f, "bu ekran kartı/sürücü masaüstü çoğaltmasını vermiyor")
             }
             Engel::EkranYok => write!(f, "seçilen ekran bulunamadı"),
+            Engel::KacisKisayoluYok => write!(
+                f,
+                "ölçeklemeyi durduracak klavye kısayolu kaydedilemedi — \
+                 kısayolu kullanan uygulamayı kapatıp yeniden deneyin; \
+                 kaçış yolu olmadan ölçekleme başlatılmıyor"
+            ),
             Engel::Sistem(k) => write!(f, "ekran yakalanamadı (sistem kodu 0x{k:08X})"),
             Engel::Platform => write!(f, "ekran yakalama bu platformda yok"),
         }

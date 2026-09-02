@@ -83,6 +83,25 @@ pub struct OlceklemeDurumu {
     /// çıkarılamadı). Bunu hata gibi göstermek "durdu" diye okunurdu;
     /// hiç göstermemek ise gördüğü bozukluğu açıklamasız bırakırdı.
     pub uyari: Option<String>,
+    /// Ölçeklemeyi klavyeden durduran kısayolun etiketi (karar #34).
+    ///
+    /// Arayüz bunu ölçekleme **başlamadan önce de** gösteriyor: kaçış
+    /// yolunu ancak ekran kaplandıktan sonra öğrenen kullanıcı için o yol
+    /// yok demektir.
+    pub durdurma_kisayoli: Option<String>,
+    /// Ölçekleme açık ama ekranda bir şey yok: ölçeklenecek pencere
+    /// bulunamadı.
+    ///
+    /// Hata değil, bekleme durumu — kullanıcı Muifly'ın kendi penceresine
+    /// bakarken normal olan hâl. Arayüzün "çalışıyor ama neden bir şey
+    /// görmüyorum" sorusuna cevabı bu alan.
+    pub hedef_bekleniyor: bool,
+    /// Döngü kaçış kısayoluyla durdu mu?
+    ///
+    /// Arka plan döngüsü bunu görüp günlüğe yazıyor: ölçeklemeyi
+    /// durduran her yol günlükte görünmeli, kısayolla durdurulan da
+    /// (şeffaflık ilkesi — `lib.rs::arka_plan_dongusu`).
+    pub kacisla_durduruldu: bool,
 }
 
 /// Arayüzdeki algoritma listesi.
@@ -227,6 +246,9 @@ impl Olcekleyici {
     /// gömülmüyor: kullanıcı düğmeye bastıysa cevabı ekranda görmeli.
     pub fn baslat(&mut self, ekran: usize, algo: Algoritma) -> Result<(), Engel> {
         self.durdur();
+        // Önceki turdan devralınmamış bir kaçış bayrağı, yeni başlayan
+        // ölçeklemeyi "kısayolla durduruldu" diye günlüğe yazdırırdı.
+        self.durum.lock().kacisla_durduruldu = false;
         self.algoritma_ata(algo);
         self.dur.store(false, Ordering::Relaxed);
 
@@ -273,6 +295,18 @@ impl Olcekleyici {
         let mut d = self.durum.lock();
         d.calisiyor = false;
         d.gecikme = None;
+        d.hedef_bekleniyor = false;
+        d.durdurma_kisayoli = None;
+    }
+
+    /// Döngü kendi kendine (kaçış kısayoluyla) durduysa bayrağı **alıp**
+    /// siler.
+    ///
+    /// Alıp silmek şart: bayrak kalsaydı arka plan döngüsü her turda aynı
+    /// satırı günlüğe yazardı.
+    pub fn kacisi_devral(&mut self) -> bool {
+        let mut d = self.durum.lock();
+        std::mem::replace(&mut d.kacisla_durduruldu, false)
     }
 }
 
@@ -336,6 +370,15 @@ fn dongu(
         }
     };
 
+    // Kaçış kısayolu pencereden ÖNCE değil, hemen sonra ve **açılış
+    // cevabından önce** kaydediliyor: kaydedilemezse ölçekleme hiç
+    // başlamıyor. Kaçış yolu olmayan bir tam ekran kaplama, kullanıcıya
+    // makineyi yeniden başlatmaktan başka çıkış bırakmıyor (karar #34).
+    let Some(kacis) = sunum::KacisKisayolu::kaydet() else {
+        let _ = gonderici.send(Err(Engel::KacisKisayoluYok));
+        return;
+    };
+
     {
         let mut d = durum.lock();
         d.calisiyor = true;
@@ -347,6 +390,8 @@ fn dongu(
         d.hedef_yukseklik = pencere.yukseklik;
         d.son_engel = None;
         d.gecikme = None;
+        d.durdurma_kisayoli = Some(kacis.etiket.to_string());
+        d.hedef_bekleniyor = true;
         d.uyari = (!pencere.yakalamadan_gizli).then(|| {
             "Bu Windows sürümü pencereyi yakalamanın dışına çıkaramıyor; \
              ölçekleme kendi çıktısını yakalayabilir (Windows 10 sürüm 2004 \
@@ -361,10 +406,68 @@ fn dongu(
     let mut sayac = 0u32;
     let mut engel_metni: Option<String> = None;
     let mut hedef_pencere: Option<windows::Win32::Foundation::HWND> = None;
+    // Durum yalnızca **değişince** yazılıyor: her karede kilit almak
+    // döngünün ölçtüğü sürelere kendi gürültüsünü katardı.
+    let mut bekliyordu = true;
+    let mut kacisla_durduruldu = false;
 
     while !dur.load(Ordering::Relaxed) {
-        if !pencere.mesajlari_isle() {
-            break;
+        match pencere.mesajlari_isle() {
+            sunum::TurSonucu::Devam => {}
+            sunum::TurSonucu::Kapandi => break,
+            sunum::TurSonucu::Kacis => {
+                kacisla_durduruldu = true;
+                break;
+            }
+        }
+
+        // Ölçeklenecek pencere önde DEĞİLKEN sunum penceresi gizleniyor.
+        //
+        // Eski davranış iki yerde ekranı kilitliyordu (karar #34):
+        //
+        // - Ölçeklenecek pencere hiç yokken masaüstünün tamamı ölçekleniyor,
+        //   yani birebir kopyalanıyordu. Ekranı kaplayan, odak almayan,
+        //   Alt+Tab'da olmayan bir pencerenin altında canlı masaüstü
+        //   görünmez oluyordu; kopya tazelenmeyi kestiği anda kullanıcının
+        //   önünde donmuş bir resim kalıyordu.
+        // - Kullanıcı ayar değiştirmek için Muifly'a geçtiğinde önceki
+        //   hedef korunuyor, yani Muifly'ın kendi penceresinin ÜSTÜNDE
+        //   oyunun görüntüsü çiziliyordu. "Durdur" düğmesi ekranda vardı
+        //   ama görünmüyordu.
+        //
+        // Gizlemek "hiçbir şey yapma" değil: hedef öne geldiğinde pencere
+        // tekrar açılıyor, arada ekran kullanıcınındır.
+        let onplan = onplandaki(hedef_pencere);
+        if let Onplan::Hedef(h) = onplan {
+            hedef_pencere = Some(h);
+        }
+        let hedef_alani = match onplan {
+            Onplan::Hedef(h) => pencere_dikdortgeni(h).and_then(|dikdortgen| {
+                algoritma::pencere_alani(
+                    dikdortgen,
+                    (yakalayici.ekran().x, yakalayici.ekran().y),
+                    (yakalayici.genislik, yakalayici.yukseklik),
+                )
+            }),
+            Onplan::Bizim | Onplan::Yok => None,
+        };
+        let Some(alan) = hedef_alani else {
+            pencere.gorunurluk(false);
+            if !bekliyordu {
+                bekliyordu = true;
+                durum.lock().hedef_bekleniyor = true;
+                tampon.temizle();
+            }
+            // Uyumak şart: yakalama yapılmadığı için turun kendi
+            // beklemesi yok, uyunmazsa döngü boşuna dönerdi.
+            std::thread::sleep(std::time::Duration::from_millis(
+                KARE_ZAMAN_ASIMI_MS as u64,
+            ));
+            continue;
+        };
+        if bekliyordu {
+            bekliyordu = false;
+            durum.lock().hedef_bekleniyor = false;
         }
 
         let algo = algoritmadan(secili.load(Ordering::Relaxed));
@@ -399,24 +502,6 @@ fn dongu(
         }
         let t1 = Instant::now();
 
-        // Ölçeklenecek şey masaüstünün tamamı değil, öndeki oyun penceresi.
-        // Kırpma olmasaydı ekran kendi boyutunda yeniden çizilir, yani
-        // hiçbir şey büyütülmezdi.
-        hedef_pencere = oyun_penceresi(hedef_pencere);
-        let alan = hedef_pencere
-            .and_then(|h| {
-                pencere_dikdortgeni(h).and_then(|dikdortgen| {
-                    algoritma::pencere_alani(
-                        dikdortgen,
-                        (yakalayici.ekran().x, yakalayici.ekran().y),
-                        (yakalayici.genislik, yakalayici.yukseklik),
-                    )
-                })
-            })
-            // Oyun penceresi bulunamadıysa masaüstünün tamamı: ekranı
-            // karartmaktansa ölçeklemeden göstermek doğru.
-            .unwrap_or_else(|| algoritma::Alan::tam(yakalayici.genislik, yakalayici.yukseklik));
-
         let cizim = pencere.ciz(
             &yakalayici.gorunum,
             alan,
@@ -429,6 +514,10 @@ fn dongu(
             engel_metni = Some(e.to_string());
             break;
         }
+        // Pencere ilk **başarılı** çizimden sonra gösteriliyor. Önce
+        // gösterip sonra çizmek, bir kare boyunca ekranı kaplayan boş bir
+        // siyah dikdörtgen demek olurdu.
+        pencere.gorunurluk(true);
 
         // Üç aşama ayrı ölçülüyor ama üçü de **CPU tarafındaki** süre.
         // `sunum` içinde dikey eşitleme beklemesi de var; arayüz bunu
@@ -452,39 +541,74 @@ fn dongu(
         }
     }
 
+    // Kısayol kaydı burada düşüyor: kombinasyonun ölçekleme kapalıyken de
+    // bizde kalması, kullanıcının kendi kısayolunu çalmak olurdu.
+    drop(kacis);
+
     let mut d = durum.lock();
     d.calisiyor = false;
     d.gecikme = tampon.ozetle();
+    d.hedef_bekleniyor = false;
+    d.durdurma_kisayoli = None;
+    d.kacisla_durduruldu = kacisla_durduruldu;
     d.son_engel = engel_metni;
 }
 
-/// Ölçeklenecek pencere: öndeki pencere, kendi pencerelerimiz hariç.
+/// Önplanda ne var?
 ///
-/// Kendi süreçlerimizi elemek şart. Kullanıcı "Başlat"a Muifly penceresinden
-/// basıyor; o an öndeki pencere Muifly'ın kendisi oluyor ve elenmezse
-/// program kendi arayüzünü büyütürdü. Sunum penceresi de bize ait —
-/// odak almıyor ama bir sürücü yolunda öne geçerse aynı sonuç çıkardı.
-///
-/// Öndeki pencere bizimse **önceki hedef korunuyor**: kullanıcı ayar
-/// değiştirmek için Muifly'a geçtiğinde ölçekleme oyunu göstermeye devam
-/// ediyor.
+/// Üç durumun ayrılması şart, çünkü ikisi "çizme" diyor ama farklı
+/// sebeplerle ve farklı sonuçlarla (karar #34).
 #[cfg(windows)]
-fn oyun_penceresi(
-    onceki: Option<windows::Win32::Foundation::HWND>,
-) -> Option<windows::Win32::Foundation::HWND> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Onplan {
+    /// Ölçeklenecek pencere önde.
+    Hedef(windows::Win32::Foundation::HWND),
+    /// Önde **bizim** penceremiz var: kullanıcı Muifly'a bakıyor.
+    ///
+    /// Sunum penceresi gizleniyor ama hedef unutulmuyor: kullanıcı ayar
+    /// değiştirip oyuna döndüğünde ölçekleme kaldığı yerden sürüyor.
+    Bizim,
+    /// Geçerli bir önplan penceresi yok (masaüstü, kilit ekranı, geçiş anı).
+    Yok,
+}
+
+/// Önplandaki pencereyi sınıflandırır.
+///
+/// Kendi süreçlerimizi ayırmak şart. Kullanıcı "Başlat"a Muifly
+/// penceresinden basıyor; o an öndeki pencere Muifly'ın kendisi oluyor ve
+/// ayrılmazsa program kendi arayüzünü büyütürdü. Sunum penceresi de bize
+/// ait — odak almıyor ama bir sürücü yolunda öne geçerse aynı sonuç
+/// çıkardı.
+///
+/// `onceki` yalnızca **aynı pencere hâlâ geçerli mi** sorusu için duruyor:
+/// hedef kapandıysa `Yok` dönüyor, korunmuyor. Kapanmış bir pencerenin son
+/// karesini ekranda tutmak, kullanıcının donmuş sandığı görüntünün ta
+/// kendisiydi.
+#[cfg(windows)]
+fn onplandaki(onceki: Option<windows::Win32::Foundation::HWND>) -> Onplan {
     use windows::Win32::System::Threading::GetCurrentProcessId;
-    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
+    };
     unsafe {
         let pencere = GetForegroundWindow();
         if pencere.is_invalid() {
-            return onceki;
+            return Onplan::Yok;
         }
         let mut pid = 0u32;
         GetWindowThreadProcessId(pencere, Some(&mut pid));
-        if pid == 0 || pid == GetCurrentProcessId() {
-            return onceki;
+        if pid == 0 {
+            return Onplan::Yok;
         }
-        Some(pencere)
+        if pid == GetCurrentProcessId() {
+            // Önde biziz. Eski hedef hâlâ yaşıyorsa "Bizim", yoksa "Yok":
+            // ikisi de gizliyor, ama "Bizim" hedefi hatırlıyor.
+            return match onceki {
+                Some(h) if IsWindow(Some(h)).as_bool() => Onplan::Bizim,
+                _ => Onplan::Yok,
+            };
+        }
+        Onplan::Hedef(pencere)
     }
 }
 
@@ -543,6 +667,59 @@ mod testler {
             surec: "oyun.exe".into(),
             profil_id: None,
         }
+    }
+
+    /// Kaçış kısayolu gerçekten kaydedilebiliyor mu?
+    ///
+    /// Bu testin sebebi karar #34: kısayol kaydedilemezse ölçekleme hiç
+    /// başlamıyor, yani bu yol kırılırsa özellik tamamen ölür. Kayıt
+    /// başarısız olursa test değil ürün kırılmış olur — o yüzden `kaydet`
+    /// burada gerçekten çağrılıyor, taklit edilmiyor.
+    ///
+    /// Kısayol test bittiğinde `Drop` ile geri veriliyor; testi çalıştıran
+    /// makinede kombinasyon kalıcı olarak bizde kalmıyor.
+    #[cfg(windows)]
+    #[test]
+    fn kacis_kisayolu_kaydedilebiliyor() {
+        let k = sunum::KacisKisayolu::kaydet().expect(
+            "hiçbir kaçış adayı kaydedilemedi — ölçekleme bu makinede \
+             hiç başlamayacak demektir",
+        );
+        assert!(!k.etiket.is_empty());
+    }
+
+    /// İkinci kayıt **aynı** kombinasyonu almıyor.
+    ///
+    /// Aday listesinin varlık sebebi bu: birinci kombinasyon meşgulse
+    /// ikinciye düşülüyor. Liste tek elemanlı olsaydı kısayolu kullanan
+    /// herhangi bir uygulama ölçeklemeyi tamamen engellerdi.
+    #[cfg(windows)]
+    #[test]
+    fn ikinci_kayit_baska_adaya_dusuyor() {
+        let ilk = sunum::KacisKisayolu::kaydet().expect("ilk kayıt");
+        let ikinci = sunum::KacisKisayolu::kaydet().expect("ikinci kayıt");
+        assert_ne!(
+            ilk.etiket, ikinci.etiket,
+            "iki kayıt aynı kombinasyonu aldı: aday listesi işlemiyor"
+        );
+    }
+
+    /// Durum, kaçış yolunu arayüze taşıyor mu?
+    ///
+    /// Kısayol kullanıcıya gösterilmezse var sayılmaz: ekranı kaplayan
+    /// pencerenin nasıl kapatılacağını bilmeyen kullanıcı için o pencere
+    /// hâlâ çıkışsızdır (karar #34).
+    #[test]
+    fn durumda_kacis_yolu_alanlari_var() {
+        let d = OlceklemeDurumu {
+            durdurma_kisayoli: Some("Ctrl+Alt+Shift+S".into()),
+            hedef_bekleniyor: true,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&d).expect("serile");
+        assert!(json.contains("durdurmaKisayoli"), "{json}");
+        assert!(json.contains("hedefBekleniyor"), "{json}");
+        assert!(json.contains("kacislaDurduruldu"), "{json}");
     }
 
     /// Ürün duruşu: rekabetçi modda ölçekleme kapalı.
@@ -624,10 +801,18 @@ mod testler {
     #[ignore = "gerçek ekran açıyor"]
     fn gercek_ekranda_bir_tur() {
         // Hangi pencere ölçekleniyor: kırpmanın çalıştığı buradan görünüyor.
-        let hedef = oyun_penceresi(None);
+        // `Bizim`/`Yok` beklenen sonuç değil ama hata da değil: testi
+        // konsoldan çalıştıran kullanıcının önünde bir oyun penceresi
+        // olmayabilir. O durumda sunum penceresi gizli kalıyor (karar #34)
+        // ve aşağıdaki `kaynak_genislik` beklemesi düşer — çıktı bunu
+        // söylesin diye yazdırılıyor.
+        let onplan = onplandaki(None);
         println!(
-            "hedef pencere: {hedef:?} → {:?}",
-            hedef.and_then(pencere_dikdortgeni)
+            "önplan: {onplan:?} → {:?}",
+            match onplan {
+                Onplan::Hedef(h) => pencere_dikdortgeni(h),
+                _ => None,
+            }
         );
 
         let mut o = Olcekleyici::yeni();
