@@ -16,7 +16,7 @@
 // tam da oraya bakıyor.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, existsSync } from "node:fs";
+import { copyFileSync, mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +32,23 @@ function ucluk() {
 
 const hedef = ucluk();
 console.log(`hedef üçlü: ${hedef}`);
+
+const dizin = join(srcTauri, "binaries");
+const varis = join(dizin, `muifly-olcum-${hedef}.exe`);
+
+// Yumurta-tavuk: yardımcıyı derlemek de `tauri-build`i çalıştırıyor ve o,
+// `externalBin` listesindeki sidecar'ın VAR OLMASINI arıyor. Dosya üretilmiş
+// bir çıktı (`.gitignore`), yani temiz bir klonda ya da CI'da yok — derleme
+// daha başlamadan "resource path ... doesn't exist" ile kırılıyor.
+//
+// Çözüm boş bir yer tutucu: `tauri-build` yalnızca varlığa bakıyor, içeriğe
+// değil. Aşağıda gerçek ikiliyle üzerine yazılıyor, yani yer tutucu yalnızca
+// derleme boyunca yaşıyor.
+mkdirSync(dizin, { recursive: true });
+if (!existsSync(varis)) {
+  console.log("yer tutucu yazılıyor (ilk derleme)...");
+  writeFileSync(varis, "");
+}
 
 console.log("yardımcı derleniyor (release)...");
 // `olcum-yardimcisi` özelliği şart: yardımcı ikili `required-features`
@@ -49,9 +66,6 @@ if (!existsSync(kaynak)) {
   throw new Error(`derleme çıktısı bulunamadı: ${kaynak}`);
 }
 
-const dizin = join(srcTauri, "binaries");
-mkdirSync(dizin, { recursive: true });
-const varis = join(dizin, `muifly-olcum-${hedef}.exe`);
 copyFileSync(kaynak, varis);
 
 console.log(`hazır: ${varis}`);
