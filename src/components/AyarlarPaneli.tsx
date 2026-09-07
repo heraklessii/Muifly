@@ -15,14 +15,13 @@
 import { useEffect, useState } from 'react';
 
 import * as api from '../lib/api';
-import type { Ayarlar, Durum, Kisitlar } from '../lib/types';
+import type { Ayarlar, Durum } from '../lib/types';
 import { IconBilgi, IconKalkan } from './Icons';
 import { LisanslarDiyalogu } from './LisanslarDiyalogu';
 
 interface Props {
   ayarlar: Ayarlar;
   durum: Durum;
-  kisitlar: Kisitlar;
   surum: string;
   onDegistir: (a: Ayarlar) => void;
   onOtomatikBaslatma: (acik: boolean) => void;
@@ -105,7 +104,6 @@ function Sayi({
 export function AyarlarPaneli({
   ayarlar,
   durum,
-  kisitlar,
   surum,
   onDegistir,
   onOtomatikBaslatma,
@@ -216,15 +214,8 @@ export function AyarlarPaneli({
         <div className="ayar-grup">
           <Anahtar
             ad="Windows ile başlat"
-            aciklama={
-              kisitlar.otomatikBaslatma
-                ? 'Kullanıcı kaydına yazılır, sistem geneline değil — yönetici yetkisi gerekmiyor. Tepside açılır, pencere gelmez.'
-                : 'Demo sürümde kapalı. Kayda hiçbir şey yazılmıyor.'
-            }
+            aciklama="Kullanıcı kaydına yazılır, sistem geneline değil — yönetici yetkisi gerekmiyor. Tepside açılır, pencere gelmez."
             acik={durum.otomatikBaslatma}
-            // Açık kalmışsa (tam sürümden gelen kayıt) kapatmak serbest:
-            // geri alma hiçbir sürümde kilitlenmiyor.
-            devreDisi={!kisitlar.otomatikBaslatma && !durum.otomatikBaslatma}
             onDegistir={() => onOtomatikBaslatma(!durum.otomatikBaslatma)}
           />
 
@@ -295,7 +286,6 @@ export function AyarlarPaneli({
             <span className="kv__ad">Sürüm</span>
             <span className="kv__deger">
               {surum}
-              {kisitlar.demo && ' · demo'}
             </span>
           </div>
           <div className="kv">
@@ -333,9 +323,8 @@ export function AyarlarPaneli({
       </div>
 
       {/*
-        Üçüncü taraf bildirimleri lisans sözleşmesinin madde 8'inde vaat
-        ediliyor; demo ya da tam sürüm ayrımı yapmadan her ikilide açık.
-        Dağıtılan bileşenin lisansı, hangi sürümü kullandığına bağlı değil.
+        Üçüncü taraf bildirimleri dağıtılan her ikilide açık: bileşenin
+        lisansı, programı nereden aldığına bağlı değil.
       */}
       <div className="panel">
         <div className="panel__baslik">Yasal</div>

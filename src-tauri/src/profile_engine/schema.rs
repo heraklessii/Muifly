@@ -2,15 +2,15 @@
 //!
 //! Şema `docs/PROFILES.md` ile birebir; JSON alan adları oradaki taslakla aynı
 //! tutuldu çünkü profil dosyaları **kullanıcının okuyup düzenleyebileceği**
-//! dosyalar (`docs/DISTRIBUTION.md`: kaynak kapalı ama profil formatı açık).
+//! dosyalar.
 //!
 //! Doğrulama burada iki iş yapıyor:
 //!
 //! 1. Bozuk bir dosyanın programı çökertmesini engellemek.
 //! 2. **Güvenlik kurallarını dosya seviyesinde uygulamak.** Bir profil,
 //!    arayüzde engellenen bir şeyi dosyayı elle düzenleyerek isteyemez:
-//!    gerçek zamanlı öncelik reddediliyor, rekabetçi profilde kare üretimi
-//!    zorla kapatılıyor, sistem süreçleri dondurma listesinden çıkarılıyor.
+//!    gerçek zamanlı öncelik reddediliyor, sistem süreçleri dondurma
+//!    listesinden çıkarılıyor.
 
 use serde::{Deserialize, Serialize};
 
@@ -78,58 +78,6 @@ pub struct AgBolumu {
     pub tcp_nodelay: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct OlceklemeBolumu {
-    #[serde(default)]
-    pub enabled: bool,
-    /// `"tam_sayi"` | `"bilinear"` | `"lanczos"` | `"xbr"`, ya da `null`
-    /// (varsayılan). Tanınmayan bir ad `dogrula` içinde düşürülüyor.
-    #[serde(default)]
-    pub algorithm: Option<String>,
-    /// Faz 4. `dogrula` şimdilik her koşulda kapatıyor.
-    #[serde(default)]
-    pub frame_generation: bool,
-}
-
-impl OlceklemeBolumu {
-    /// Profildeki algoritma; yoksa ya da tanınmıyorsa varsayılan.
-    ///
-    /// Varsayılan tam sayı katı: kaynakta olmayan renk üretmeyen tek yol.
-    /// Profilinde algoritma yazmayan bir kullanıcı, en az müdahale edeni
-    /// almalı.
-    pub fn algoritma(&self) -> crate::scaling::Algoritma {
-        self.algorithm
-            .as_deref()
-            .and_then(crate::scaling::Algoritma::coz)
-            .unwrap_or_default()
-    }
-}
-
-/// Ekran çevirisi (Faz 5, karar #37).
-///
-/// Alan burada duruyor, ayarlarda değil: karar #22 "alan seçimi oyun
-/// profiline kaydedilir" diyor ve gerekçesi somut — diyalog kutusunun
-/// yeri oyuna göre değişiyor, makineye göre değil. Oran olarak saklanması
-/// ([`crate::ceviri::Alan`]) profilin başka çözünürlükte de doğru yere düşmesini
-/// sağlıyor.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct CeviriBolumu {
-    #[serde(default)]
-    pub enabled: bool,
-    /// Çevrilecek ekran parçası. `null` = ekranın tamamı.
-    #[serde(default)]
-    pub region: Option<crate::ceviri::Alan>,
-    /// OCR'ın okuyacağı dil (BCP-47). `null` = varsayılan.
-    ///
-    /// Çeviri yönü sabit (EN→TR) ve bu alan onu değiştirmiyor; yalnızca
-    /// Windows'un hangi OCR paketiyle okuyacağını söylüyor. `en-GB`
-    /// paketi kurulu bir makinede `en-US` istemek boşuna hata olurdu.
-    #[serde(default)]
-    pub source_language: Option<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Profil {
@@ -137,17 +85,13 @@ pub struct Profil {
     pub display_name: String,
     /// Eşleşecek çalıştırılabilir adları. Küçük harfe indirgeniyor.
     pub executable_names: Vec<String>,
-    /// Rekabetçi mod: kare üretimi ve agresif ölçekleme zorla kapalı.
+    /// Rekabetçi mod: gecikmeyi en aza indirmeyi hedefleyen profil.
     #[serde(default)]
     pub competitive: bool,
     #[serde(default)]
     pub system: SistemBolumu,
     #[serde(default)]
     pub network: AgBolumu,
-    #[serde(default)]
-    pub scaling: OlceklemeBolumu,
-    #[serde(default)]
-    pub ceviri: CeviriBolumu,
     #[serde(default = "varsayilan_olusturan")]
     pub created_by: String,
     /// İleride topluluk paylaşımı için ayrılmış alan.
@@ -170,8 +114,6 @@ impl Profil {
             competitive: false,
             system: SistemBolumu::default(),
             network: AgBolumu::default(),
-            scaling: OlceklemeBolumu::default(),
-            ceviri: CeviriBolumu::default(),
             created_by: varsayilan_olusturan(),
             shared: false,
         }
@@ -266,70 +208,6 @@ impl Profil {
             .filter(|a| !a.is_empty())
             .collect();
 
-        // Kare üretimi (Faz 4, karar #35) artık **var**; genel kapı
-        // kaldırıldı. Rekabetçi profildeki kapı ise kalıcı: kare üretimi
-        // tanımı gereği bir kareyi elde tutuyor ve rekabetçi mod tam
-        // olarak o beklemeyi en aza indirmek için var (`docs/PROFILES.md`).
-        //
-        // Ölçeklemeyi kapatan kural aşağıda ayrıca çalışıyor; burası
-        // ondan önce, çünkü ölçekleme kapatıldığında üretimin de kapanmış
-        // olması gerekiyor ve iki ayrı düzeltme satırı kullanıcıya iki ayrı
-        // şey söylüyor.
-        if self.scaling.frame_generation && self.competitive {
-            self.scaling.frame_generation = false;
-            duzeltmeler.push("rekabetçi profilde kare üretimi kapatıldı (gecikme ekliyor)".into());
-        }
-
-        // Rekabetçi mod kuralı: ölçekleme de kapalı.
-        //
-        // "UI seviyesinde de engellenmeli, sadece config'e güvenilmemeli"
-        // (`docs/PROFILES.md`) — burası config tarafındaki kapı. Ölçekleme
-        // her karede ölçülebilir bir gecikme ekliyor (`scaling::gecikme`) ve
-        // rekabetçi mod tam olarak o gecikmeyi en aza indirmek için var.
-        if self.competitive && self.scaling.enabled {
-            self.scaling.enabled = false;
-            duzeltmeler.push("rekabetçi profilde ölçekleme kapatıldı (gecikme ekliyor)".into());
-        }
-
-        // Algoritma adı tanınıyor mu? Elle düzenlenmiş bir dosyada yazım
-        // hatası olabilir; sessizce varsayılana düşmek, kullanıcının
-        // seçtiğini sandığı şeyden başkasını çalıştırmak olurdu.
-        if let Some(ad) = self.scaling.algorithm.clone() {
-            if crate::scaling::Algoritma::coz(&ad).is_none() {
-                self.scaling.algorithm = None;
-                duzeltmeler.push(format!(
-                    "'{ad}' diye bir ölçekleme algoritması yok, varsayılana dönüldü"
-                ));
-            }
-        }
-
-        // Çeviri alanı (Faz 5, karar #37). Oran olarak saklanıyor ve elle
-        // düzenlenmiş bir dosyadan her şey gelebilir; ekranın içine
-        // çekiliyor. Kırpma sonrası hiçbir şey kalmadıysa alan düşürülüyor
-        // ve düşürüldüğü SÖYLENIYOR: sessizce tüm ekrana dönmek,
-        // kullanıcının seçtiğini sandığı yerden başka bir yeri okumak olurdu.
-        if let Some(alan) = self.ceviri.region {
-            let kirpilmis = alan.kirp();
-            if kirpilmis.width <= 0.0 || kirpilmis.height <= 0.0 {
-                self.ceviri.region = None;
-                duzeltmeler.push("çeviri alanı boştu, ekranın tamamına dönüldü".into());
-            } else {
-                if kirpilmis != alan {
-                    duzeltmeler.push("çeviri alanı ekranın içine çekildi".into());
-                }
-                self.ceviri.region = Some(kirpilmis);
-            }
-        }
-
-        // Boş bir dil etiketi, OCR motorunu "" ile açmaya çalışmak demek.
-        if let Some(dil) = self.ceviri.source_language.clone() {
-            if dil.trim().is_empty() {
-                self.ceviri.source_language = None;
-            } else {
-                self.ceviri.source_language = Some(dil.trim().to_string());
-            }
-        }
-
         Ok((self, duzeltmeler))
     }
 
@@ -373,16 +251,6 @@ mod testler {
     }
 
     #[test]
-    fn rekabetci_profilde_kare_uretimi_zorla_kapaniyor() {
-        let mut p = temel();
-        p.competitive = true;
-        p.scaling.frame_generation = true;
-        let (p, duzeltmeler) = p.dogrula().unwrap();
-        assert!(!p.scaling.frame_generation);
-        assert!(duzeltmeler.iter().any(|d| d.contains("kare üretimi")));
-    }
-
-    #[test]
     fn sistem_surecleri_dondurma_listesinden_dusuyor() {
         let mut p = temel();
         p.system.suspend_process_list = vec![
@@ -402,68 +270,6 @@ mod testler {
         let (p, duzeltmeler) = p.dogrula().unwrap();
         assert_eq!(p.system.suspend_process_list, vec!["discord.exe"]);
         assert!(duzeltmeler.iter().any(|d| d.contains("oyunun kendisi")));
-    }
-
-    #[test]
-    fn olcekleme_ayari_korunuyor() {
-        // Faz 3 geldi: geçerli bir ölçekleme ayarı artık siliniyor değil,
-        // olduğu gibi uygulanıyor.
-        let mut p = temel();
-        p.scaling.enabled = true;
-        p.scaling.algorithm = Some("lanczos".into());
-        let (p, duzeltmeler) = p.dogrula().unwrap();
-        assert!(p.scaling.enabled);
-        assert_eq!(p.scaling.algorithm.as_deref(), Some("lanczos"));
-        assert!(duzeltmeler.is_empty(), "{duzeltmeler:?}");
-        assert_eq!(p.scaling.algoritma(), crate::scaling::Algoritma::Lanczos);
-    }
-
-    #[test]
-    fn bilinmeyen_algoritma_varsayilana_dusuyor() {
-        // Elle düzenlenmiş dosyada yazım hatası: sessizce başka bir şey
-        // çalıştırmak yerine söyleniyor.
-        let mut p = temel();
-        p.scaling.enabled = true;
-        p.scaling.algorithm = Some("lanzcos".into());
-        let (p, duzeltmeler) = p.dogrula().unwrap();
-        assert_eq!(p.scaling.algorithm, None);
-        assert_eq!(p.scaling.algoritma(), crate::scaling::Algoritma::default());
-        assert!(duzeltmeler.iter().any(|d| d.contains("lanzcos")));
-    }
-
-    #[test]
-    fn rekabetci_profilde_olcekleme_zorla_kapaniyor() {
-        // Ürün duruşu: rekabetçi modda ölçekleme kısıtlı değil, kapalı.
-        // Gerekçe `scaling` modül belgesinde; burası dosya tarafındaki kapı.
-        let mut p = temel();
-        p.competitive = true;
-        p.scaling.enabled = true;
-        p.scaling.algorithm = Some("xbr".into());
-        let (p, duzeltmeler) = p.dogrula().unwrap();
-        assert!(!p.scaling.enabled);
-        assert!(duzeltmeler
-            .iter()
-            .any(|d| d.contains("ölçekleme kapatıldı")));
-    }
-
-    /// Faz 4 geldi: genel kapı **kalktı**.
-    ///
-    /// Bu test eskiden tersini koruyordu ("Faz 4'e kadar kapalı"). Kare
-    /// üretimi yazıldığında (karar #35) yön değişti; testin kendisi
-    /// silinmedi çünkü korunacak bir şey hâlâ var: rekabetçi olmayan bir
-    /// profilde ayar artık **yok sayılmamalı**. Sessizce yok sayılsaydı
-    /// kullanıcı profilinde açtığı özelliğin neden çalışmadığını
-    /// bulamazdı.
-    #[test]
-    fn kare_uretimi_rekabetci_olmayanda_korunuyor() {
-        let mut p = temel();
-        p.scaling.frame_generation = true;
-        let (p, duzeltmeler) = p.dogrula().unwrap();
-        assert!(p.scaling.frame_generation, "ayar yok sayıldı");
-        assert!(
-            !duzeltmeler.iter().any(|d| d.contains("kare üretimi")),
-            "kare üretimi için gereksiz düzeltme satırı: {duzeltmeler:?}"
-        );
     }
 
     #[test]

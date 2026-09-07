@@ -1,5 +1,5 @@
 /**
- * Üçüncü taraf lisanslar — EULA madde 8'in vaat ettiği ekran.
+ * Üçüncü taraf lisanslar.
  *
  * İki tasarım kararı:
  *

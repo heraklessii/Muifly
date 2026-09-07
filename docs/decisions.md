@@ -1652,3 +1652,72 @@ Denetim öncesi `cargo test` 473, `cargo clippy` sıfır uyarı veriyordu; yani
 bulunan sekiz kusurun hiçbiri var olan testlerin baktığı yerde değildi.
 Sekizinin de ortak sebebi aynı: **bu makinede görünmeyen bir yol**. Sonrası
 487 test.
+
+---
+
+## #39 — Ölçekleme, kare üretimi ve çeviri kaldırıldı; ürün açık kaynak ve ücretsiz oldu
+
+**Karar**: İki ayrı karar, aynı turda ve aynı yöne bakıyorlar.
+
+1. `scaling/` (Faz 3 + Faz 4a) ve `ceviri/` (Faz 5) modülleri, arayüz
+   panelleri, yardımcı pencereleri, testleri, belgeleri ve bağımlılıkları
+   **tamamen kaldırıldı**.
+2. Muifly kapalı kaynak/ücretli olmaktan çıktı: **Apache License 2.0**,
+   ücretsiz, tek sürüm. `surum.rs` ve `demo` derleme bayrağı da kalktı.
+
+**Neden (1)**: Proje sahibi ikisini de denedi. Ölçekleme ve kare üretimi
+"hem iyi çalışmıyor hem de bizi çok yoracak gibi duruyor". Bu, kodun
+kalitesiyle ilgili bir yargı değil, ürünün kapsamıyla ilgili: üç boru hattı
+(yakalama, D3D11 sunum, ONNX çıkarım) toplamda kod tabanının yarısıydı ve
+üçü de aracın asıl işine — sistem ve ağ optimizasyonuna — hiçbir şey
+katmıyordu.
+
+Kaldırmanın maliyeti dürüstçe yazılmalı: bunlar çalışan koddu. Faz 3'ün boru
+hattı bu makinede uçtan uca koştu, Faz 4a'nın hareket tahmini sentetik
+gerçek-referansı buluyordu, Faz 5'in modeli 1,7 s'de yükleniyor ve cümle
+başına 78-243 ms'de çeviriyordu. Hiçbiri "bozuk olduğu için" silinmedi;
+**gözle denendiğinde yeterince iyi olmadıkları ve bakım yükleri
+kazandırdıklarından büyük olduğu için** silindi.
+
+Silinen şey aynı zamanda üç fazlık bir kapsam genişlemesiydi ve bunun kökeni
+karar #33'te açıkça duruyor: Faz 1'in saha testi yapılmadan Faz 3'e
+geçilmişti. O borç Faz 4'te (#35) ve Faz 5'te (#37) iki kez daha taşındı.
+Üç fazın birden silinmesi, o borcun bir kerede ödenmesi.
+
+**Neden (2)**: Kapalı kaynak + ücretli model, kaldırılan üç modülün
+üzerine kuruluydu. `PRODUCT_VISION.md`'nin "üç kategoriyi tek araçta
+birleştiriyoruz, o yüzden Lossless Scaling'in biraz üzerinde fiyatlanır"
+gerekçesi, üç kategoriden ikisi silinince kalmadı. Geriye kalan (sistem +
+ağ) için ücret istemek, aynı belgedeki "rakiplerden ayrışma" argümanını
+zayıflatırdı.
+
+Apache 2.0, MIT değil: patent hükmü (madde 3) ve değişiklik bildirimi
+(madde 4b) bu üründe anlamlı. Mui ailesinin geri kalanıyla da aynı lisans.
+
+**Ne kaldırıldı, tam liste**:
+
+| Kaldırılan | Neydi |
+|---|---|
+| `src-tauri/src/scaling/` (9 dosya) | Desktop Duplication, 4 ölçekleme algoritması, kare üretimi, sunum penceresi, gecikme ölçümü |
+| `src-tauri/src/ceviri/` (15 dosya) | OCR, ONNX çeviri, model indirme, kısayol, çeviri belleği, terim sözlüğü |
+| `src-tauri/src/surum.rs` | Demo/tam sürüm kısıtları |
+| `src/components/` (4 dosya + 2 test) | Ölçekleme paneli, Çeviri paneli, overlay, alan seçici |
+| `src-tauri/capabilities/ceviri.json` | İki yardımcı pencerenin izin listesi |
+| `arac/ceviri-sonda/`, `arac/ocr-sonda/` | Fizibilite denemeleri (kararlar #28, #29) |
+| `arac/vitrin-hazirla.mjs` | Public "vitrin" deposu üreteci — dayanağı kaynağın kapalı olmasıydı |
+| `docs/FRAME_GENERATION.md` | Faz 4a tasarımı + 4b fizibilitesi |
+| `LICENSE.md` (EULA) | Yerine `LICENSE` (Apache 2.0) |
+| `ort`, `tokenizers` bağımlılıkları | ONNX Runtime ve SentencePiece |
+| 12 `windows` crate özelliği | WinRT OCR, D3D11/DXGI, WinHTTP, RegisterHotKey |
+
+**Ölçülen sonuç**: `cargo test` 487 → 286, `npm test` 79 → 51. Rust kaynağı
+~7.400 satır azaldı. Kalan testlerin hiçbiri düşmedi — kaldırılan yolların
+korumadığı hiçbir ürün duruşu yoktu.
+
+**Açık kalan bir tutarsızlık**: `competitive` bayrağı ve "Rekabetçi Mod"
+artık **hiçbir davranışı değiştirmiyor**. Koruduğu iki şey (kare üretimi ve
+agresif ölçekleme) silindi; geriye mod adı ve katalogdaki etiket kaldı.
+Bilerek bırakıldı — kaldırmak `katalog.json`'daki oyun kayıtlarına, mod
+sayımına ve oturum geçmişine dokunmak demek ve bu ayrı bir karar. Ama
+şeffaflık ilkesi açısından bir borç: kullanıcıya hiçbir şey yapmayan bir
+mod gösteriliyor. `tasks.md` → Değerlendirilecek.

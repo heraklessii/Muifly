@@ -8,7 +8,7 @@
 //! - `appcache/librarycache/<appid>/library_600x900.jpg` — kapak görseli
 //!
 //! Bunları okumak, IGDB/RAWG/SteamGridDB gibi servislere gitmekten her
-//! açıdan üstün: anahtar gömmek gerekmiyor (kapalı kaynak bir ikiliden
+//! açıdan üstün: anahtar gömmek gerekmiyor (dağıtılan bir ikiliden
 //! çıkarılabilirdi), kota yok, çevrimdışı çalışıyor ve kullanıcının
 //! kütüphanesi hiçbir sunucuya bildirilmiyor. `docs/decisions.md` #25.
 //!

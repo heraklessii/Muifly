@@ -18,18 +18,18 @@
 │  │ - process mgmt  │  │ - DNS test      │  │ - FPS okuma│ │
 │  │ - priority/     │  │ - route test    │  │ - ping/    │ │
 │  │   affinity      │  │ - QoS           │  │   jitter   │ │
-│  │ - power plan    │  │ - TCP tuning    │  │ - overlay  │ │
-│  │ - memory mgmt   │  │                 │  │   (DXGI)   │ │
+│  │ - power plan    │  │ - TCP tuning    │  │ - kare     │ │
+│  │                 │  │                 │  │   ölçümü   │ │
 │  └────────────────┘  └────────────────┘  └───────────┘ │
 │                                                          │
-│  ┌────────────────┐  ┌────────────────┐  ┌───────────┐ │
-│  │ scaling (Faz 3+)│  │ profile_engine  │  │ library   │ │
-│  │ - screen capture│  │ - JSON profil   │  │ - Steam/  │ │
-│  │ - upscale algo  │  │   yükleme       │  │   Epic     │ │
-│  │ - (Faz 4: ML     │  │ - oyun algılama │  │ - kapak/  │ │
-│  │   frame gen)     │  │ - mod state     │  │   ikon     │ │
-│  │                  │  │ - katalog       │  │ (yerel)    │ │
-│  └────────────────┘  └────────────────┘  └───────────┘ │
+│  ┌────────────────┐  ┌───────────┐                     │
+│  │ profile_engine  │  │ library   │                     │
+│  │ - JSON profil   │  │ - Steam/  │                     │
+│  │   yükleme       │  │   Epic     │                     │
+│  │ - oyun algılama │  │ - kapak/  │                     │
+│  │ - mod state     │  │   ikon     │                     │
+│  │ - katalog       │  │ (yerel)    │                     │
+│  └────────────────┘  └───────────┘                     │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -54,26 +54,15 @@
 ## Profil Sistemi (özet — detay `PROFILES.md`)
 
 Her oyun bir JSON profiline bağlanır: hangi process'ler suspend edilecek, hangi
-network ayarları uygulanacak, hangi scaling algoritması (varsa) kullanılacak.
+network ayarları uygulanacak.
 Profiller kullanıcı tarafından düzenlenebilir ve ileride community'de paylaşılabilir
 hale getirilebilir (henüz karar verilmedi, Faz 1 kapsamı dışında).
 
-## Ekran Yakalama / Scaling Mimarisi (Faz 3+ — ön tasarım)
-
-Lossless Scaling referans alınarak: motor entegrasyonu YOK, bunun yerine
-Windows Desktop Duplication API (veya DXGI) ile pencereli/kenarlıksız modda
-çalışan oyunun render edilmiş frame'i doğrudan yakalanır, upscale edilip tekrar
-gösterilir. Bu, `DESIGN_PRINCIPLES.md`'deki "injection yok" ilkesiyle uyumludur
-çünkü oyun sürecine hiçbir şey enjekte edilmez — sadece ekran çıktısı okunur.
-
 Detaylı modül arayüzleri ve fonksiyon imzaları: `MODULES.md`
-
-> Bu bölüm **ön tasarım**. Gerçekleşmiş hali aşağıda: "Ölçekleme boru hattı
-> (Faz 3 — uygulanmış)".
 
 ---
 
-# Uygulanmış Akış (1 Eylül 2026)
+# Uygulanmış Akış (7 Eylül 2026)
 
 Yukarıdaki şema hedefi, aşağısı kurulmuş olanı anlatıyor.
 
@@ -103,8 +92,6 @@ Yukarıdaki şema hedefi, aşağısı kurulmuş olanı anlatıyor.
 | `muifly://durum` | Mod değiştiğinde, ayar yazıldığında | Tam `Durum` |
 | `muifly://gunluk` | Mod değiştiğinde | Son 20 satır (arayüz tam listeyi ayrıca çekiyor) |
 | `muifly://ornek` | Her ölçümde | Tek `Ornek` |
-| `muifly://ceviri` | Çeviri isteği bittiğinde (başarılı ya da değil) | `(CeviriDurumu, Sonuc?)` |
-| `muifly://ceviri-indirme` | Model indirilirken, her tamponda | `IndirmeIlerlemesi` |
 
 Arayüz kendiliğinden yoklama (polling) yapmıyor.
 
@@ -146,69 +133,10 @@ bırakıyor; uzun süren ağ işleri (DNS karşılaştırması, yol testi) kilid
 almıyor ve `spawn_blocking` üzerinde koşuyor — o sırada arayüzün durum
 sorgusu bloke olmuyor.
 
-## Ölçekleme boru hattı (Faz 3 — uygulanmış)
+## Kaldırılan boru hatları
 
-Yukarıdaki "ön tasarım" bölümünün gerçekleşmiş hali. Karar #32.
-
-```text
-Desktop Duplication ──► ID3D11Texture2D ──► piksel gölgelendirici ──► sunum zinciri
-   (IDXGIOutputDuplication)   (kendi kopyamız)   (olcekleme.hlsl)     (üstteki pencere)
-                     hepsi TEK D3D11 cihazında; kare CPU'ya inmiyor
-```
-
-**Kendi iş parçacığında.** D3D11 nesneleri, çoğaltma ve pencere aynı iş
-parçacığında oluşturuluyor, kullanılıyor ve yok ediliyor. Pencere mesaj
-kuyruğu zaten onu yaratan iş parçacığına bağlı; nesneleri paylaşmaya
-çalışmak, kazanılacak bir şey olmadan bir sürü kilit demek olurdu.
-
-Motor'la paylaşım üç küçük parçadan ibaret: durum yapısı (`Mutex`), durdurma
-bayrağı (`AtomicBool`) ve seçili algoritma (`AtomicU8`). Algoritmanın atomik
-olması, çalışırken değiştirilebilmesi için: yeniden başlatmak ekranın bir
-anlığına kararması demek olurdu.
-
-**Açılış hatası çağırana dönüyor.** `Olcekleyici::baslat` iş parçacığını
-başlatıp açılış cevabını bir kanaldan bekliyor (5 sn). Yakalama açılamıyorsa
-(en sık sebep: oyunun münhasır tam ekranda olması) kullanıcı bunu düğmeye
-bastığı anda görüyor, arka planda sessizce çalışmayan bir özellik olarak
-değil.
-
-**Bu yol deftere yazmıyor.** Sistemde kalıcı bir iz yok; geri alınacak şey
-sürecin ömrüyle sınırlı bir pencere. Günlüğe başlangıç, algoritma ve **durma
-sebebi** yazılıyor. Oyun kapandığında (`oturumu_kapat`), rekabetçi moda
-geçildiğinde (`mod_guncelle`) ve "her şeyi geri al" düğmesinde ölçekleme
-duruyor.
-
-
-## Çeviri boru hattı (Faz 5 — uygulanmış)
-
-Karar #37. Yakalama katmanı Faz 3'ünkiyle **aynı** — ikinci bir yakalama
-yazılmadı.
-
-```text
-RegisterHotKey ──► yakalama ──► alan kesme ──► Windows.Media.Ocr ──► önişleme
-  (kendi iş                (scaling::                              (BÜYÜK HARF,
-   parçacığı)               yakalama)                               şüpheler)
-                                                                        │
-        overlay ◄── akış sonucu ◄── sözlük geri koy ◄── model ◄── cümlelere ayır
-     (üstteki pencere)                              (ONNX, 2 çekirdek)
-```
-
-**Üç iş parçacığı, üçü de ayrı sebeple.** Kısayolun kendi kuyruğu var
-(`RegisterHotKey` pencere sahibi olmadan çağrıldığında mesaj iş parçacığına
-düşüyor ve kaydı yapanla kaldıran aynı olmak zorunda). Çeviri kendi iş
-parçacığında koşuyor (bir istek saniyeler sürebiliyor). Arka plan döngüsü
-sonucu günlüğe yazıp arayüze yayınlıyor — iş parçacığının Motor'a erişimi yok.
-
-**Kısayol geri çağrısı hiçbir iş yapmıyor**, yalnızca bir kanala haber
-veriyor. Orada çeviri yapılsaydı, çeviri sürerken ikinci bir tuş basışı
-kuyrukta bekler ve kullanıcı "kısayol çalışmıyor" sanırdı.
-
-**Çeviri belleği her istekte diskten okunuyor.** Elde tutulan bir kopya,
-kullanıcı arayüzden bir çeviriyi düzelttiğinde ikisinden birinin diğerini
-ezmesi demek olurdu — üstelik ezilen taraf çoğu zaman kullanıcının kendi
-emeği olurdu.
-
-**Bu yol da deftere yazmıyor.** Kaydedilen tek sistem kaynağı klavye kısayolu
-ve o da sürecin ömrüyle sınırlı. Günlüğe açılma, kapanma ve her isteğin
-sonucu yazılıyor: bu program o an ekranı okumuş oluyor ve bunun görünür
-olması gerekiyor.
+Ölçekleme (Faz 3), kare üretimi (Faz 4a) ve ekran çevirisi (Faz 5) bu
+dosyada uzun uzun anlatılıyordu; üçü de karar #39'la silindi. Gerekçe ve o
+kodun ne öğrettiği `decisions.md` #39'da; mimari bir iz bırakmadılar çünkü
+üçü de deftere yazmıyordu — bıraktıkları tek kalıcı şey, "bu yollar deftere
+yazmıyor" istisnasının artık gereksiz olmasıydı.

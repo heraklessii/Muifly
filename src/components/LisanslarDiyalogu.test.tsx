@@ -2,7 +2,7 @@
  * Üçüncü taraf lisans ekranının iki duruşu testle korunuyor:
  *
  * 1. **Lisans metni olmayan bileşen gizlenmiyor.** Listeyi temiz göstermek
- *    için onları atlamak, EULA madde 8'in vaat ettiği listeyi eksik yapardı.
+ *    için onları atlamak, listeyi eksik yapardı.
  *    Eksik olan neyse o yazılıyor.
  * 2. **Metinler talep üzerine geliyor.** Açılışta hiçbir lisans metni
  *    çekilmiyor; bir megabaytlık veriyi kimsenin okumadığı bir ekran için

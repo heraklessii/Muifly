@@ -93,19 +93,6 @@ pub struct Motor {
     pub mod_: Mod,
     /// Biten oturumların diskteki kaydı (`monitor::gecmis`).
     pub gecmis: Gecmis,
-    /// Ölçekleme iş parçacığının denetleyicisi (`scaling`).
-    ///
-    /// Motor'un içinde duruyor çünkü mod geçişleri onu durdurmak zorunda:
-    /// rekabetçi moda geçildiğinde ya da oyun kapandığında açık kalan bir
-    /// ölçekleme penceresi, kullanıcının istemediği tek şey olurdu.
-    pub olcekleyici: crate::scaling::Olcekleyici,
-    /// Ekran çevirisinin denetleyicisi (`ceviri`, karar #37).
-    ///
-    /// Motor'un içinde duruyor çünkü çevrilecek alan ve çeviri belleği
-    /// **öndeki oyuna** bağlı (karar #22) ve öndeki oyunu Motor biliyor.
-    /// Karar #30 bu modülü bilerek Motor'a bağlamamıştı; o kararın açık
-    /// sorusu ("Muifly modülü mü, ayrı ürün mü") karar #37'de kapandı.
-    pub ceviri: crate::ceviri::Ceviri,
     ornekler: Tampon,
     ornekleyici: Ornekleyici,
     /// Optimizasyon uygulandığı an — karşılaştırma ve geçmiş kaydı için.
@@ -140,8 +127,6 @@ impl Motor {
             profiller,
             mod_: Mod::Bosta,
             gecmis: Gecmis::yukle(settings::gecmis_yolu()),
-            olcekleyici: crate::scaling::Olcekleyici::yeni(),
-            ceviri: crate::ceviri::Ceviri::yeni(),
             ornekler: Tampon::yeni(monitor::ORNEK_KAPASITESI),
             ornekleyici: Ornekleyici::yeni(),
             acik_oturum: None,
@@ -292,18 +277,8 @@ impl Motor {
             }
         }
 
-        // 5. ve 6. adım ağ modülüne ait. Demo ikilisinde kapalı; profil
-        // dosyasında istense bile uygulanmıyor ve atlandığı kullanıcıya
-        // söyleniyor — sessizce atlamak, profilde yazanla gerçeği ayırırdı.
-        let ag_acik = crate::surum::kisitlar().ag_modulu;
-        if !ag_acik && (profil.network.qos_priority || profil.network.tcp_nodelay) {
-            let m = "ağ ayarları atlandı: Network Boost demo sürümde kapalı".to_string();
-            self.gunluk.bilgi(Kategori::Ag, m.clone());
-            cikti.atlanan.push(m);
-        }
-
         // 5. QoS ilkesi.
-        if ag_acik && profil.network.qos_priority {
+        if profil.network.qos_priority {
             if let Some(exe) = profil.executable_names.first() {
                 let sonuc = network_boost::qos::ilke_olustur(exe);
                 self.uygula_ve_yaz(
@@ -319,7 +294,7 @@ impl Motor {
         }
 
         // 6. TCP ayarları.
-        if ag_acik && profil.network.tcp_nodelay {
+        if profil.network.tcp_nodelay {
             match network_boost::tcp::nagle_kapat() {
                 Ok((kayitlar, hatalar)) => {
                     if !kayitlar.is_empty() {
@@ -342,45 +317,6 @@ impl Motor {
                     let m = format!("TCP ayarı uygulanamadı — {}", crate::error::tek_satir(&e));
                     self.gunluk.uyari(Kategori::Ag, m.clone());
                     cikti.hatalar.push(m);
-                }
-            }
-        }
-
-        // 7. Ölçekleme (Faz 3).
-        //
-        // Deftere yazılmıyor ve bu bir istisna değil: açılan tek şey bir
-        // pencere ve o pencere sürecin ömrüyle sınırlı — geri alınacak
-        // kalıcı bir iz yok (`scaling` modül belgesi). Günlüğe ise yazıyor.
-        if profil.scaling.enabled {
-            let algo = profil.scaling.algoritma();
-            if profil.competitive || self.ayarlar.rekabetci_mod {
-                // Dosya doğrulaması bunu zaten kapatıyor; buradaki ikinci
-                // kapı, kullanıcının ayarlardan sonradan işaretlediği
-                // rekabetçi mod için.
-                let m = "rekabetçi modda ölçekleme açılmadı (gecikme ekliyor)".to_string();
-                self.gunluk.bilgi(Kategori::Sistem, m.clone());
-                cikti.atlanan.push(m);
-            } else {
-                let ekran = self.ayarlar.olcekleme_ekrani;
-                // Kare üretimi (Faz 4) profilden geliyor. Şemadaki
-                // doğrulama rekabetçi profillerde bunu zaten kapatıyor;
-                // buradaki atama o kararı taşıyor, yeniden vermiyor.
-                self.olcekleyici
-                    .uretim_ata(profil.scaling.frame_generation);
-                match self.olcekleyici.baslat(ekran, algo) {
-                    Ok(()) => {
-                        let ozet = format!("ölçekleme başladı ({})", algo.ad());
-                        self.gunluk
-                            .yaz(Duzey::Aksiyon, Kategori::Sistem, ozet.clone(), None);
-                        cikti.uygulanan.push(ozet);
-                    }
-                    Err(e) => {
-                        // Yakalama açılamamak beklenen bir durum (münhasır
-                        // tam ekran). Hata metni ne yapılacağını söylüyor.
-                        let m = format!("ölçekleme açılamadı — {e}");
-                        self.gunluk.uyari(Kategori::Sistem, m.clone());
-                        cikti.hatalar.push(m);
-                    }
                 }
             }
         }
@@ -485,11 +421,6 @@ impl Motor {
 
     /// Oyun kapandı / öne başka bir şey geldi: oturumluk her şeyi geri al.
     pub fn oturumu_kapat(&mut self) -> revert::Sonuc {
-        // Ölçekleme önce kapanıyor: oyun kapandıktan sonra ekranda üstte
-        // duran siyah bir pencere, geri alınmamış bir değişikliğin en
-        // görünür hali olurdu.
-        self.olceklemeyi_durdur("oturum kapandı");
-
         let sonuc = revert::oturumu_kapat(&mut self.defter, &mut self.gunluk);
         if sonuc.geri_alinan > 0 {
             self.gunluk.bilgi(
@@ -499,250 +430,6 @@ impl Motor {
         }
         self.oturumu_defterle(sonuc.geri_alinan);
         sonuc
-    }
-
-    // -----------------------------------------------------------------
-    // Ölçekleme (Faz 3)
-    // -----------------------------------------------------------------
-
-    /// Kullanıcının elle başlattığı ölçekleme.
-    ///
-    /// Rekabetçi modda reddediliyor — profil dosyasındaki kapının arayüz
-    /// tarafındaki eşi (`scaling::moda_uygun`).
-    pub fn olceklemeyi_baslat(&mut self, algo: crate::scaling::Algoritma) -> Result<()> {
-        if !crate::scaling::moda_uygun(&self.mod_) || self.ayarlar.rekabetci_mod {
-            return Err(crate::error::Error::ProfileInvalid(
-                "rekabetçi modda ölçekleme kapalı (gecikme ekliyor)".into(),
-            ));
-        }
-        let ekran = self.ayarlar.olcekleme_ekrani;
-        self.olcekleyici
-            .baslat(ekran, algo)
-            .map_err(|e| crate::error::Error::Olcum(e.to_string()))?;
-        self.gunluk.yaz(
-            Duzey::Aksiyon,
-            Kategori::Sistem,
-            format!("ölçekleme başladı ({})", algo.ad()),
-            None,
-        );
-        Ok(())
-    }
-
-    /// Ölçeklemeyi durdurur ve **neden** durduğunu günlüğe yazar.
-    ///
-    /// Sebep metni parametre: aynı fonksiyona hem kullanıcının düğmesinden
-    /// hem oturum kapanışından geliniyor ve günlükte ikisi ayrılabilmeli.
-    /// Çalışmıyorsa hiçbir şey yazılmıyor — olmayan bir işi günlüğe
-    /// yazmak yanlış beyan olurdu.
-    pub fn olceklemeyi_durdur(&mut self, sebep: &str) {
-        if !self.olcekleyici.calisiyor() {
-            return;
-        }
-        self.olcekleyici.durdur();
-        self.gunluk.yaz(
-            Duzey::GeriAlma,
-            Kategori::Sistem,
-            format!("ölçekleme durduruldu ({sebep})"),
-            None,
-        );
-    }
-
-    /// Ölçekleme kendi kendine, kaçış kısayoluyla durduysa bunu tamamlar.
-    ///
-    /// Döngü iş parçacığı kısayolu görüp çıkıyor ama günlüğe **yazamıyor**:
-    /// Motor'a erişimi yok. Bu iki adım burada kapanıyor — iş parçacığı
-    /// toplanıyor ve durdurma günlüğe geçiyor. Yazılmasaydı kullanıcının
-    /// ekranı kaplayan pencereyi kapattığı an günlükte iz bırakmazdı;
-    /// şeffaflık ilkesi "kullanıcının kendi yaptığı" için de geçerli.
-    ///
-    /// Dönüş: bu turda bir kaçış işlendi mi (arayüze durum yayınlamak için).
-    pub fn olcekleme_kacisini_isle(&mut self) -> bool {
-        if !self.olcekleyici.kacisi_devral() {
-            return false;
-        }
-        self.olcekleyici.durdur();
-        self.gunluk.yaz(
-            Duzey::GeriAlma,
-            Kategori::Sistem,
-            "ölçekleme durduruldu (kaçış kısayolu)".to_string(),
-            None,
-        );
-        true
-    }
-
-    /// Çalışan ölçeklemenin algoritmasını değiştirir.
-    pub fn olcekleme_algoritmasi(&mut self, algo: crate::scaling::Algoritma) {
-        self.olcekleyici.algoritma_ata(algo);
-        if self.olcekleyici.calisiyor() {
-            self.gunluk.bilgi(
-                Kategori::Sistem,
-                format!("ölçekleme algoritması: {}", algo.ad()),
-            );
-        }
-    }
-
-    pub fn olcekleme_durumu(&self) -> crate::scaling::OlceklemeDurumu {
-        self.olcekleyici.durum()
-    }
-
-    /// Kare üretimini (Faz 4) açar/kapatır.
-    ///
-    /// Rekabetçi modda **açılmıyor**: kare üretimi tanımı gereği bir kareyi
-    /// elde tutuyor ve rekabetçi mod tam olarak o beklemeyi en aza indirmek
-    /// için var. Profil şemasındaki kapının çalışma zamanı eşi — kullanıcı
-    /// rekabetçi modu sonradan işaretlemiş olabilir.
-    ///
-    /// Günlüğe yazıyor: gecikme ekleyen bir özelliğin ne zaman açıldığı,
-    /// kullanıcının sonradan "neden böyle hissediyor" sorusunun cevabı.
-    pub fn olcekleme_uretimi(&mut self, acik: bool) -> Result<()> {
-        if acik && (!crate::scaling::moda_uygun(&self.mod_) || self.ayarlar.rekabetci_mod) {
-            return Err(crate::error::Error::ProfileInvalid(
-                "rekabetçi modda kare üretimi kapalı (bir kareyi elde tutuyor)".into(),
-            ));
-        }
-        self.olcekleyici.uretim_ata(acik);
-        self.gunluk.bilgi(
-            Kategori::Sistem,
-            if acik {
-                "kare üretimi açıldı"
-            } else {
-                "kare üretimi kapatıldı"
-            },
-        );
-        Ok(())
-    }
-
-    // -----------------------------------------------------------------
-    // Ekran çevirisi (Faz 5, karar #37)
-    // -----------------------------------------------------------------
-
-    /// Çevirinin o anki yapılandırması: öndeki oyun + ayarlar.
-    ///
-    /// Alan ve dil **profilden** geliyor (karar #22), ekran ve boşta düşme
-    /// süresi ayarlardan: ilki oyuna, ikincisi makineye ait bir tercih.
-    /// Profil yoksa ekranın tamamı okunuyor — alan seçmeden hiç çalışmayan
-    /// bir özellik yapmak için sebep yok (karar #28 tam kare için 74 ms
-    /// ölçtü).
-    pub fn ceviri_yapilandirmasi(&self) -> crate::ceviri::Yapilandirma {
-        let profil = self.aktif_profil();
-        let bolum = profil.as_ref().map(|p| &p.ceviri);
-        crate::ceviri::Yapilandirma {
-            ekran: self.ayarlar.ceviri_ekrani,
-            alan: bolum
-                .and_then(|b| b.region)
-                .unwrap_or_else(crate::ceviri::Alan::tam_ekran),
-            oyun: self.ceviri_oyunu(),
-            kaynak_dil: bolum
-                .and_then(|b| b.source_language.clone())
-                .unwrap_or_else(|| crate::ceviri::denetleyici::KAYNAK_DIL.to_string()),
-            bosta_dusur_sn: self.ayarlar.ceviri_bosta_dusur_sn as u64,
-        }
-    }
-
-    /// Çeviri belleğinin bağlanacağı ad.
-    ///
-    /// Profil kimliği tercih ediliyor: aynı oyunun iki farklı
-    /// çalıştırılabilir dosyası (launcher + oyun) tek bir belleği
-    /// paylaşmalı. Profil yoksa süreç adı; o da yoksa "genel" — hiçbir oyun
-    /// önde değilken yapılan denemeler bir oyunun belleğini kirletmesin.
-    pub fn ceviri_oyunu(&self) -> String {
-        if let Some(p) = self.aktif_profil() {
-            return p.profile_id.clone();
-        }
-        match self.mod_.surec() {
-            Some(s) if !s.trim().is_empty() => s.to_string(),
-            _ => "genel".to_string(),
-        }
-    }
-
-    /// Öndeki oyunun profili (varsa).
-    fn aktif_profil(&self) -> Option<&Profil> {
-        let kimlik = match &self.mod_ {
-            Mod::OyunProfili { profil_id, .. }
-            | Mod::Rekabetci {
-                profil_id: Some(profil_id),
-                ..
-            } => profil_id.as_str(),
-            _ => return None,
-        };
-        self.profiller.iter().find(|p| p.profile_id == kimlik)
-    }
-
-    /// Çeviriyi açar (kısayolu kaydeder).
-    ///
-    /// Hata **çağırana** dönüyor: kısayol kaydedilemediyse kullanıcı bunu
-    /// hemen görmeli, yoksa tuşa basıp hiçbir şey olmamasını izler.
-    pub fn ceviriyi_ac(&mut self) -> Result<()> {
-        let y = self.ceviri_yapilandirmasi();
-        self.ceviri.ac(y)?;
-        let kisayol = self
-            .ceviri
-            .durum()
-            .kisayol
-            .unwrap_or_else(|| "-".to_string());
-        self.gunluk.bilgi(
-            Kategori::Uygulama,
-            format!("ekran çevirisi açıldı (kısayol {kisayol})"),
-        );
-        Ok(())
-    }
-
-    /// Çeviriyi kapatır ve kısayolu sisteme geri bırakır.
-    pub fn ceviriyi_kapat(&mut self, sebep: &str) {
-        if !self.ceviri.acik() {
-            return;
-        }
-        self.ceviri.kapat();
-        self.gunluk.bilgi(
-            Kategori::Uygulama,
-            format!("ekran çevirisi kapatıldı ({sebep})"),
-        );
-    }
-
-    /// Öndeki oyun değiştiğinde çevirinin alanını ve belleğini tazeler.
-    ///
-    /// Yeniden başlatma yok: kısayol elde kalıyor. Başka türlüsü, oyun
-    /// değiştiği her an kombinasyonu bırakıp yeniden istemek olurdu ve
-    /// aradaki boşlukta başka bir uygulama onu kapabilirdi.
-    pub fn ceviriyi_tazele(&mut self) {
-        if !self.ceviri.acik() {
-            return;
-        }
-        let y = self.ceviri_yapilandirmasi();
-        self.ceviri.yapilandir(y);
-    }
-
-    /// Yeni bir çeviri sonucu geldiyse günlüğe yazar.
-    ///
-    /// Ölçeklemenin kaçış bayrağıyla aynı yapı (karar #34): iş parçacığının
-    /// Motor'a erişimi yok, günlük satırı burada düşüyor. Şeffaflık ilkesi
-    /// çeviri için de geçerli — hangi metnin ne zaman okunduğu görünür
-    /// olmalı, çünkü bu program o an ekranı okumuş oluyor.
-    ///
-    /// Dönüş: bu turda bir sonuç işlendi mi (arayüze olay yayınlamak için).
-    pub fn ceviri_sonucunu_isle(&mut self) -> bool {
-        if !self.ceviri.sonucu_devral() {
-            return false;
-        }
-        let durum = self.ceviri.durum();
-        match durum.son_hata {
-            Some(hata) => {
-                self.gunluk
-                    .uyari(Kategori::Uygulama, format!("ekran çevirisi: {hata}"));
-            }
-            None => {
-                let sonuc = self.ceviri.son_sonuc();
-                let birim = sonuc.as_ref().map(|s| s.birimler.len()).unwrap_or(0);
-                let bellekten = sonuc.as_ref().map(|s| s.bellekten).unwrap_or(0);
-                self.gunluk.bilgi(
-                    Kategori::Uygulama,
-                    format!(
-                        "ekran çevirisi: {birim} birim okundu ({bellekten} tanesi bellekten)"
-                    ),
-                );
-            }
-        }
-        true
     }
 
     pub fn gecmis_ozeti(&self) -> GecmisOzeti {
@@ -778,11 +465,6 @@ impl Motor {
 
     /// Kullanıcının "varsayılana dön" düğmesi.
     pub fn hepsini_geri_al(&mut self) -> revert::Sonuc {
-        // "Her şeyi geri al" düğmesine basan kullanıcı ekranda duran
-        // ölçekleme penceresini de kastediyor; defterde kaydı olmadığı için
-        // burada ayrıca kapatılıyor.
-        self.olceklemeyi_durdur("her şey geri alındı");
-
         // Muifly'ın kendi QoS ilkeleri deftere yazılıyor ama defter kaybolmuş
         // olabilir (elle silinen dosya). Ön ekli ilkeler ayrıca süpürülüyor.
         if let Ok(adet) = network_boost::qos::bizim_ilkeleri_kaldir() {
@@ -848,22 +530,6 @@ impl Motor {
             format!("mod: {} → {}", self.mod_.ad(), yeni.ad()),
         );
         self.mod_ = yeni.clone();
-
-        // Rekabetçi moda geçildiyse ölçekleme kapanıyor. Kullanıcı bu modu
-        // gecikmeyi en aza indirmek için seçiyor; gecikme ekleyen bir
-        // pencerenin açık kalması, seçimin tersini yapmak olurdu.
-        if !crate::scaling::moda_uygun(&self.mod_) {
-            self.olceklemeyi_durdur("rekabetçi moda geçildi");
-        }
-
-        // Çeviri KAPATILMIYOR, yalnızca tazeleniyor (karar #37).
-        //
-        // Ölçekleme her karede gecikme ekliyor, o yüzden rekabetçi modda
-        // kapanıyor. Çeviri ise kullanıcının tuşa bastığı anda bir kez
-        // çalışıyor; rekabetçi modda kapatmak, kullanıcının açıkça
-        // istediği bir işi reddetmek olurdu. Tazeleme şart: yeni oyunun
-        // alanı ve çeviri belleği başka.
-        self.ceviriyi_tazele();
 
         Some(ModDegisimi { yeni, geri_alinan })
     }
@@ -1077,12 +743,6 @@ mod testler {
             profiller: Vec::new(),
             mod_: Mod::Bosta,
             gecmis: Gecmis::bellekte(),
-            // Başlatılmamış ölçekleyici hiçbir iş parçacığı açmıyor: saf
-            // mantık testleri ekrana ve D3D11'e dokunmuyor.
-            olcekleyici: crate::scaling::Olcekleyici::yeni(),
-            // Aynı gerekçe çeviri için de geçerli: açılmamış bir denetleyici
-            // ne kısayol kaydediyor ne iş parçacığı açıyor.
-            ceviri: crate::ceviri::Ceviri::yeni(),
             ornekler: Tampon::yeni(100),
             ornekleyici: Ornekleyici::yeni(),
             acik_oturum: None,

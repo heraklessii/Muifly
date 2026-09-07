@@ -20,11 +20,10 @@
  *    aynı anda değişiyor.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { AgPaneli } from './components/AgPaneli';
 import { AyarlarPaneli } from './components/AyarlarPaneli';
-import { CeviriPaneli } from './components/CeviriPaneli';
 import { DurumPaneli } from './components/DurumPaneli';
 import { GecmisPaneli } from './components/GecmisPaneli';
 import { GunlukPaneli } from './components/GunlukPaneli';
@@ -32,33 +31,29 @@ import {
   IconAg,
   IconAy,
   IconAyarlar,
-  IconCeviri,
   IconDurum,
   IconGecmis,
   IconGunes,
   IconGunluk,
   IconMuifly,
-  IconOlcekleme,
   IconProfil,
   IconUyari,
 } from './components/Icons';
 import { IceAktarmaDiyalogu } from './components/IceAktarmaDiyalogu';
 import { KutuphaneDiyalogu } from './components/KutuphaneDiyalogu';
-import { OlceklemePaneli } from './components/OlceklemePaneli';
 import { ProfilDiyalogu } from './components/ProfilDiyalogu';
 import { ProfilPaneli } from './components/ProfilPaneli';
 import { Sparkline } from './components/Sparkline';
 import { Toasts, useToasts } from './components/Toasts';
 import * as api from './lib/api';
 import { sayi } from './lib/format';
-import { modRengi, modSureci, TAM_SURUM } from './lib/types';
+import { modRengi, modSureci } from './lib/types';
 import type {
   Ayarlar,
   Durum,
   GecmisOzeti,
   Karsilastirma,
   Kayit,
-  Kisitlar,
   Onizleme,
   Ornek,
   OturumKaydi,
@@ -72,8 +67,6 @@ type Sekme =
   | 'durum'
   | 'profiller'
   | 'ag'
-  | 'olcekleme'
-  | 'ceviri'
   | 'gunluk'
   | 'gecmis'
   | 'ayarlar';
@@ -105,18 +98,6 @@ const SEKMELER: {
     ad: 'Ağ',
     alt: 'Ölçüm ve gözlem. DNS ve yönlendirme Muifly tarafından değiştirilmez.',
     Ikon: IconAg,
-  },
-  {
-    id: 'olcekleme',
-    ad: 'Ölçekleme',
-    alt: 'Ekranı okuyup büyütür. Oyuna dokunmaz; eklediği gecikme ölçülüp gösterilir.',
-    Ikon: IconOlcekleme,
-  },
-  {
-    id: 'ceviri',
-    ad: 'Çeviri',
-    alt: 'Tuşa basınca ekrandaki yazıyı okur ve bu bilgisayarda çevirir. Hiçbir metin dışarı gitmez.',
-    Ikon: IconCeviri,
   },
   {
     id: 'gunluk',
@@ -156,7 +137,6 @@ export default function App() {
   const [gecmisOzeti, setGecmisOzeti] = useState<GecmisOzeti | null>(null);
   const [yapilmayanlar, setYapilmayanlar] = useState<[string, string][]>([]);
   const [surum, setSurum] = useState('');
-  const [kisitlar, setKisitlar] = useState<Kisitlar>(TAM_SURUM);
   const [mesgul, setMesgul] = useState(false);
   const [diyalog, setDiyalog] = useState<{ profil: Profil | null; yeni: boolean } | null>(null);
   const [onizleme, setOnizleme] = useState<Onizleme | null>(null);
@@ -190,7 +170,6 @@ export default function App() {
 
   useEffect(() => {
     api.surum().then(setSurum).catch(() => setSurum(''));
-    api.kisitlar().then(setKisitlar).catch(() => setKisitlar(TAM_SURUM));
     api.yapilmayanlar().then(setYapilmayanlar).catch(() => setYapilmayanlar([]));
     tazele().catch((e) => goster('hata', String(e)));
   }, [tazele, goster]);
@@ -225,20 +204,7 @@ export default function App() {
     if (durum) document.documentElement.dataset.theme = durum.ayarlar.tema;
   }, [durum?.ayarlar.tema]);
 
-  // Görünen sekmeler: demoda ağ modülü yok, sekme "kapalı" diye gösterilmek
-  // yerine hiç gösterilmiyor (karar #20).
-  const gorunen = useMemo(
-    () => SEKMELER.filter(({ id }) => id !== 'ag' || kisitlar.agModulu),
-    [kisitlar.agModulu],
-  );
-
-  /**
-   * Ctrl+1..n ile sekme değiştirme.
-   *
-   * Numaralar GÖRÜNEN sekmelere göre: demoda ağ sekmesi yokken Ctrl+3 Günlük'ü
-   * açıyor. Kısayolun ekrandaki sıralamayı takip etmesi, gizli bir sekmeye
-   * götürmesinden iyi.
-   */
+  /** Ctrl+1..n ile sekme değiştirme — numaralar kenar çubuğundaki sırayla. */
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -246,13 +212,13 @@ export default function App() {
       // görünmez hale getirirdi.
       if (diyalog || onizleme || kutuphane) return;
       const no = Number(e.key);
-      if (!Number.isInteger(no) || no < 1 || no > gorunen.length) return;
+      if (!Number.isInteger(no) || no < 1 || no > SEKMELER.length) return;
       e.preventDefault();
-      setSekme(gorunen[no - 1].id);
+      setSekme(SEKMELER[no - 1].id);
     };
     window.addEventListener('keydown', f);
     return () => window.removeEventListener('keydown', f);
-  }, [gorunen, diyalog, onizleme, kutuphane]);
+  }, [diyalog, onizleme, kutuphane]);
 
   /** Uzun süren bir işlemi çalıştırır, hatayı bildirir, sonunda tazeler. */
   const islem = useCallback(
@@ -372,12 +338,12 @@ export default function App() {
           <IconMuifly />
           <span className="brand">
             <strong>Muifly</strong>
-            <span>{surum ? `v${surum}${kisitlar.demo ? ' · demo' : ''}` : 'yükleniyor'}</span>
+            <span>{surum ? `v${surum}` : 'yükleniyor'}</span>
           </span>
         </div>
 
         <nav className="rail__nav" aria-label="Bölümler">
-          {gorunen.map(({ id, ad, Ikon }, i) => {
+          {SEKMELER.map(({ id, ad, Ikon }, i) => {
             const rozet = id === 'gunluk' && durum.bekleyenGeriAlma > 0;
             return (
               <button
@@ -494,7 +460,6 @@ export default function App() {
             <ProfilPaneli
               profiller={profiller}
               durum={durum}
-              kisitlar={kisitlar}
               mesgul={mesgul}
               onYeni={() => setDiyalog({ profil: null, yeni: true })}
               onKutuphane={() => setKutuphane(true)}
@@ -516,45 +481,13 @@ export default function App() {
             />
           )}
 
-          {sekme === 'ag' && kisitlar.agModulu && (
+          {sekme === 'ag' && (
             <AgPaneli
               yonetici={durum.yonetici}
               gecikmeHedefi={durum.ayarlar.gecikmeHedefi}
               mesgul={mesgul}
               onIslem={islem}
               onBildir={goster}
-            />
-          )}
-
-          {sekme === 'olcekleme' && (
-            <OlceklemePaneli
-              rekabetciMod={durum.ayarlar.rekabetciMod}
-              olceklemeEkrani={durum.ayarlar.olceklemeEkrani}
-              mesgul={mesgul}
-              onIslem={islem}
-              onBildir={goster}
-              onEkranDegistir={(indeks) =>
-                ayarDegistir({ ...durum.ayarlar, olceklemeEkrani: indeks })
-              }
-              onAyarlara={() => setSekme('ayarlar')}
-            />
-          )}
-
-          {sekme === 'ceviri' && (
-            <CeviriPaneli
-              ceviriEkrani={durum.ayarlar.ceviriEkrani}
-              overlayAcik={durum.ayarlar.ceviriOverlay}
-              profiller={profiller}
-              mesgul={mesgul}
-              onIslem={islem}
-              onBildir={goster}
-              onEkranDegistir={(indeks) =>
-                ayarDegistir({ ...durum.ayarlar, ceviriEkrani: indeks })
-              }
-              onOverlayDegistir={(acik) =>
-                ayarDegistir({ ...durum.ayarlar, ceviriOverlay: acik })
-              }
-              onAyarlara={() => setSekme('ayarlar')}
             />
           )}
 
@@ -598,7 +531,6 @@ export default function App() {
             <AyarlarPaneli
               ayarlar={durum.ayarlar}
               durum={durum}
-              kisitlar={kisitlar}
               surum={surum}
               onDegistir={ayarDegistir}
               onOtomatikBaslatma={(acik) =>

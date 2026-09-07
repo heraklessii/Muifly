@@ -1,188 +1,105 @@
-# Dağıtım, Lisans ve Ticari Model
+# Dağıtım ve Lisans
 
-> Bu dosya "Muifly nasıl satılıyor ve ne açık, ne kapalı" sorusunun tek
-> otoritesidir. Bir yerde (README, site, mağaza metni, UI) bununla çelişen bir
-> ifade görülürse, doğru olan burasıdır.
+> Bu dosya "Muifly nasıl dağıtılıyor ve hangi lisansla" sorusunun tek
+> otoritesidir. Bir yerde (README, site, UI) bununla çelişen bir ifade
+> görülürse, doğru olan burasıdır.
 
 ## Temel Karar
 
-**Muifly kapalı kaynak, tek seferlik ücretli bir üründür.**
+**Muifly ücretsiz ve açık kaynaktır — Apache License 2.0.**
 
-- Kaynak kodu yayınlanmaz. Repo özeldir (private).
-- Abonelik yok, reklam yok, oyun içi satın alma yok, telemetri yok.
-- Ücretsiz ve fonksiyon olarak sınırlı bir **demo** vardır (aşağıda kapsamı).
+- Kaynak kod GitHub'da yayınlanır, depo public'tir.
+- Ücret yok, abonelik yok, reklam yok, oyun içi satın alma yok, telemetri yok.
+- Demo/tam sürüm ayrımı **yok**: tek bir ikili, bütün özellikleriyle.
 
-Bu, Mui ailesindeki diğer projelerden bilinçli bir ayrımdır: Muiget ve Muivly
-açık kaynak/ücretsizdir, Muifly değildir. Yeni bir oturum "Mui projeleri açık
-kaynak olur" varsayımıyla hareket etmemelidir.
+Bu, karar #39'la değişti; öncesinde Muifly kapalı kaynak ve tek seferlik
+ücretli olarak planlanıyordu. Artık Mui ailesindeki diğer projelerle
+(Muiget, Muivly) aynı modelde.
 
-## "Şeffaflık" ne demek, ne demek değil
+## Neden Apache 2.0
 
-`DESIGN_PRINCIPLES.md` madde 2'deki şeffaflık ilkesi **çalışma zamanı
-şeffaflığıdır**, kaynak kodu şeffaflığı değil:
+- Patent hükmü var (madde 3): katkı gönderen, katkısındaki patentler için
+  kullanıcılara lisans vermiş oluyor. MIT'te bu boşluk açık.
+- İzin verici: kullanıcıyı da, kurumsal bir kullanımı da kısıtlamıyor.
+- Değişiklik bildirimi (madde 4b) istiyor: fork'lanmış bir sürümün
+  değiştirildiği görünür kalıyor.
+- Mui ailesinin geri kalanıyla aynı lisans — bir kullanıcının iki proje için
+  iki farklı lisans metni okuması gerekmiyor.
 
-| Şeffaflık = | Şeffaflık ≠ |
+Katkı gönderen, Apache 2.0 madde 5 uyarınca katkısını aynı lisansla
+lisanslamış sayılıyor. Ayrı bir CLA yok: solo bir projede CLA, gönderilen
+yamaların önündeki en gereksiz eşik.
+
+## "Şeffaflık" ne demek
+
+`DESIGN_PRINCIPLES.md` madde 2'deki şeffaflık ilkesi iki katmanlı:
+
+| Katman | Ne demek |
 |---|---|
-| Hangi process durduruldu, listede görünür | Kaynak kodun okunabilir olması |
-| Hangi ayar hangi değerden hangi değere geçti, loglanır | Derleme adımlarının yayınlanması |
-| Her değişiklik tek tıkla geri alınabilir | Lisansın izin verici olması |
-| Ne zaman ağa çıkıldığı kullanıcıya söylenir | Repo'nun public olması |
+| **Çalışma zamanı** | Hangi süreç durduruldu, hangi ayar hangi değerden hangi değere geçti, ne zaman geri alındı, ne zaman ağa çıkıldı — hepsi ekranda |
+| **Kaynak** | Kod okunabilir, derlenebilir, çatallanabilir |
 
-Bu ayrım pazarlama metninde de korunur: "açık kaynak" ya da "open source"
-kelimeleri Muifly için **hiçbir yerde kullanılmaz**. Kullanılacak dil:
-"ne yaptığını gösteren", "geri alınabilir", "kara kutu değil".
+İkisi ayrı işler ve ikisi de gerekli. Kaynak açık diye çalışma zamanı
+günlüğünden vazgeçilmiyor: kimse bir aracı her çalıştırmadan önce kaynağını
+okumuyor.
 
 ## Kanallar
 
 | Kanal | Rol | Ne var |
 |---|---|---|
-| **Steam** | Birincil satış kanalı | Tam sürüm (ücretli), demo (Steam demo uygulaması), duyurular, kullanıcı yorumları |
-| **itch.io** | İkincil satış kanalı | Aynı tam sürüm, DRM'siz indirme, Steam'in %30'unu istemeyen alıcı için |
-| **GitHub** | Yalnızca tanıtım + demo dağıtımı | Public bir "site" reposu: GitHub Pages tanıtım sayfası, demo binary'si Releases'te, issue takibi (hata bildirimi). **Kaynak kod yok.** |
+| **GitHub** | Birincil | Kaynak kod, Releases'te imzalı kurulum paketi, Issues'ta hata takibi, Pages'te tanıtım sayfası |
 
-### GitHub reposunun kapsamı (net sınır)
+Tek depo: `heraklessii/Muifly`, public. Eskiden var olan "vitrin deposu"
+ayrımı (`arac/vitrin-hazirla.mjs`) kaldırıldı — dayanağı kaynak kodun kapalı
+olmasıydı.
 
-İki depo var ve adları sabit:
+Steam ve itch.io yayını şu an planda değil. İleride yapılırsa lisans
+değişmez: Apache 2.0 ücretli dağıtımı yasaklamıyor, ama kaynak açık olduğu
+sürece o kanalın satacağı şey kolaylıktır (otomatik güncelleme, kurulum),
+ürünün kendisi değil.
 
-| Depo | Görünürlük | İçerik |
-|---|---|---|
-| `heraklessii/Muifly` | **public** | Vitrin: tanıtım sayfası, README, EULA, Releases (demo), Issues |
-| `heraklessii/Muifly-dev` | **private** | Geliştirme: kaynak, belgeler, araçlar, CI |
-
-Site içindeki bağlantılar (`site/index.html` → Releases, Issues, EULA)
-public depoyu gösteriyor; bu yüzden public deponun adı `Muifly`.
-
-Public repo **sadece** şunları içerir:
-
-- `site/` — GitHub Pages tanıtım sayfası (bu depodaki `site/` klasörü)
-- `README.md` — ürün tanıtımı, mağaza linkleri, demo indirme linki
-- `LICENSE.md` — **EULA** (son kullanıcı lisans sözleşmesi), açık kaynak lisansı değil
-- Releases — yalnızca **demo** binary'si (imzalı kurulum dosyası)
-- Issues — hata bildirimi ve özellik isteği
-
-Public repoya **asla** girmeyecekler: `src/`, `src-tauri/`, `docs/` (bu iç
-belgeler), profil üretim araçları, imzalama anahtarları.
-
-Bu ayrım fiziksel olarak korunur: geliştirme deposu ayrı ve private'tır.
-Yayın süreci, private depodan public depoya **derlenmiş çıktı ve site
-klasörünü kopyalamaktır**, kaynak kodu değil.
-
-Kopyalama elle yapılmıyor — `arac/vitrin-hazirla.mjs` bir **izin listesine**
-göre kopyalıyor ve hedefte kaynak kod bulursa duruyor:
+## Derleme
 
 ```bash
-node arac/vitrin-hazirla.mjs ../Muifly-vitrin
+npm install
+node arac/olcum-yardimcisi-hazirla.mjs   # kare ölçümü sidecar'ı — build ÖNCESİ şart
+npm run tauri build
 ```
 
-Betik git komutu çalıştırmıyor: dosyaları hazırlıyor, `git push` insana
-kalıyor. Kaynak kodun public depoya sızması geri alınamaz bir olay (git
-geçmişi ve GitHub önbelleği kalır), o yüzden iki kapı da kapalı — izin
-listesi ve çıkıştaki yasaklı yol kontrolü.
+Gerekenler: Rust 1.77.2+, Node.js 20+, Visual Studio Build Tools (C++ iş yükü).
 
-## Demo Kapsamı
+## Sürüm ve güncelleme
 
-Demo, ürünü "kısıtlanmış" değil "eksiksiz ama dar" gösterir — kullanıcı
-gerçekten çalıştığını kendi makinesinde görmeli, çünkü bu kategoride en büyük
-satın alma engeli "acaba placebo mu" şüphesidir.
-
-**Demoda VAR:**
-- System Boost'un tamamı, tek bir oyun profili sınırıyla (kullanıcı 1 profil
-  oluşturabilir)
-- Öncesi/sonrası ölçüm ve karşılaştırma raporu (satın alma kararını veren şey bu)
-- Şeffaflık log ekranı, tam haliyle
-- Geri alma (revert) mekanizmasının tamamı
-
-**Demoda YOK:**
-- Network Boost (Faz 2)
-- Scaling (Faz 3+)
-- Sınırsız profil, profil içe/dışa aktarma
-- Sistem açılışı modu (otomatik başlatma)
-
-**Henüz karara bağlanmadı**: Ölçekleme (Faz 3) ve ekran çevirisi (Faz 5) şu an
-demo ikilisinde de **açık** — `surum.rs`teki kısıt listesine eklenmediler.
-İkisi de bilinçli bir bekletme, unutma değil: demo kapsamı bir ürün kararı ve
-listeye bir özellik eklemek onu geri almaktan kolay. `tasks.md` →
-Değerlendirilecek.
-
-**Demoda asla olmayacak**: zaman sınırı (7 gün deneme), kapanma sayacı, nag
-ekranı. Demo süresiz çalışır. Sınır özellik seviyesindedir, zaman seviyesinde
-değil — çünkü zaman sınırı, ürünün "geri alınabilirlik" vaadiyle çelişen bir
-baskı aracıdır.
-
-### Nasıl derleniyor
-
-```bash
-cargo build --release --features demo    # src-tauri/ içinde
-```
-
-Kısıtlar `src-tauri/src/surum.rs` içindeki `Kisitlar` yapısında, tek yerde
-(karar #20). Çalışma zamanı lisans kontrolü, anahtar doğrulama ya da sunucuya
-sorma yok — demo ayrı bir ikili.
-
-**Demoda da tamamen açık olan iki yol**: geri alma ve temizlik. Otomatik
-başlatmayı *kapatmak* ve QoS ilkelerini kaldırmak demoda da çalışıyor. Sürüm
-farkı, kullanıcının sistemine bırakılan izi hiçbir koşulda artırmamalı.
-
-## Fiyatlandırma
-
-- Hedef aralık: **Lossless Scaling'in ($6.99) biraz üzerinde**, çünkü Muifly üç
-  kategoriyi birleştiriyor. Faz 1+2 yayındayken $7.99–9.99 bandı makul.
-- Faz 3 (scaling) eklenince fiyat artışı yapılabilir; **önceden satın alanlar
-  ücretsiz alır** (Steam'de standart davranış, ayrıca duyurulur).
-- İndirim politikası: Steam sezon indirimleri normal, ama %75+ derin indirim
-  yapılmaz — bu kategoride derin indirim "değersiz araç" sinyali veriyor.
-- itch.io fiyatı Steam ile aynı tutulur. Fiyat farkı kanal çatışması yaratır.
-
-## Lisans Modeli (teknik)
-
-- **DRM yok.** Steam'in kendi sahiplik kontrolü (Steamworks) dışında ek bir
-  aktivasyon/lisans sunucusu yok. itch.io sürümü tamamen DRM'siz.
+- **DRM yok, lisans anahtarı yok, aktivasyon sunucusu yok.**
 - Program çalışmak için **hiçbir zaman** ağa çıkmak zorunda değildir. Ağ
-  erişimi yalnızca kullanıcının açıkça başlattığı işlemlerde olur (DNS/route
-  testi, sürüm kontrolü, ekran çevirisi modelinin indirilmesi) ve bu her
-  seferinde loglanır.
-- **Çeviri modeli** (Faz 5) tek istisna gibi görünebilir ama değil: kuruluma
-  dahil değil, yalnızca kullanıcı "indir" dediğinde iniyor, adresi kodda
-  sabit ve inen her dosya SHA-256 ile doğrulanıyor. İndirilmezse ekran
-  çevirisi dışındaki her şey aynen çalışır.
-- Lisans anahtarı doğrulama sunucusu kurulmaz. Solo geliştirici için bakım
-  yükü, engellediği korsanlıktan büyük.
+  erişimi yalnızca kullanıcının açıkça başlattığı işlemlerde olur (DNS/yol
+  testi, gecikme ölçümü) ve her seferinde günlüğe yazılır.
+- Otomatik güncelleme yok. Yeni sürüm Releases'e konuyor.
 
-## Mağaza Sayfası Gereksinimleri (yayın öncesi kontrol listesi)
+## Yayın kontrol listesi
 
-`DESIGN_PRINCIPLES.md` madde 4 (sayısal vaat yok) mağaza metni için de
-geçerlidir — hatta orada daha kritiktir, çünkü Steam yorumlarında "vaat edilen
-FPS artışı gelmedi" en hızlı puan düşüren şikayettir.
+`DESIGN_PRINCIPLES.md` madde 4 (sayısal vaat yok) yayın metinleri için de
+geçerlidir.
 
-- [ ] Steam mağaza açıklaması: sayısal iddia içermiyor
+- [ ] README ve site: sayısal iddia içermiyor
 - [ ] Ekran görüntüleri: gerçek uygulamadan, düzenlenmemiş
-- [ ] Tanıtım videosu: öncesi/sonrası ölçümü gerçek bir oturumdan
-- [ ] Anti-cheat bölümü: "injection yapmıyoruz" net şekilde yazılı, garanti
+- [ ] Anti-cheat bölümü: "injection yapmıyoruz" net yazılı, garanti
       verilmeden (bkz. `RISKS.md`)
 - [ ] Sistem gereksinimleri: Windows 10 1809+ / Windows 11, x64
 - [ ] "Ne yapmaz" bölümü var: ping'i garanti etmez, oyun motoruna dokunmaz,
-      internet hızını artırmaz
-- [ ] İade politikası Steam varsayılanı (2 saat / 14 gün) — özel kısıt yok
-- [ ] Ekran çevirisi (Faz 5) anlatılırken **üç sınır** açıkça yazılı:
-      (1) çeviri modeli ayrı bir indirme, ~507 MiB; (2) yalnızca
-      İngilizce → Türkçe; (3) sonucu gösteren pencere münhasır tam ekranda
-      görünmez, kenarlıksız pencere modu gerekir. Üçü de satın alma kararını
-      etkileyen sınırlar ve sonradan öğrenilirse iade sebebi olur
-- [ ] Ekran çevirisi "dördüncü modül" gibi sunulmuyor: ürünün kimliği üç
-      kategoriyi tek araçta birleştirmek (`PRODUCT_VISION.md`), çeviri bunun
-      yanına konan varsayılan kapalı bir ek (karar #37)
-- [ ] Kod imzalama sertifikası alındı (SmartScreen uyarısı satışı doğrudan
-      öldürür; bu kodla çözülmüyor)
-- [x] Üçüncü taraf lisans bildirimleri uygulama içinde (EULA madde 8'in vaadi;
-      Ayarlar → Yasal, karar #21). Yayın öncesi `node arac/ucuncu-taraf-uret.mjs`
-      son bir kez çalıştırılmalı ki listede yayınlanan sürümün bağımlılıkları
-      dursun
+      internet hızını artırmaz, görüntü ölçekleme yapmaz
+- [ ] `node arac/olcum-yardimcisi-hazirla.mjs` çalıştırıldı ve üretilen
+      sidecar ikilisi de imzalandı (imzalanmazsa kare ölçümü yayın
+      sürümünde sessizce ölür)
+- [ ] Kod imzalama sertifikası (SmartScreen uyarısı ilk kurulumu zorlaştırır;
+      bu kodla çözülmüyor)
+- [x] Üçüncü taraf lisans bildirimleri uygulama içinde (Ayarlar → Yasal,
+      karar #21). Yayın öncesi `node arac/ucuncu-taraf-uret.mjs` son bir kez
+      çalıştırılmalı ki listede yayınlanan sürümün bağımlılıkları dursun
+- [ ] `LICENSE` dosyası pakete dahil
 
 ## Telemetri
 
 **Yok.** Kullanım istatistiği, çökme raporu, analytics toplanmaz. Bir çökme
 raporu sistemi ileride eklenirse: varsayılan kapalı, açık rıza ile, ne
 gönderildiği kullanıcıya gösterilerek.
-
-Bu, ücretli bir üründe rakiplerden ayrışmanın en ucuz yolu ve mağaza
-sayfasında doğrudan söylenebilecek bir şey.

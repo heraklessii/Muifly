@@ -7,7 +7,7 @@
 //! | Sabit VPN tüneli üzerinden trafiği yönlendirmek | Yönlendirme yapmıyor; yolu ölçüp gösteriyor |
 //! | "Ping'i X ms düşürür" | Ölçümü gösteriyor, iddia etmiyor |
 //! | DNS'i sessizce değiştirmek | Ölçüp öneriyor, değiştirmeyi kullanıcıya bırakıyor |
-//! | Aylık abonelik | Tek seferlik (`docs/DISTRIBUTION.md`) |
+//! | Aylık abonelik | Ücretsiz ve açık kaynak |
 //!
 //! Bu, özelliği zayıflatmak değil: WTFast/ExitLag'in tünelinin ping'i
 //! **kötüleştirdiği** durumlar yaygın ve kullanıcı bunu ölçemediği için fark

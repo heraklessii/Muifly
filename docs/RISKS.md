@@ -36,21 +36,11 @@
     **Araştırıldı (karar #27)**: yol açık ama bedeli var — gerçek zamanlı ETW
     oturumu yükseltilmiş yetki istiyor (`ERROR_ACCESS_DENIED`, ölçüldü). Bu
     yüzden ölçüm sürekli değil, kullanıcının başlattığı süreli bir pencere.
-  - Overlay'i oyun içine değil, ayrı bir her-zaman-üstte pencere/widget olarak sun.
-  - Bu karar netleşmeden overlay implementasyonuna başlanmamalı.
-- **Kabul edilen sonuç** (karar #22): Ayrı üst pencere seçildi. Bunun bedeli,
-  overlay'in **exclusive fullscreen'de çalışmamasıdır**; kenarlıksız modda
-  çalışır. Bu bir hata değil, seçilen mimarinin doğal sınırı — mağaza sayfasında
-  ve özelliğin kendi ekranında baştan yazılmalı, kullanıcı satın aldıktan sonra
-  keşfetmemeli.
-
-## Anti-Cheat ile Etkileşim (Scaling Modülü)
-
-- Desktop Duplication API ile ekran yakalama, oyun process'ine dokunmadığı için
-  düşük risklidir ama sıfır risk garantisi verilemez — bazı agresif anti-cheat'ler
-  ekran yakalama API çağrılarını genel olarak izleyebilir.
-- **Azaltma**: Kullanıcıya bu belirsizlik netçe iletilmeli (Lossless Scaling'in de
-  yaptığı gibi: "topluluk güvenli buluyor ama garanti edilemez").
+  - Oyun içi overlay hiç yapılmaz; ölçüm Muifly penceresinde gösterilir.
+- **Kabul edilen sonuç**: oyun içi overlay yok. Kare ölçümü ETW ile
+  dışarıdan okunuyor ve sonucu uygulamanın kendi penceresinde duruyor.
+  Karar #39 ile üstte duran pencerelerin hepsi (ölçekleme sunumu, çeviri
+  overlay'i) kaldırıldı; geriye hook ihtiyacı olan bir yol kalmadı.
 
 ## Registry / TCP Tuning Geri Alma
 
@@ -66,55 +56,19 @@
   düşüşüne (yeniden yükleme maliyeti) yol açabilir.
 - **Azaltma**: Varsayılan kapalı, opsiyonel özellik olarak sun.
 
-## Yerel Model Boyutu ve Kalitesi (Ekran Çevirisi, Faz 5)
-
-- Yerel bir çeviri modeli kabaca 100–300 MB disk ve yüklüyken yüzlerce MB RAM
-  demek. Karar #1 Electron'u tam da bu gerekçeyle elemişti; aynı argüman bu kez
-  ürünün kendisine karşı çalışır.
-- **Azaltma**: Model ikiliye gömülmez, isteğe bağlı indirilir ve boştayken
-  bellekten düşürülür (karar #22). OCR tarafında bedel yok —
-  `Windows.Media.Ocr` işletim sisteminde hazır.
-- İkinci ve daha sinsi risk **kalite**: yerel küçük modeller oyun diyaloğunda
-  (deyim, fantezi terminolojisi, kısa UI parçaları) vasat kalır ve kullanıcının
-  kıyas noktası DeepL'dir. Bu, özelliği en çok tehdit eden şey ve en az kontrol
-  edilebilen şey.
-- **Azaltma**: Faz 5 açılmadan önce gerçek oyun diyaloğuyla ölçülmeli
-  (`ROADMAP.md` → Faz 5, fizibilite soruları). Ayrıca çeviri belleği, doğrusu
-  bir kez girildiğinde modelin o metindeki zayıflığını kalıcı olarak devre dışı
-  bırakır — kalite sorununun tek yapısal panzehiri bu.
-- Sayısal vaat yasağı (ilke 4) burada da geçerli: "%X doğruluk" gibi bir iddia
-  kullanılmaz.
-
-**Faz 5 yazıldıktan sonraki durum (karar #37)**: boyut tahmini tuttu ama
-büyük çıktı — indirme ~507 MiB, tahminin (100–300 MB) üstünde. Azaltmalar
-uygulandı: model kuruluma girmiyor, boştayken bellekten düşüyor (varsayılan
-beş dakika), çıkarım iki çekirdekle sınırlı. **Yeni ve kabul edilen bir
-bedel** ONNX Runtime'ın statik bağlanması: ikili büyüdü, gerekçesi ve
-ölçülen rakam karar #37'de.
-
-Kalite riski **azalmadı, yalnızca ölçüldü**. Karar #29'un üç zaafının
-üçünün de kodda bir karşılığı var ve ikisi ölçülerek doğrulandı; ama
-külliyat hâlâ sentetik ve hiçbiri gerçek bir oyunda denenmedi. Kullanıcının
-kıyas noktasının DeepL olması riski aynen duruyor — bunun tek yapısal
-panzehiri hâlâ çeviri belleği.
-
-## Klavye Kısayolunun Sistemden Alınması (Ekran Çevirisi, Faz 5)
-
-- Ekran çevirisi açıkken program sistemden bir klavye kombinasyonu alıyor
-  (`RegisterHotKey`) ve o kombinasyon başka uygulamalara gitmiyor. Bu,
-  kullanıcının fark etmesi en zor müdahalelerden biri: bir oyunda ya da başka
-  bir programda "tuş çalışmıyor" diye görünür.
-- **Azaltma**: Varsayılan kapalı. Açıkken hangi kombinasyonun alındığı
-  Çeviri ekranında yazılı. Kayıt başarısızsa özellik hiç açılmıyor —
-  kısayolu sessizce başka bir kombinasyona kaydırmak, kullanıcının bilmediği
-  bir tuşu almak olurdu. Program kapanınca kombinasyon sisteme geri
-  dönüyor (`Drop`).
-- Kanca (`SetWindowsHookEx`) **kullanılmıyor**: tuş basışları okunmuyor.
-  Anti-cheat açısından kritik olan ayrım bu (tasarım ilkesi 3).
-
 ## Sayısal Vaat Riski (Pazarlama/UI Metni)
 
 - Geliştirme sırasında "kolay satış" cazibesiyle sayısal iddialar UI'a sızabilir
   (örn. bir geliştirici yorumu "bu %20 hızlandırır" gibi bir string yazabilir).
 - **Azaltma**: UI metin review'unda `DESIGN_PRINCIPLES.md` madde 4'e karşı kontrol
   edilmeli, bu bir stil tercihi değil kural.
+
+## Kapsam Genişlemesi
+
+- Bu dosyanın en pahalı riski kodda değil planda çıktı: proje sistem ve ağ
+  tarafı sahada doğrulanmadan görüntü ölçekleme (Faz 3), kare üretimi
+  (Faz 4a) ve ekran çevirisi (Faz 5) yazdı. Üçü de kod olarak bitti,
+  üçü de yeterince iyi çalışmadı ve üçü de karar #39'la silindi.
+- **Azaltma**: `DESIGN_PRINCIPLES.md` → Faz Disiplini. Bir faz sahada
+  doğrulanmadan bir sonrakine geçilmez. Bu kural zaten yazılıydı; eksik
+  olan uygulanmasıydı.

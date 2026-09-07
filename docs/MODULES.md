@@ -40,78 +40,14 @@ mesajı yazılmaz (`DESIGN_PRINCIPLES.md`).
 
 ## monitor
 
-**Sorumluluk**: FPS, ping, jitter, CPU/GPU kullanımı canlı ölçüm ve overlay.
+**Sorumluluk**: Kare süresi, ping, jitter, CPU/bellek kullanımı — canlı ölçüm ve şeffaflık günlüğü.
 
 | İşlev | API / Yöntem | Not |
 |---|---|---|
 | FPS ölçümü | DXGI present call sayımı veya PresentMon benzeri yaklaşım | Overlay yoksa da arka planda ölçülebilmeli |
-| Overlay | DirectX hook (Faz 2+, dikkatli tasarlanmalı) | Bkz. `RISKS.md` — hook'lar anti-cheat riski taşıyabilir, alternatifi ayrı pencere/widget |
+| Kare süresi ölçümü | ETW oturumu, ayrı yükseltilmiş yardımcı ikili | Hook yok (bkz. `RISKS.md`); ölçüm sistemin kendi olay akışından okunuyor (karar #27) |
 | Öncesi/sonrası snapshot | İki zaman noktasındaki metrik farkını hesaplama | UI'da karşılaştırma raporu için |
 | Log akışı | Event tabanlı, `system_boost` ve `network_boost`'tan gelen aksiyon logları | Şeffaflık ilkesi |
-
-## scaling (Faz 3 — yazıldı)
-
-**Sorumluluk**: Post-process spatial upscaling (Faz 3), ileride ML tabanlı frame
-generation (Faz 4).
-
-| İşlev | API / Yöntem | Not |
-|---|---|---|
-| Ekran yakalama | Desktop Duplication (`IDXGIOutputDuplication`) | ✅ Kare, yakalamayla aynı D3D11 cihazında kalıyor; CPU'ya inmiyor |
-| Spatial upscaling | D3D11 piksel gölgelendiricileri | ✅ Tam sayı katı, bilinear, Lanczos (a=3), xBR |
-| Sunum | `WS_EX_TOPMOST\|NOACTIVATE\|TRANSPARENT\|TOOLWINDOW` + DXGI çevirme zinciri | ✅ Odak almıyor, tıklama geçiriyor, Alt+Tab'da görünmüyor |
-| Kaçış kısayolu | `RegisterHotKey` (kanca değil) | ✅ Yukarıdaki beş bayrak birlikte kapatılamayan bir kutu yapıyor; kısayol kaydedilemezse ölçekleme başlamıyor (karar #34) |
-| Hedef önde değilken | Sunum penceresi gizleniyor | ✅ Masaüstünde ve Muifly'a bakarken ekran kullanıcıya kalıyor; hedef unutulmuyor (karar #34) |
-| Gecikme ölçümü | Kare başına yakalama/sunum süreleri | ✅ Eklenen bedel; kazanç iddiası taşımıyor |
-| Kare üretimi (Faz 4a) | Piramitli blok eşleme + çift yönlü warp, HLSL | ✅ ML yok. Varsayılan kapalı, rekabetçi modda kapalı; bir kareyi elde tutuyor ve bu bedel algoritma hızıyla azalmıyor (karar #35) |
-| Kare üretimi doğruluğu | `hareket.rs` CPU referansı + sentetik gerçek-referans | ✅ Bilinen kaydırma → beklenen vektör; gözle değil testle |
-| Frame generation ML (Faz 4b) | Eğitilmiş model | ⬜ Fizibilite yapıldı, **açılmadı** — `docs/FRAME_GENERATION.md` |
-| İkinci GPU offload | Çoklu adaptör (iGPU+dGPU) tespiti ve hesaplama dağıtımı | ⬜ Faz 3/4 sonrası "nice to have" |
-
-**Kritik**: Bu modül oyun process'ine HİÇBİR ŞEY enjekte etmez, sadece ekranı okur.
-Mimari gerekçe: `ARCHITECTURE.md` → "Ekran Yakalama / Scaling Mimarisi",
-uygulama kararları `decisions.md` #32.
-
-**Neden CPU'da bir ikinci uygulama var**: `algoritma.rs` çalışma zamanında
-kullanılmıyor. Gölgelendiricinin ne üretmesi gerektiğinin tanımı ve Faz 3'ün
-"görüntü kalitesi karşılaştırmalı olarak doğrulanmış olsun" kriterinin test
-edilebilir hali. Ölçüm, CPU yolunun gerçek zamanlı olmadığını gösteriyor
-(karar #32).
-
-**Rekabetçi modda kapalı** — kısıtlı değil, kapalı. Ölçekleme gecikme
-ekliyor; rekabetçi mod o gecikmeyi en aza indirmek için var. Üç kapı:
-profil doğrulaması, profil uygulama yolu, mod geçişi.
-
-**Deftere yazmıyor, günlüğe yazıyor.** Sistemde geri alınacak bir iz
-bırakmıyor: açılan tek şey sürecin ömrüyle sınırlı bir pencere.
-
-## ceviri (Faz 5 — yazıldı)
-
-**Sorumluluk**: Tuşa basınca ekrandaki yazıyı okumak ve bu bilgisayarda
-çevirmek. Ağa yalnızca modelin indirilmesi için, yalnızca kullanıcı
-isterse çıkılıyor.
-
-| İşlev | API / Yöntem | Not |
-|---|---|---|
-| Kısayol | `RegisterHotKey` (kanca değil) | ✅ Tuş basışları okunmuyor; sisteme tek kombinasyon. Kaydedilemezse özellik **açılmıyor** |
-| Ekran okuma | `scaling::yakalama` yeniden kullanılıyor | ✅ Faz 3'ün katmanı; ikinci bir yakalama yazılmadı (karar #37) |
-| Alan kesme | `alan.rs` | ✅ Oran olarak saklanıyor; profil başka çözünürlükte de doğru yere düşüyor |
-| Yazı çıkarma | `Windows.Media.Ocr` | ✅ İkiliye sıfır bayt ekliyor; satır sonları korunuyor (karar #28) |
-| Cümlelere ayırma | `cumle.rs` | ✅ Karar #29 zaaf 3'ü kaynağında kapatıyor: model tek cümle görüyor |
-| Çeviri | ONNX Runtime, greedy çözümleme | ✅ İki çekirdekle sınırlı; boştayken bellekten düşüyor |
-| Model dosyaları | `model.rs` + `indirme.rs` (WinHTTP) + `sha256.rs` | ✅ İkiliye girmiyor, isteğe bağlı iniyor, her dosya doğrulanıyor (karar #1, #22) |
-| Sonuç penceresi | Tauri penceresi: üstte, odak almayan, kapatma düğmeli | ✅ Ekranın tamamını kaplamıyor ve tıklanabilir — karar #34'ün dersi |
-| Alan seçici | Donmuş ekran görüntüsü üstünde dikdörtgen | ✅ Esc ile kapanıyor; görüntü gelmese bile kilitlenmiyor |
-
-**Kritik**: Bu modül de oyun sürecine HİÇBİR ŞEY enjekte etmiyor. Yakalama
-Faz 3'ün yolu, kısayol resmî bir API, çeviri ayrı bir iş parçacığında.
-
-**Rekabetçi modda KAPALI DEĞİL** — ölçeklemeden farkı bu. Ölçekleme her
-karede gecikme ekliyor; çeviri kullanıcı tuşa bastığında bir kez çalışıyor.
-Açıkça istenen bir işi reddetmek, kapının koruduğu şeyi korumazdı (karar
-#37).
-
-**Deftere yazmıyor, günlüğe yazıyor.** Kaydedilen tek sistem kaynağı klavye
-kısayolu ve o da sürecin ömrüyle sınırlı.
 
 ## profile_engine
 
@@ -131,7 +67,7 @@ onaylayacağı bir profil taslağı.
 
 ---
 
-# Uygulama Durumu (1 Eylül 2026)
+# Uygulama Durumu (7 Eylül 2026)
 
 Yukarıdaki tablolar **tasarımı** anlatıyor; aşağısı kodda ne olduğunu.
 Bir modülü değiştirmeden önce buraya bak.
@@ -159,13 +95,12 @@ Bir modülü değiştirmeden önce buraya bak.
 | Geçmiş arayüzü | `components/GecmisPaneli.tsx` | ✅ Liste + özet şeridi + arama + onaylı silme + düz metin rapor. Ayar kapalıysa sebebi yazıyor. On testle korunuyor |
 | Profil şeması | `profile_engine/schema.rs` | ✅ Doğrulama + güvenli hale getirme; düzeltmeler kullanıcıya gösteriliyor |
 | Profil deposu | `profile_engine/store.rs` | ✅ Ayrı JSON dosyaları (karar #9), yol kaçışı engelli |
-| Profil aktarımı | `profile_engine/aktarim.rs` | ✅ İki adımlı içe aktarma: önizleme diske yazmıyor, çakışmada ezmiyor (karar #23). Demoda kapalı |
+| Profil aktarımı | `profile_engine/aktarim.rs` | ✅ İki adımlı içe aktarma: önizleme diske yazmıyor, çakışmada ezmiyor (karar #23) |
 | Mod seçimi | `profile_engine/mod.rs` | ✅ Beş mod, saf `mod_sec` fonksiyonu |
 | Geri alma defteri | `ledger.rs` | ✅ Diske yazılıyor (karar #3), bozuk dosya programı kilitlemiyor |
 | Geri alma uygulayıcı | `revert.rs` | ✅ Kısmi başarısızlık: başarısız kayıt deftere iade ediliyor |
 | Registry | `registry.rs` | ✅ Her yazma bir `Undo` döndürüyor. "Yaz ve unut" fonksiyonu yok |
 | Sistem tepsisi | `tray.rs` | ✅ Simge + menü (Göster / Öndekine uygula / Varsayılana dön / Çıkış). Menü işlemleri motordan geçiyor, bildirimle sonuçlanıyor. Mod değişimi bildirimi ayara bağlı, varsayılanı kapalı (karar #24) |
-| Sürüm kısıtları | `surum.rs` | ✅ Demo/tam ayrımı derleme bayrağıyla (karar #20). Zaman sınırı yok, testle korunuyor |
 | Üçüncü taraf bildirimleri | `ucuncu_taraf.rs` | ✅ `ucuncu-taraf.json` ikiliye gömülü, tembel ayrıştırılıyor. Veriyi `arac/ucuncu-taraf-uret.mjs` üretiyor (karar #21) |
 | Steam kütüphanesi | `library/steam.rs` | ✅ `libraryfolders.vdf` + `appmanifest_*.acf` + `librarycache` kapakları — diskten, ağsız (karar #25) |
 | Epic kütüphanesi | `library/epic.rs` | ✅ `Manifests/*.item`; `LaunchExecutable` alanı exe'yi doğrudan veriyor |
@@ -174,27 +109,6 @@ Bir modülü değiştirmeden önce buraya bak.
 | Exe ikonu | `library/ikon.rs` | ✅ `PrivateExtractIconsW` → GDI → PNG. Kapağı olmayan oyunların görsel kaynağı |
 | PNG yazıcı | `library/png.rs` | ✅ Sıkıştırmasız; yeni bağımlılık eklememek için (karar #21) |
 | Oyun katalogu | `profile_engine/katalog.rs` | ✅ Gömülü `katalog.json`: exe → oyun adı + rekabetçi bayrağı. Hazır ayar taşımıyor (karar #26) |
-| Çeviri önişleme | `ceviri/onisleme.rs` | ✅ BÜYÜK HARF metni cümle düzenine indirir; OCR'ın bozduğundan şüphelenilen yeri **işaretler, düzeltmez** (karar #29 zaaf 1, #28) |
-| Terim sözlüğü | `ceviri/sozluk.rs` | ✅ Terimler çeviriden önce çıkarılıp yerlerine işaret konuyor; model terimi hiç görmüyor. İşaret biçimi **ölçülerek** seçildi — ilk seçim (`[[0]]`) modelden sağ çıkmıyordu (karar #37) |
-| Çeviri belleği | `ceviri/bellek.rs` | ✅ Oyun başına JSON. Makine kaydı kullanıcı kaydını ezemiyor, budama kullanıcı kayıtlarına dokunmuyor (karar #22) |
-| OCR dil kontrolü | `ceviri/ocr_dil.rs` | ✅ Kaynak dilin OCR paketi kurulu mu; değilse nasıl kurulacağı söyleniyor. Karar mantığı WinRT'den ayrı, her platformda test ediliyor (karar #28) |
-| Ekran yakalama | `scaling/yakalama.rs` | ✅ Desktop Duplication; çok kartlı makinelerde ekranı süren adaptörle açılıyor. Münhasır tam ekranda çalışmaz ve bunu **ne yapılacağını söyleyerek** bildirir |
-| Ölçekleme algoritmaları | `scaling/algoritma.rs` | ✅ CPU **referansı** — çalışma zamanında kullanılmıyor. Kalite karşılaştırma testleri burada (karar #32) |
-| Ölçekleme gölgelendiricileri | `scaling/olcekleme.hlsl` | ✅ Gerçek zamanlı yol. Tam sayı / bilinear / Lanczos / xBR, `D3DCompile` ile çalışma zamanında derleniyor |
-| Sunum penceresi | `scaling/sunum.rs` | ✅ Odak almayan, tıklama geçiren, Alt+Tab'da görünmeyen üstteki pencere + DXGI çevirme zinciri |
-| Ölçekleme gecikmesi | `scaling/gecikme.rs` | ✅ Boru hattının **eklediği** süre. İyileşme alanı taşımıyor, testle korunuyor (karar #15, #32) |
-| Ölçekleme akışı | `scaling/mod.rs` | ✅ İş parçacığı denetimi, rekabetçi mod kapısı, yakalama denemesi |
-| Kare üretimi | `scaling/uretim.rs` + `uretim.hlsl` | ✅ Faz 4a — varsayılan kapalı, rekabetçi modda kapalı (karar #35) |
-| Çeviri alanı | `ceviri/alan.rs` | ✅ Oran olarak; profil paylaşıldığında başka çözünürlükte de doğru yere düşüyor |
-| Cümlelere ayırma | `ceviri/cumle.rs` | ✅ Her cümle ayrı çevriliyor — karar #29 zaaf 3'ün (sessiz cümle atlama) kaynağındaki çözüm |
-| OCR | `ceviri/ocr.rs` | ✅ `Windows.Media.Ocr`; satır sonları korunuyor çünkü `cumle` onları sınır sayıyor |
-| Çeviri motoru | `ceviri/cevirici.rs` | ✅ ONNX Runtime + SentencePiece. Sayıya çevirme `vocab.json`un işi, parçalama `tokenizer.json`un (karar #29) |
-| Model dosyaları | `ceviri/model.rs` | ✅ Boyut + SHA-256 kodda sabit; ikiliye gömülmediği testle korunuyor |
-| İndirme | `ceviri/indirme.rs` | ✅ WinHTTP — yeni bir HTTP kasası eklenmedi (`png.rs` ile aynı gerekçe) |
-| SHA-256 | `ceviri/sha256.rs` | ✅ Elle yazıldı; testi FIPS 180-4'ün kendi örnekleriyle |
-| Çeviri kısayolu | `ceviri/kisayol.rs` | ✅ `RegisterHotKey`, kendi iş parçacığında. Kaydedilemezse özellik açılmıyor |
-| Çeviri akışı | `ceviri/akis.rs` | ✅ Boru hattının kararları — Windows'suz test edilebiliyor |
-| Çeviri denetleyicisi | `ceviri/denetleyici.rs` | ✅ İş parçacığı, aşama bildirimi, modelin boşta düşürülmesi |
 
 ## Neden bazı satırlar ◐
 
@@ -205,12 +119,11 @@ okusun.
 
 ## Test durumu
 
-470 birim testi geçiyor (`cargo test` ve `cargo test --features demo`), arayüz
-tarafında 79 test (`npm test` — vitest + jsdom, backend mock’lu). Ayrıca beş
-test `--ignored`: üçü gerçek model dosyalarına, ikisi gerçek ekrana ihtiyaç
-duyuyor ve CI'da koşamıyor.
-Testlerin bir kısmı **ürün duruşlarını koruyor**,
-yalnızca kodu değil:
+286 birim testi geçiyor (`cargo test`), arayüz tarafında 51 test
+(`npm test` — vitest + jsdom, backend mock’lu). `--ignored` test kalmadı:
+gerçek ekrana ve gerçek model dosyalarına ihtiyaç duyanların hepsi karar
+#39'la silindi.
+Testlerin bir kısmı **ürün duruşlarını koruyor**, yalnızca kodu değil:
 
 | Test | Neyi koruyor |
 |---|---|
@@ -226,12 +139,10 @@ yalnızca kodu değil:
 | `bozuk_defter_programi_kilitlemiyor` | Bozuk defter geri alma arayüzünü kapatamaz |
 | `basarisiz_islem_deftere_yazilmiyor` | Yapılmamış değişikliğin geri alma kaydı oluşmaz |
 | `isaret_yoksa_karsilastirma_yok` | Uydurulmuş "öncesi" gösterilmez (karar #15) |
-| `kisitlarda_zaman_alani_yok` | Demoya zaman sınırı / deneme sayacı girmez (karar #20) |
 | `menude_sayisal_vaat_yok` | Tepsi menüsü metinlerine sayısal iddia sızmaz (ilke 4) |
 | `cok_gruplu_makinede_p_core_maskesi_verilmiyor` | Yanlış affinite maskesi uygulanmaz |
 | `defterde olmayan kayıt için geri al düğmesi göstermiyor` (arayüz) | Geri alınmış değişiklik için düğme gösterilmez |
 | `backend düzeltme döndürdüğünde kullanıcıya gösteriyor` (arayüz) | Profil düzeltmeleri sessizce yutulmaz |
-| `demo ikilisinde ağ sekmesi hiç görünmüyor` (arayüz) | Demo kapsamı arayüzde de geçerli (karar #20) |
 | `yazi_tipi_metniyle_birlikte_listede` | Dağıtılan yazı tipinin OFL metni ikiliden düşmez |
 | `listedeki_surumler_cargo_lock_ile_ayni` | Bağımlılık yükseltilince bildirim listesi bayat kalmaz (karar #21) |
 | `lisans metni olmayan bileşeni listeden gizlemiyor` (arayüz) | Liste temiz görünsün diye eksiltilmez (karar #21) |
@@ -243,11 +154,6 @@ yalnızca kodu değil:
 | `raporda_iyilesme_iddiasi_yok` | Geçmiş raporu ölçüm taşır, "iyileşti" demez (ilke 4, karar #31) |
 | `varsayilan_gecmis_acik` | Geçmiş kapalı gelirse ancak önceden açmayı akıl eden görür (karar #31) |
 | `ölçüm penceresini iki ayrı sütun olarak gösteriyor, oran üretmiyor` (arayüz) | Geçmişte tek bir "şu kadar iyileşti" oranı üretilmez (karar #15, #31) |
-| `makine_kullanici_kaydinin_ustune_yazamiyor` | Makine çevirisi kullanıcının onayladığı kaydı ezemez (karar #30) |
-| `onbellek_temizligi_kullanici_kayitlarina_dokunmuyor` | Yer açmak için kullanıcının elle düzeltmesi atılmaz (karar #30) |
-| `bitisik_kelime_suphesi_duzeltilmeye_calisilmiyor` | OCR şüphesi işaretlenir, tahminle düzeltilmez (karar #28, #29) |
-| `dusen_isaret_kayip_olarak_bildiriliyor` | Terim koruma işareti düşerse sessizce yutulmaz (karar #30) |
-| `kurulum_metninde_sayisal_vaat_yok` | OCR kurulum yönlendirmesine sayısal iddia sızmaz (ilke 4) |
 
 Bu testlerden biri düşerse, düşüren kişi bir ürün kararını değiştiriyor
 demektir. Testi "düzeltmeden" önce kararı tartış.

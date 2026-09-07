@@ -6,46 +6,47 @@
 
 ## Proje Nedir
 
-Muifly, Windows için oyun performans optimizasyon aracı. Üç ana modülü tek çatı
-altında birleştirir:
+Muifly, Windows için oyun performans optimizasyon aracı. İki ana modülü tek
+çatı altında birleştirir:
 
 1. **System Boost** — process önceliklendirme, arka plan servis yönetimi, güç planı
 2. **Network Boost** — DNS/route ölçümü, QoS, jitter/packet loss izleme
-3. **Scaling** — post-process upscaling (spatial) + kare üretimi (Faz 4a, ML'siz)
 
-Bunların yanında, üçüne eş sayılmayan bir ek: **ekran çevirisi** (Faz 5).
-Varsayılan kapalı ve modeli ayrı indiriliyor — ürünün kimliği hâlâ "üç
-kategoriyi tek araçta birleştirmek" (karar #37).
+Yanlarında bir üçüncü ayak var ama o bir modül değil bir kural: **şeffaflık
+günlüğü + ölçüm + geri alma**, ikisinin de üstünden geçiyor.
 
-Rakip/ilham: Lossless Scaling (Steam), Razer Cortex, WTFast/ExitLag. Boşluk: bu üçünü
-ayrı ayrı satın alıyorlar, biz tek + şeffaf + tersine çevrilebilir bir araçta topluyoruz.
+Proje bir dönem görüntü ölçekleme (Faz 3), kare üretimi (Faz 4a) ve ekran
+çevirisi (Faz 5) da içeriyordu. Üçü de yazıldı, denendi ve **kaldırıldı**
+(karar #39). Geri getirme önerisi gelirse önce o kararı oku: silinme sebebi
+kod kalitesi değil, kapsam.
+
+Rakip/ilham: Razer Cortex, WTFast/ExitLag. Boşluk: sistem ve ağ tarafını
+şeffaf ve tersine çevrilebilir yapan bir araç yok.
 
 Detaylı ürün vizyonu ve faz planı: `docs/PRODUCT_VISION.md`
 
-## Ticari Model — ÖNCE BUNU OKU
+## Lisans ve Dağıtım — ÖNCE BUNU OKU
 
-**Muifly kapalı kaynaklı, tek seferlik ücretli bir üründür.** Steam birincil
-kanal, itch.io ikincil, GitHub yalnızca tanıtım sayfası + demo dağıtımı.
+**Muifly açık kaynak ve ücretsizdir — Apache License 2.0.** Tek kanal GitHub:
+kaynak kod, Releases'te kurulum paketi, Issues'ta hata takibi, Pages'te
+tanıtım sayfası.
 
-Bu, Mui ailesindeki diğer projelerden bilinçli bir ayrım: Muiget ve Muivly
-açık kaynak/ücretsizdir, Muifly değildir. "Mui projeleri açık kaynak olur"
-varsayımıyla hareket etme.
+Demo/tam sürüm ayrımı **yok** (karar #39'da kaldırıldı). `surum.rs`,
+`Kisitlar` ya da `--features demo` diye bir şey aramaya çalışma; yoklar.
 
-"Açık kaynak" / "open source" ifadeleri Muifly için **hiçbir metinde**
-kullanılmaz. Şeffaflık ilkesi burada **çalışma zamanı şeffaflığı** demek:
-programın ne yaptığını göstermesi, kaynak kodun yayınlanması değil.
+Şeffaflık ilkesi iki katmanlı: kaynağın okunabilir olması **ve** programın
+çalışırken ne yaptığını göstermesi. İkincisi birincisinin yerine geçmiyor.
 
-Detay (demo kapsamı, fiyat, lisans, mağaza kontrol listesi):
-`docs/DISTRIBUTION.md`
+Detay: `docs/DISTRIBUTION.md`
 
 ## Teknoloji Yığını
 
 - **Core**: Rust (Windows API çağrıları, process/network yönetimi)
 - **UI**: Tauri v2 + React/Vite/TypeScript
-- **Görüntü işleme (Faz 3+)**: DXGI/Desktop Duplication API tabanlı ekran yakalama
 
 Diğer Mui projeleriyle (Muiget, Muivly) ortak konvansiyonlar: JSON tabanlı config,
-documentation-first yapı, token-optimized CLAUDE.md, aynı tasarım jetonları.
+documentation-first yapı, token-optimized CLAUDE.md, aynı tasarım jetonları,
+aynı lisans.
 
 ## Mimari Özet
 
@@ -58,8 +59,6 @@ state.rs (Motor)   ← akış: oyun algılandı → profil uygula → kapanınca
    ├── system_boost/     öncelik, affinite, dondurma, güç planı, açılış
    ├── network_boost/    DNS ölçümü, gecikme/jitter, TCP, QoS
    ├── monitor/          şeffaflık günlüğü + ölçüm + oturum geçmişi
-   ├── scaling/          ekran yakalama + ölçekleme + kare üretimi + sunum
-   ├── ceviri/           ekran çevirisi: OCR + yerel model + kısayol (Faz 5)
    ├── ledger.rs         geri alma defteri (veri)
    └── revert.rs         geri alma uygulayıcısı (davranış)
 ```
@@ -68,11 +67,8 @@ state.rs (Motor)   ← akış: oyun algılandı → profil uygula → kapanınca
 üzerinden geçer ve **hem deftere hem günlüğe** yazar. Üçünden biri eksik
 kalırsa ya geri alma kaybolur ya kullanıcı ne olduğunu göremez.
 
-İki istisna `scaling/` ve `ceviri/`: deftere yazmıyorlar çünkü geri
-alınacak bir iz bırakmıyorlar — ilkinin açtığı tek şey sürecin ömrüyle
-sınırlı bir pencere, ikincisinin aldığı tek sistem kaynağı yine sürecin
-ömrüyle sınırlı bir klavye kısayolu. İkisi de günlüğe yazıyor
-(kararlar #32, #37).
+Bu kuralın eskiden iki istisnası vardı (`scaling/` ve `ceviri/`, deftere
+yazmıyorlardı). İkisi de karar #39'la kalktı; artık istisna yok.
 
 Detaylı mimari: `docs/ARCHITECTURE.md` · Modül detayı: `docs/MODULES.md`
 
@@ -82,7 +78,6 @@ Detaylı mimari: `docs/ARCHITECTURE.md` · Modül detayı: `docs/MODULES.md`
    suspend → kapatma değil dondurma. Defter diske yazılır, çökme sonrası
    açılışta bekleyenler geri alınır.
 2. **Şeffaflık** — ne değişti, kullanıcıya log olarak gösterilir. Kara kutu yok.
-   (Kaynak kodu açmak DEĞİL — bkz. Ticari Model.)
 3. **Anti-cheat güvenliği** — process/DLL injection, memory hooking YOK.
    Sadece resmi Windows API'leri.
 4. **Sayısal vaat yok** — "ping'i X ms düşürür" gibi iddialar kullanılmaz.
@@ -99,29 +94,21 @@ Detaylı gerekçeler: `docs/DESIGN_PRINCIPLES.md`
 npm run dev        # sadece frontend (Vite, localhost:1420)
 npm run build      # tsc + vite build → dist/
 npm run tauri dev  # tam uygulama (Rust + pencere)
-npm test           # arayüz testleri (vitest + jsdom) — 79 test
+npm test           # arayüz testleri (vitest + jsdom) — 51 test
 ```
 
 ```bash
-cargo test                    # src-tauri/ içinde — 487 test
-cargo test --features demo    # demo ikilisinin kısıtlarıyla
-cargo build --features demo   # demo ikilisi (bkz. docs/decisions.md #20)
+cargo test         # src-tauri/ içinde — 286 test
 
 # Ölçüm yardımcısı `required-features` arkasında (paketleme çakışması,
 # tasks.md → Tamamlandı). `cargo test` onu DERLEMİYOR; derleme hatasının
 # yayın gününe kalmaması için:
 cargo clippy --all-targets --features olcum-yardimcisi -- -D warnings
-
-# Faz 5'in uçtan uca testleri gerçek model dosyalarına ihtiyaç duyuyor ve
-# `cargo test` onları KOŞMUYOR. Model kuruluysa (Çeviri ekranı → "Modeli
-# indir") elle:
-cargo test --release ceviri::cevirici::testler -- --ignored --nocapture
 ```
 
 ```bash
 node arac/ucuncu-taraf-uret.mjs               # üçüncü taraf bildirimleri
 node arac/olcum-yardimcisi-hazirla.mjs        # ölçüm yardımcısı — `tauri build` ÖNCESİ
-node arac/vitrin-hazirla.mjs ../Muifly-vitrin  # public depo içeriği (kaynak kod HARİÇ)
 npx tauri icon src-tauri/icons/kaynak.svg     # ikon seti
 ```
 
@@ -130,11 +117,9 @@ npx tauri icon src-tauri/icons/kaynak.svg     # ikon seti
 > (karar #27); o ikili kurulumla birlikte gitmezse özellik yayın sürümünde
 > sessizce ölür. Kod imzalama yapılırken **bu ikili de imzalanmalı**.
 
-> Birinci ve üçüncü komut ÜRETİLEN dosyalar yazıyor, elle düzenlenmez.
-> Bağımlılık eklendiğinde ya da yükseltildiğinde birincisi çalıştırılmalı;
-> unutulursa `ucuncu_taraf::testler` CI'da kırmızıya döner (karar #21).
-> İkincisi yalnızca yayın günü çalışır ve public depoya **kaynak kod
-> kopyalamaz** — izin listeli (`docs/DISTRIBUTION.md`).
+> Birinci komut ÜRETİLEN bir dosya yazıyor, elle düzenlenmez. Bağımlılık
+> eklendiğinde ya da yükseltildiğinde çalıştırılmalı; unutulursa
+> `ucuncu_taraf::testler` CI'da kırmızıya döner (karar #21).
 
 > Arayüzü denerken: `cargo run` ile açılan debug binary arayüzü `dist/` yerine
 > `devUrl`den (localhost:1420) yüklüyor. Vite çalışmıyorken pencere boş kalır.
@@ -142,132 +127,72 @@ npx tauri icon src-tauri/icons/kaynak.svg     # ikon seti
 
 ## Dizin Yapısı
 
-`✅` = var ve derleniyor, `⬜` = henüz yok.
-
 ```
 Muifly/
-├── CLAUDE.md                ✅ bu dosya
-├── README.md                ✅ kullanıcıya dönük tanıtım (kapalı kaynak dilinde)
-├── LICENSE.md               ✅ EULA — açık kaynak lisansı DEĞİL
+├── CLAUDE.md                bu dosya
+├── README.md                kullanıcıya dönük tanıtım
+├── LICENSE                  Apache License 2.0
 ├── docs/
-│   ├── PRODUCT_VISION.md    ✅ konumlandırma, rakip analizi
-│   ├── DISTRIBUTION.md      ✅ ticari model, demo kapsamı, mağaza listesi
-│   ├── ARCHITECTURE.md      ✅
-│   ├── MODULES.md           ✅ modül bazlı teknik detay
-│   ├── DESIGN_PRINCIPLES.md ✅ beş ilke ve gerekçeleri
-│   ├── PROFILES.md          ✅ mod sistemi, profil JSON şeması
-│   ├── FRAME_GENERATION.md  ✅ Faz 4a tasarımı + 4b (ML) fizibilitesi
-│   ├── ROADMAP.md           ✅ fazlar + yayın kilometre taşları
-│   ├── RISKS.md             ✅ bilinen riskler ve azaltmaları
-│   ├── decisions.md         ✅ ADR tarzı kararlar (kod buraya numarayla atıf yapıyor)
-│   ├── worklog.md           ✅ oturum günlüğü
-│   └── tasks.md             ✅ yapılacaklar
-├── arac/                    ✅ geliştirme betikleri
-│   ├── ucuncu-taraf-uret.mjs   ✅ ÜRETEÇ — bağımlılık değişince çalıştır
-│   ├── vitrin-hazirla.mjs      ✅ public depo içeriği (izin listeli)
-│   ├── etw-sonda/             ✅ ATILACAK fizibilite denemesi (karar #27)
-│   ├── ocr-sonda/             ✅ ATILACAK fizibilite denemesi (karar #28)
-│   └── ceviri-sonda/          ✅ ATILACAK fizibilite denemesi (karar #29)
-├── site/                    ✅ GitHub Pages tanıtım sayfası
-├── src/                     ✅ React arayüzü
-│   ├── App.tsx              ✅ kabuk: kenar çubuğu, başlık çubuğu, yedi ekran
-│   ├── styles.css           ✅ Mui tasarım sistemi (teal, Outfit, koyu zemin)
-│   ├── components/          ✅ 8 panel + 3 diyalog + overlay + alan seçici + grafik + ikon + toast
-│   ├── assets/fonts/        ✅ Outfit + LICENSE-OFL.txt (gömülü, CDN yok)
-│   └── lib/                 ✅ api.ts (invoke sarmalayıcıları), types.ts, format.ts
-└── src-tauri/               ✅ Rust çekirdeği
-    ├── icons/kaynak.svg     ✅ ikon setinin tek kaynağı
-    ├── ucuncu-taraf.json    ✅ ÜRETİLEN — üçüncü taraf bildirimleri
-    ├── katalog.json         ✅ ELLE bakılan — oyun katalogu (karar #26)
+│   ├── PRODUCT_VISION.md    konumlandırma, rakip analizi
+│   ├── DISTRIBUTION.md      lisans, dağıtım, yayın kontrol listesi
+│   ├── ARCHITECTURE.md
+│   ├── MODULES.md           modül bazlı teknik detay
+│   ├── DESIGN_PRINCIPLES.md beş ilke ve gerekçeleri
+│   ├── PROFILES.md          mod sistemi, profil JSON şeması
+│   ├── ROADMAP.md           fazlar + yayın kilometre taşları
+│   ├── RISKS.md             bilinen riskler ve azaltmaları
+│   ├── decisions.md         ADR tarzı kararlar (kod buraya numarayla atıf yapıyor)
+│   ├── worklog.md           oturum günlüğü
+│   └── tasks.md             yapılacaklar
+├── arac/                    geliştirme betikleri
+│   ├── ucuncu-taraf-uret.mjs        ÜRETEÇ — bağımlılık değişince çalıştır
+│   ├── olcum-yardimcisi-hazirla.mjs sidecar — `tauri build` öncesi
+│   └── etw-sonda/                   ATILACAK fizibilite denemesi (karar #27)
+├── site/                    GitHub Pages tanıtım sayfası
+├── src/                     React arayüzü
+│   ├── App.tsx              kabuk: kenar çubuğu, başlık çubuğu, altı ekran
+│   ├── styles.css           Mui tasarım sistemi (teal, Outfit, koyu zemin)
+│   ├── components/          6 panel + 3 diyalog + grafik + ikon + toast
+│   ├── assets/fonts/        Outfit + LICENSE-OFL.txt (gömülü, CDN yok)
+│   └── lib/                 api.ts (invoke sarmalayıcıları), types.ts, format.ts
+└── src-tauri/               Rust çekirdeği
+    ├── icons/kaynak.svg     ikon setinin tek kaynağı
+    ├── ucuncu-taraf.json    ÜRETİLEN — üçüncü taraf bildirimleri
+    ├── katalog.json         ELLE bakılan — oyun katalogu (karar #26)
     └── src/
-        ├── lib.rs           ✅ Tauri kurulumu + arka plan döngüsü
-        ├── commands.rs      ✅ arayüze açılan komutlar
-        ├── state.rs         ✅ Motor: akışın kurulduğu yer
-        ├── ledger.rs        ✅ geri alma defteri (diske yazılıyor)
-        ├── revert.rs        ✅ geri alma uygulayıcısı
-        ├── registry.rs      ✅ her yazma bir Undo döndürüyor
-        ├── settings.rs      ✅ ayarlar + veri yolları
-        ├── surum.rs         ✅ demo/tam sürüm kısıtları (derleme bayrağı)
-        ├── tray.rs          ✅ sistem tepsisi simgesi ve menüsü
-        ├── ucuncu_taraf.rs  ✅ gömülü lisans bildirimleri (EULA md. 8)
-        ├── error.rs         ✅ tek hata tipi
-        ├── winutil.rs       ✅ HANDLE RAII sarmalayıcı
-        ├── monitor/         ✅ log.rs (günlük), gecmis.rs (oturum geçmişi, karar #31),
-        │                       metrics.rs (jitter/özet), frames.rs (kare
-        │                       istatistiği), etw.rs (karar #27)
-        ├── system_boost/    ✅ detect, priority, suspend, power, startup
-        ├── network_boost/   ✅ dns, latency, tcp, qos
-        ├── profile_engine/  ✅ schema, store, aktarım (içe/dışa), mod seçimi, katalog
-        ├── library/         ✅ steam, epic, exe adayları, vdf, ikon, png — hepsi yerel
-        ├── ceviri/          ✅ Faz 5 tamamlandı (kararlar #30, #37):
-        │                       onisleme, sozluk, bellek, ocr_dil (ilk tur);
-        │                       ocr, alan, cumle, cevirici, model, indirme,
-        │                       sha256, kisayol, akis, denetleyici (ikinci tur).
-        │                       Motor'a BAĞLI; deftere yazmıyor, günlüğe yazıyor.
-        │                       Model ikiliye GİRMİYOR — isteğe bağlı iniyor.
-        └── scaling/         ✅ Faz 3 (karar #32) + Faz 4a (karar #35):
-                                yakalama (Desktop Duplication),
-                                olcekleme.hlsl + uretim.hlsl (gerçek zamanlı
-                                yollar), algoritma.rs ve hareket.rs (CPU
-                                REFERANSLARI — çalışma zamanında
-                                kullanılmıyor, doğruluk orada ölçülüyor),
-                                uretim.rs, sunum, gecikme.
-                                Rekabetçi modda kapalı, deftere yazmıyor.
+        ├── lib.rs           Tauri kurulumu + arka plan döngüsü
+        ├── commands.rs      arayüze açılan komutlar
+        ├── state.rs         Motor: akışın kurulduğu yer
+        ├── ledger.rs        geri alma defteri (diske yazılıyor)
+        ├── revert.rs        geri alma uygulayıcısı
+        ├── registry.rs      her yazma bir Undo döndürüyor
+        ├── settings.rs      ayarlar + veri yolları
+        ├── tray.rs          sistem tepsisi simgesi ve menüsü
+        ├── ucuncu_taraf.rs  gömülü lisans bildirimleri
+        ├── error.rs         tek hata tipi
+        ├── winutil.rs       HANDLE RAII sarmalayıcı
+        ├── monitor/         log.rs (günlük), gecmis.rs (oturum geçmişi, karar #31),
+        │                    metrics.rs (jitter/özet), frames.rs (kare
+        │                    istatistiği), etw.rs + olcum.rs (karar #27)
+        ├── system_boost/    detect, priority, suspend, power, startup
+        ├── network_boost/   dns, latency, tcp, qos
+        ├── profile_engine/  schema, store, aktarım (içe/dışa), mod seçimi, katalog
+        └── library/         steam, epic, exe adayları, vdf, ikon, png — hepsi yerel
 ```
-
-> `scaling/` içinde **iki** CPU referansı var (`algoritma.rs`,
-> `hareket.rs`) ve ikisi de çalışma zamanında kullanılmıyor. Sebebi aynı:
-> görüntü işlemenin doğruluğu gözle anlaşılmıyor. Gölgelendiriciyle
-> ayrışmamaları test ile bağlı — sabitleri değiştirirken ikisini birden
-> değiştir.
 
 ## Faz Durumu
 
-- **Faz 1** (sistem) — ✅ kod tamam, ⬜ saha testi bekliyor (5-10 oyun)
-- **Faz 2** (network + kare ölçümü) — ✅ kod tamam (DNS otomatik uygulama
+- **Faz 1** (sistem) — kod tamam, saha testi bekliyor (5-10 oyun).
+  Bu, projenin en uzun süredir bekleyen işi ve üç faz boyunca ertelendi
+  (kararlar #33, #35, #37). Karar #39 o üç fazı silerek borcu kapattı;
+  saha testi hâlâ yapılmadı — `tasks.md` → Sıradaki 1.
+- **Faz 2** (network + kare ölçümü) — kod tamam (DNS otomatik uygulama
   bilinçli olarak yok, karar #6). Kare ölçümü uçtan uca bağlandı: ETW
   oturumu, yükseltilmiş yardımcı ikili, arayüz (kararlar #14, #27).
-  ⬜ Gerçek bir oyunda doğrulama bekliyor — `tasks.md` → Sıradaki 5
-- **Faz 3** (spatial upscaling) — 🟡 **kod tamam** (kararlar #32, #33).
-  Yakalama, dört algoritma (gölgelendiricide), sunum penceresi, gecikme
-  ölçümü ve arayüz sekmesi bağlandı. Faz sırası **bilerek atlandı**: Faz 1
-  saha testi hâlâ yapılmadı, gerekçe karar #33'te.
-  ✅ Boru hattı bu makinede uçtan uca koştu (`cargo test
-  gercek_ekranda_bir_tur -- --ignored`). ⬜ Gerçek bir oyunla ve **gözle**
-  denenmedi — `tasks.md` → Sıradaki 7. Birim testleri görüntünün doğru
-  göründüğünü gösteremiyor; ilk çalıştırma iki işlevsizlik kusuru
-  gösterdi (karar #32). Masaüstünde ilk elle deneme makineyi
-  kullanılamaz hale getirdi: sunum penceresinin kapatılacak hiçbir yolu
-  yoktu. Kaçış kısayolu ve gizlenme kuralı eklendi (karar #34), ikisi de
-  **henüz elle denenmedi**. Kararlılık turunda (karar #36) ekran modu
-  değişince boru hattının siyah kalması düzeltildi ve gecikme ölçümü
-  kaynağı bekleme süresini bedelden ayırdı — ölçülen bedel 7,26 ms
-  değil 0,40 ms çıktı.
-- **Faz 4** (kare üretimi) — faz **ikiye ayrıldı** (karar #35), çünkü kare
-  üretimi ML gerektirmiyor.
-  - **4a (klasik)** — 🟡 **kod tamam**. Piramitli blok eşleme + çift yönlü
-    warp, HLSL'de; CPU referansı `hareket.rs` ve doğruluğu sentetik
-    gerçek-referansla ölçülüyor. Varsayılan kapalı, rekabetçi modda kapalı.
-    Anahtar açıldığında ilk ara kare bir ısınma turu bekliyor (karar #36).
-    ⬜ Gerçek bir oyunla gözle denenmedi — `tasks.md` → Sıradaki 8.
-  - **4b (ML)** — ⬜ fizibilite **yapıldı** (`docs/FRAME_GENERATION.md`) ve
-    sonucu: şu an açılmıyor. Açılma koşulu 4a'nın sahada denenmiş ve
-    kusurlarının listelenmiş olması.
-- **Faz 5** (ekran çevirisi) — 🟡 **kod tamam** (kararlar #30, #37).
-  Faz iki turda yazıldı: karar #30 yakalamaya dokunmayan dört parçayı
-  önceden yazdı, karar #37 kalanını (yakalama, OCR, kısayol, overlay, alan
-  seçici, model indirme, çıkarım, arayüz). Karar #30'un ayrım testi tuttu:
-  eski dört parçanın hiçbiri yeniden yazılmadı.
-  ✅ Model bu makinede uçtan uca koştu (`cargo test --release
-  ceviri::cevirici::testler -- --ignored`): yükleme 1,7 s, cümle başına
-  78-243 ms, karar #29'un üç zaafının üçü de beklenen davranışı gösterdi.
-  ⚠️ Karar #30'un ölçülmemiş varsayımı **çürüdü**: terim işareti `[[0]]`
-  modelden `[0]` olarak çıkıyordu; on beş aday ölçülüp `#0#` seçildi.
-  Ölçüm testi `--ignored` olarak duruyor.
-  ⬜ Gerçek bir oyunla denenmedi — `tasks.md` → Sıradaki 9. Kısayol,
-  overlay, alan seçici ve ürünün kendi indirme yolu hiç çalıştırılmadı.
-  Ekleme bedeli ölçüldü ve saklanmıyor: ikili 8,69 → 31,81 MiB (ONNX
-  Runtime statik bağlı), model indirmesi ~507 MiB ve kuruluma dahil değil.
+  Gerçek bir oyunda doğrulama bekliyor — `tasks.md` → Sıradaki 4.
+- **Faz 3, 4, 5** — **kaldırıldı** (karar #39). Ölçekleme, kare üretimi ve
+  ekran çevirisi yazıldı, denendi, silindi. Kapsam dışı; geri getirme
+  önerisi gelirse önce kararı oku.
 
 ## Claude Code için notlar
 
@@ -277,9 +202,8 @@ Muifly/
   Kod yorumları oraya atıf yapıyor; numaraları değiştirme.
 - Tasarım ilkelerinden sapan hiçbir implementasyon (özellikle
   injection/hooking) yapılmamalı — önce kullanıcıya sor.
-- Faz sırasını atlama: Faz 1 sahada doğrulanmadan Faz 4'e geçilmez. (Faz 3
-  bu kurala rağmen, proje sahibinin açık isteğiyle yazıldı — karar #33.
-  Bu bir emsal değil: kural duruyor.)
+- Faz sırasını atlama. Bu kural bir kez çiğnendi ve bedeli ödendi: Faz 1
+  saha testi yapılmadan yazılan üç faz, sonunda silindi (karar #39).
 - Yeni bir "yapmıyoruz" kararı verilirse, onu koruyan bir test yaz. Ürün
   duruşlarının çoğu şu an testle korunuyor (`tunel_destegi`,
   `bellek_temizleme_destegi`, `varsayilan_liste_bos`, realtime öncelik).

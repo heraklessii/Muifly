@@ -9,7 +9,7 @@
  * LICENSE dosyalarında duruyor. Ek bir araç bağımlılığı taşımadan aynı sonucu
  * veriyorsa, taşımıyoruz.
  *
- * EULA madde 8 uygulama içinde bir "Üçüncü taraf lisanslar" bölümü vaat
+ * Uygulama içindeki "Üçüncü taraf lisanslar" bölümü bir liste
  * ediyor. Bu dosya o bölümün verisi; `src-tauri/src/ucuncu_taraf.rs` onu
  * ikiliye gömüyor. Bağımlılık sürümleri değiştiğinde betik yeniden
  * çalıştırılmalı — `ucuncu_taraf::testler` bunu unutulursa yakalıyor.

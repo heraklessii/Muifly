@@ -2,7 +2,7 @@
 //!
 //! Her profil ayrı bir JSON dosyası, tek bir veritabanı değil. Sebep:
 //! kullanıcının bir profili bir metin editöründe açıp okuyabilmesi ve bir
-//! arkadaşına gönderebilmesi (`docs/DISTRIBUTION.md`: kaynak kapalı, profil
+//! arkadaşına gönderebilmesi (profil
 //! formatı açık). Tek dosyalık bir veritabanı bunu imkânsız kılardı.
 //!
 //! Dosya adı profil kimliğinden üretiliyor ve dosya sistemi için

@@ -129,12 +129,6 @@ export interface AgBolumu {
   tcp_nodelay: boolean;
 }
 
-export interface OlceklemeBolumu {
-  enabled: boolean;
-  algorithm: string | null;
-  frame_generation: boolean;
-}
-
 export interface Profil {
   profile_id: string;
   display_name: string;
@@ -142,8 +136,6 @@ export interface Profil {
   competitive: boolean;
   system: SistemBolumu;
   network: AgBolumu;
-  scaling: OlceklemeBolumu;
-  ceviri: CeviriBolumu;
   created_by: string;
   shared: boolean;
 }
@@ -163,8 +155,6 @@ export function bosProfil(): Profil {
       power_plan: null,
     },
     network: { preferred_dns: null, qos_priority: false, tcp_nodelay: false },
-    scaling: { enabled: false, algorithm: null, frame_generation: false },
-    ceviri: { enabled: false, region: null, source_language: null },
     created_by: 'user',
     shared: false,
   };
@@ -222,111 +212,6 @@ export interface Ayarlar {
   tema: 'dark' | 'light';
   /** Biten oyun oturumlarını diske kaydet. Varsayılan açık. */
   gecmisTut: boolean;
-  /** Ölçeklemenin yakalayacağı ekran (`olceklemeEkranlari` listesindeki sıra). */
-  olceklemeEkrani: number;
-  /** Ekran çevirisi açık mı (kısayol kayıtlı mı). Varsayılan kapalı. */
-  ceviriAcik: boolean;
-  /** Çevirinin okuyacağı ekran. Ölçeklemeninkinden ayrı. */
-  ceviriEkrani: number;
-  /** Sonuç ekranın üstünde bir pencerede gösterilsin mi. */
-  ceviriOverlay: boolean;
-  /** Model kaç saniye boşta kalınca bellekten düşsün. `0` = hiç. */
-  ceviriBostaDusurSn: number;
-}
-
-// ---------------------------------------------------------------------------
-// Ölçekleme (Faz 3) — `src-tauri/src/scaling/`
-// ---------------------------------------------------------------------------
-
-/** Algoritma anahtarı. Profil dosyasındaki değerle aynı. */
-export type AlgoritmaAnahtari = 'tam_sayi' | 'bilinear' | 'lanczos' | 'xbr';
-
-/**
- * Bir algoritmanın adı ve açıklaması.
- *
- * Metinler backend'den geliyor, burada kopyalanmıyor: tasarım ilkesi 4'ün
- * testi (`aciklamalarda_sayisal_vaat_yok`) Rust tarafında ve açıklamanın
- * ikinci bir kopyası o testin göremediği bir yer olurdu.
- */
-export interface AlgoritmaBilgisi {
-  anahtar: AlgoritmaAnahtari;
-  ad: string;
-  aciklama: string;
-}
-
-export interface Ekran {
-  indeks: number;
-  ad: string;
-  genislik: number;
-  yukseklik: number;
-  birincil: boolean;
-}
-
-/**
- * Ölçekleme boru hattının EKLEDİĞİ gecikme.
- *
- * Bir kazanç değil bir bedel: alan adlarında "iyileşme" ya da "oran" yok ve
- * bu, Rust tarafında testle korunuyor.
- */
-export interface GecikmeOzeti {
-  kareSayisi: number;
-  ortMs: number;
-  p1KotuMs: number;
-  enKotuMs: number;
-  yakalamaOrtMs: number;
-  olceklemeOrtMs: number;
-  /** Kare üretiminin (Faz 4) kare başına ortalama CPU süresi. */
-  uretimOrtMs: number;
-  /** Dikey eşitleme beklemesi de bunun içinde. */
-  sunumOrtMs: number;
-  /**
-   * Kaynağın yeni kare üretmesi beklenen ortalama süre.
-   *
-   * `ortMs`e DAHİL DEĞİL: bu bekleme ölçekleme kapalıyken de olurdu,
-   * boru hattının eklediği bir bedel değil (karar #36).
-   */
-  beklemeOrtMs: number;
-  /** Bu pencerede üretilen kare sayısı — bir kazanç iddiası değil. */
-  uretilenKare: number;
-  /** Ekran yenileme hızı (Hz), ölçülebildiyse. */
-  yenilemeHz: number | null;
-  bosTur: number;
-}
-
-export interface OlceklemeDurumu {
-  calisiyor: boolean;
-  algoritma: AlgoritmaAnahtari | null;
-  ekran: number | null;
-  kaynakGenislik: number;
-  kaynakYukseklik: number;
-  hedefGenislik: number;
-  hedefYukseklik: number;
-  gecikme: GecikmeOzeti | null;
-  /** Neden durduğu. Kullanıcıya gösterilecek cümle. */
-  sonEngel: string | null;
-  /** Çalışıyor ama bir kısıt var — hatadan ayrı, çünkü ölçekleme sürüyor. */
-  uyari: string | null;
-  /** Ölçeklemeyi klavyeden durduran kısayolun etiketi (karar #34). */
-  durdurmaKisayoli: string | null;
-  /** Ölçekleme açık ama ölçeklenecek pencere önde değil: ekranda bir şey yok. */
-  hedefBekleniyor: boolean;
-  /** Döngü kaçış kısayoluyla mı durdu? Günlüğe arka plan döngüsü yazıyor. */
-  kacislaDurduruldu: boolean;
-  /** Kare üretimi (Faz 4) şu an açık mı? */
-  uretimAcik: boolean;
-  /** Kare üretimi bu oturumda kullanılabilir mi? `false` ise hazırlanamadı. */
-  uretimKullanilabilir: boolean;
-  /** Ekranın yenileme hızı (Hz), okunabildiyse. */
-  yenilemeHz: number | null;
-  /** Kare üretimi beklendiği gibi çalışmayabilir — sebebi yazılı. */
-  uretimUyarisi: string | null;
-}
-
-export interface YakalamaDenemesi {
-  genislik: number;
-  yukseklik: number;
-  /** Deneme süresince ekranda değişiklik oldu mu? `false` hata değil. */
-  yeniKare: boolean;
 }
 
 export interface Durum {
@@ -439,31 +324,6 @@ export function oturumSuresiSn(k: OturumKaydi): number {
   return Math.max(0, Math.round((k.bitis - k.baslangic) / 1000));
 }
 
-/**
- * Bu ikilide hangi özelliklerin açık olduğu — `src-tauri/src/surum.rs`.
- *
- * Demo sınırı özellik seviyesinde: zaman sınırı, kalan gün ya da deneme
- * sayacı diye bir alan yok ve eklenmeyecek.
- */
-export interface Kisitlar {
-  demo: boolean;
-  /** `null` = sınırsız. */
-  profilSiniri: number | null;
-  agModulu: boolean;
-  otomatikBaslatma: boolean;
-  /** Profil dosyası içe/dışa aktarma. */
-  profilAktarimi: boolean;
-}
-
-/** Kısıtlar okunamazsa varsayılan: her şey açık (tam sürüm gibi davran). */
-export const TAM_SURUM: Kisitlar = {
-  demo: false,
-  profilSiniri: null,
-  agModulu: true,
-  otomatikBaslatma: true,
-  profilAktarimi: true,
-};
-
 // ---------------------------------------------------------------------------
 // Ağ
 // ---------------------------------------------------------------------------
@@ -560,7 +420,7 @@ export interface Taslak {
 }
 
 /* ---------------------------------------------------------------------------
- * Üçüncü taraf bildirimleri (EULA madde 8)
+ * Üçüncü taraf bildirimleri
  *
  * Veri `src-tauri/ucuncu-taraf.json`'dan geliyor; alan adları
  * `ucuncu_taraf.rs` ile birebir aynı.
@@ -585,126 +445,3 @@ export interface UcuncuTarafListesi {
   hedef: string;
   bilesenler: UcuncuTarafBileseni[];
 }
-
-
-/* ---------------------------------------------------------------------------
- * Ekran çevirisi (Faz 5) — `src-tauri/src/ceviri/`
- *
- * Alan adları Rust tarafıyla birebir aynı. `Alan` ve `CeviriBolumu` profil
- * dosyasına yazıldığı için snake_case, geri kalanı camelCase.
- * ------------------------------------------------------------------------- */
-
-/** Çevrilecek ekran parçası — kenar uzunluklarının **oranı** (0..1). */
-export interface Alan {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-export interface CeviriBolumu {
-  enabled: boolean;
-  /** `null` = ekranın tamamı. */
-  region: Alan | null;
-  /** OCR'ın okuyacağı dil. `null` = varsayılan. */
-  source_language: string | null;
-}
-
-/** Çevirinin hangi adımda olduğu. */
-export type CeviriAsamasi =
-  | 'bosta'
-  | 'yakalaniyor'
-  | 'okunuyor'
-  | 'modelYukleniyor'
-  | 'cevriliyor';
-
-export const ASAMA_ETIKETLERI: Record<CeviriAsamasi, string> = {
-  bosta: 'Hazır',
-  yakalaniyor: 'Ekran okunuyor',
-  okunuyor: 'Yazı taranıyor',
-  modelYukleniyor: 'Model belleğe alınıyor',
-  cevriliyor: 'Çevriliyor',
-};
-
-export interface CeviriDurumu {
-  acik: boolean;
-  /** Kayıtlı kısayol, örn. `Ctrl+Alt+T`. Açıkken hep dolu. */
-  kisayol: string | null;
-  asama: CeviriAsamasi;
-  modelBellekte: boolean;
-  yakalamaMs: number | null;
-  ocrMs: number | null;
-  ceviriMs: number | null;
-  /** Son isteğin hatası. Sonraki başarılı istekte siliniyor. */
-  sonHata: string | null;
-  oyun: string;
-  kaynakDil: string;
-  hedefDil: string;
-  tumEkran: boolean;
-}
-
-/** Bir kaydın nereden geldiği (karar #22). */
-export type Koken = 'makine' | 'kullanici';
-
-export interface CeviriBirimi {
-  /** Kullanıcının ekranda gördüğü hâli. Her zaman gösteriliyor (karar #29). */
-  kaynak: string;
-  ceviri: string;
-  koken: Koken;
-  korunanTerimler: string[];
-  /** Çıktıda işareti bulunamayan terimler — "çeviri eksik" demek. */
-  kayipTerimler: string[];
-  /** Model bu birim için hiçbir şey üretmedi. */
-  bos: boolean;
-}
-
-export interface CeviriSonucu {
-  ham: string;
-  uyarilar: string[];
-  birimler: CeviriBirimi[];
-  bellekten: number;
-  ceviriMs: number;
-}
-
-export interface ModelDurumu {
-  kurulu: boolean;
-  toplamBayt: number;
-  dizin: string;
-  eksikler: string[];
-  kaynak: string;
-}
-
-export interface IndirmeIlerlemesi {
-  sira: number;
-  adet: number;
-  ad: string;
-  inen: number;
-  toplam: number;
-  bitti: boolean;
-  hata: string | null;
-}
-
-export interface CeviriKaydi {
-  metin: string;
-  ceviri: string;
-  koken: Koken;
-  zaman: number;
-}
-
-export interface CeviriBellegi {
-  oyun: string;
-  kaynakDil: string;
-  hedefDil: string;
-  terimler: Record<string, string>;
-  kayitlar: CeviriKaydi[];
-}
-
-/** OCR dil paketinin durumu (karar #28). */
-export type OcrDilDurumu =
-  | { durum: 'var'; dil: { etiket: string; ad: string } }
-  | {
-      durum: 'yok';
-      etiket: string;
-      nasilKurulur: string;
-      mevcut: { etiket: string; ad: string }[];
-    };

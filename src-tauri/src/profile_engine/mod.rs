@@ -8,7 +8,7 @@ pub mod schema;
 pub mod store;
 
 pub use aktarim::Onizleme;
-pub use schema::{AffiniteTercihi, AgBolumu, OlceklemeBolumu, Profil, SistemBolumu};
+pub use schema::{AffiniteTercihi, AgBolumu, Profil, SistemBolumu};
 
 use serde::{Deserialize, Serialize};
 
@@ -64,14 +64,6 @@ impl Mod {
             | Mod::OyunProfili { surec, .. }
             | Mod::Rekabetci { surec, .. } => Some(surec),
         }
-    }
-
-    /// Ölçekleme ve kare üretimi bu modda kullanılabilir mi?
-    ///
-    /// Faz 3 gelmeden hepsi `false`; rekabetçi modda Faz 3'ten sonra da
-    /// kare üretimi `false` kalacak.
-    pub fn kare_uretimi_serbest(&self) -> bool {
-        !matches!(self, Mod::Rekabetci { .. })
     }
 }
 
@@ -206,16 +198,6 @@ mod testler {
         let p = vec![profil("cs2", "cs2.exe", false)];
         let m = mod_sec(Some(&pencere("cs2.exe", false)), &p, false);
         assert!(matches!(m, Mod::OyunProfili { .. }));
-    }
-
-    #[test]
-    fn rekabetci_modda_kare_uretimi_kapali() {
-        let m = Mod::Rekabetci {
-            pid: 1,
-            surec: "cs2.exe".into(),
-            profil_id: None,
-        };
-        assert!(!m.kare_uretimi_serbest());
     }
 
     #[test]

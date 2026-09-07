@@ -1,7 +1,0 @@
-{
-  "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "ceviri",
-  "description": "Ekran çevirisinin iki yardımcı penceresi: sonucu gösteren overlay ve alan seçici. Liste ana pencereninkinden de dar — bu pencerelerin dosya, bildirim ya da adres açma ihtiyacı yok. Kendi komutlarımız (ceviri_*) izin listesi gerektirmiyor; buradaki iki izin yalnızca olay dinlemek ve pencerenin kendini kapatabilmesi için.",
-  "windows": ["ceviri-overlay", "ceviri-alan"],
-  "permissions": ["core:event:default", "core:window:allow-close"]
-}

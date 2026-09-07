@@ -6,12 +6,11 @@
  * `kismi` alıyor: her test yalnızca ilgilendiği alanı yazsın.
  */
 
-import { bosProfil, TAM_SURUM } from '../lib/types';
+import { bosProfil } from '../lib/types';
 import type {
   Durum,
   GecmisOzeti,
   Kayit,
-  Kisitlar,
   Onizleme,
   OturumKaydi,
   Ozet,
@@ -30,11 +29,6 @@ export const AYARLAR = {
   tepsiyeKucult: true,
   tema: 'dark' as const,
   gecmisTut: true,
-  olceklemeEkrani: 0,
-  ceviriAcik: false,
-  ceviriEkrani: 0,
-  ceviriOverlay: true,
-  ceviriBostaDusurSn: 300,
 };
 
 export function durum(kismi: Partial<Durum> = {}): Durum {
@@ -142,13 +136,3 @@ export function gecmisOzeti(kismi: Partial<GecmisOzeti> = {}): GecmisOzeti {
     ...kismi,
   };
 }
-
-export const KISITLAR_TAM = TAM_SURUM;
-
-export const KISITLAR_DEMO: Kisitlar = {
-  demo: true,
-  profilSiniri: 1,
-  agModulu: false,
-  otomatikBaslatma: false,
-  profilAktarimi: false,
-};

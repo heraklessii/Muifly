@@ -2,8 +2,8 @@
  * Profil listesi.
  *
  * Profil dosyalarının nerede durduğu kullanıcıya söyleniyor: dosyalar
- * okunabilir JSON ve paylaşılabilir (`docs/DISTRIBUTION.md` — kaynak kapalı,
- * profil formatı açık). İçe/dışa aktarma da bu yüzden var: paylaşım dosya
+ * okunabilir JSON ve paylaşılabilir. İçe/dışa aktarma da bu yüzden var:
+ * paylaşım dosya
  * alışverişi olarak kalıyor, merkezi bir sunucu ya da hesap sistemi yok
  * (`docs/PROFILES.md`).
  *
@@ -15,11 +15,10 @@
 import { useMemo, useState } from 'react';
 
 import * as api from '../lib/api';
-import type { Durum, Kisitlar, Profil } from '../lib/types';
+import type { Durum, Profil } from '../lib/types';
 import { modSureci } from '../lib/types';
 import {
   IconArti,
-  IconBilgi,
   IconCop,
   IconDisaAktar,
   IconDuzenle,
@@ -32,7 +31,6 @@ import {
 interface Props {
   profiller: Profil[];
   durum: Durum;
-  kisitlar: Kisitlar;
   mesgul: boolean;
   onYeni: () => void;
   onKutuphane: () => void;
@@ -117,7 +115,6 @@ function Rozetler({ p }: { p: Profil }) {
 export function ProfilPaneli({
   profiller,
   durum,
-  kisitlar,
   mesgul,
   onYeni,
   onKutuphane,
@@ -130,10 +127,6 @@ export function ProfilPaneli({
   const [arama, setArama] = useState('');
 
   const ondeki = modSureci(durum.mod);
-  // Sınır profil sayısında: var olan profil düzenlenebilir, yenisi eklenemez.
-  const sinirDoldu =
-    kisitlar.profilSiniri !== null && profiller.length >= kisitlar.profilSiniri;
-
   const gosterilen = useMemo(() => {
     const q = arama.trim().toLocaleLowerCase('tr');
     if (!q) return profiller;
@@ -160,17 +153,11 @@ export function ProfilPaneli({
               aria-label="Profil ara"
             />
           )}
-          {/* Demoda aktarım kapalı: düğme gizlenmiyor, gerekçesi yazılıyor —
-              kullanıcı özelliğin var olduğunu bilmeli. */}
           <button
             className="button"
-            disabled={mesgul || !kisitlar.profilAktarimi || sinirDoldu}
+            disabled={mesgul}
             onClick={onIceAktar}
-            title={
-              kisitlar.profilAktarimi
-                ? 'Bir profil dosyası seç; ne yapacağı gösterilir'
-                : 'Profil aktarımı demo sürümde kapalı'
-            }
+            title="Bir profil dosyası seç; ne yapacağı gösterilir"
           >
             <IconIceAktar />
             İçe aktar
@@ -180,29 +167,18 @@ export function ProfilPaneli({
               kütüphanenin bulamadığı oyunlar için tek çıkış o. */}
           <button
             className="button"
-            disabled={sinirDoldu}
             onClick={onKutuphane}
             title="Steam ve Epic kütüphaneni diskten okur; hiçbir sunucuya sorulmaz"
           >
             <IconKutuphane />
             Kütüphaneden ekle
           </button>
-          <button className="button primary" disabled={sinirDoldu} onClick={onYeni}>
+          <button className="button primary" onClick={onYeni}>
             <IconArti />
             Yeni profil
           </button>
         </div>
       </div>
-
-      {sinirDoldu && (
-        <div className="serit bilgi">
-          <IconBilgi />
-          <span>
-            Demo sürümde tek profil oluşturulabiliyor. Var olan profili
-            düzenlemek, uygulamak ve geri almak sınırsız.
-          </span>
-        </div>
-      )}
 
       <p className="panel__aciklama">
         Her profil bir JSON dosyası olarak <code>%APPDATA%\Muifly\profiller</code>{' '}
@@ -218,11 +194,11 @@ export function ProfilPaneli({
             Bir oyun için profil oluştur: hangi uygulamaların dondurulacağını,
             hangi güç planının kullanılacağını sen belirle.
           </p>
-          <button className="button primary" onClick={onKutuphane} disabled={sinirDoldu}>
+          <button className="button primary" onClick={onKutuphane}>
             <IconKutuphane />
             Kütüphaneden seç
           </button>
-          <button className="button ghost" onClick={onYeni} disabled={sinirDoldu}>
+          <button className="button ghost" onClick={onYeni}>
             <IconArti />
             Elle oluştur
           </button>
@@ -275,13 +251,9 @@ export function ProfilPaneli({
                   <button
                     className="button small ghost icon"
                     onClick={() => onDisaAktar(p)}
-                    disabled={mesgul || !kisitlar.profilAktarimi}
+                    disabled={mesgul}
                     aria-label={`${p.display_name} profilini dışa aktar`}
-                    title={
-                      kisitlar.profilAktarimi
-                        ? 'Profili bir dosyaya kaydet'
-                        : 'Profil aktarımı demo sürümde kapalı'
-                    }
+                    title="Profili bir dosyaya kaydet"
                   >
                     <IconDisaAktar />
                   </button>

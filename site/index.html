@@ -305,38 +305,6 @@
         margin-top: 2px;
       }
 
-      .demo-liste {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 16px;
-        margin-top: 8px;
-      }
-
-      .demo-liste ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        font-size: 15px;
-        color: var(--text-muted);
-      }
-
-      .demo-liste li {
-        padding: 6px 0;
-        display: flex;
-        gap: 10px;
-        align-items: flex-start;
-      }
-
-      .isaret {
-        color: var(--accent);
-        font-weight: 700;
-        flex: 0 0 auto;
-      }
-
-      .isaret.yok {
-        color: var(--text-muted);
-      }
-
       footer {
         padding: 48px 0 72px;
         color: var(--text-muted);
@@ -384,15 +352,13 @@
         </p>
 
         <div class="dugmeler">
-          <a class="dugme birincil" href="#" aria-disabled="true">Steam'de yakında</a>
-          <a class="dugme" href="#" aria-disabled="true">itch.io'da yakında</a>
-          <a class="dugme" href="#" aria-disabled="true">Demo yakında</a>
+          <a class="dugme birincil" href="https://github.com/heraklessii/Muifly">Kaynak kod</a>
+          <a class="dugme" href="https://github.com/heraklessii/Muifly/releases">İndir</a>
         </div>
 
         <p class="fiyat-notu">
-          Tek seferlik satın alma. Windows 10 (1809+) ve Windows 11, x64.
-          Demo yayımlandığında süresiz olacak — zaman sınırı, nag ekranı ya da
-          kapanma sayacı olmayacak.
+          Ücretsiz ve açık kaynak — Apache License 2.0.
+          Windows 10 (1809+) ve Windows 11, x64.
         </p>
       </div>
     </header>
@@ -401,8 +367,8 @@
       <div class="kapsayici">
         <h2>Üç şey yapar</h2>
         <p class="bolum-ozet">
-          Oyuncular bugün bunlar için üç ayrı araca para veriyor. Muifly ikisini
-          birleştiriyor; üçüncüsü (görüntü ölçekleme) yol haritasında.
+          Sistem, ağ ve şeffaflık. Üçü de aynı kuralla çalışıyor: ne
+          yapıldığı yazılıyor, yapılan geri alınabiliyor.
         </p>
 
         <div class="kartlar">
@@ -488,6 +454,13 @@
                 </td>
               </tr>
               <tr>
+                <td>Görüntü ölçekleme ve kare üretimi yapmaz</td>
+                <td>
+                  Denendi ve çıkarıldı: sonuç yeterince iyi değildi ve bakımı,
+                  aracın asıl işinden çalıyordu. Bu iş için ayrı araçlar var.
+                </td>
+              </tr>
+              <tr>
                 <td>Bellek "temizlemez"</td>
                 <td>
                   Standby list temizlemenin ölçülebilir bir faydası
@@ -518,39 +491,6 @@
 
     <section>
       <div class="kapsayici">
-        <h2>Demo</h2>
-        <p class="bolum-ozet">
-          Bu kategoride en büyük satın alma engeli "acaba placebo mu" şüphesi.
-          Demo, ürünün gerçekten çalıştığını kendi makinende görmen için var —
-          kısıtlanmış değil, dar ama eksiksiz.
-        </p>
-
-        <div class="demo-liste">
-          <div class="kart">
-            <h3>Demoda var</h3>
-            <ul>
-              <li><span class="isaret">+</span> System Boost'un tamamı</li>
-              <li><span class="isaret">+</span> Öncesi/sonrası ölçüm ve karşılaştırma</li>
-              <li><span class="isaret">+</span> Şeffaflık günlüğü, tam haliyle</li>
-              <li><span class="isaret">+</span> Geri alma mekanizmasının tamamı</li>
-              <li><span class="isaret">+</span> Bir oyun profili</li>
-            </ul>
-          </div>
-          <div class="kart">
-            <h3>Tam sürümde</h3>
-            <ul>
-              <li><span class="isaret yok">−</span> Network Boost (DNS, yol testi, QoS, TCP)</li>
-              <li><span class="isaret yok">−</span> Sınırsız profil, içe/dışa aktarma</li>
-              <li><span class="isaret yok">−</span> Sistem açılışı modu</li>
-              <li><span class="isaret yok">−</span> Görüntü ölçekleme (yol haritasında)</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <div class="kapsayici">
         <h2>Kaynak kod</h2>
         <div class="serit">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -559,16 +499,16 @@
           </svg>
           <div>
             <p style="margin: 0 0 10px">
-              <strong>Muifly kapalı kaynaklı ve ücretli bir üründür.</strong> Bu
-              depo tanıtım sayfası, demo dağıtımı ve hata takibi içindir.
+              <strong>Muifly ücretsiz ve açık kaynaktır — Apache License 2.0.</strong>
+              Kaynak, hata takibi ve kurulum paketi aynı depoda.
             </p>
             <p style="margin: 0">
-              Ürünün şeffaflık vaadi kaynak koduyla değil, <em>çalışırken ne
-              yaptığını göstermesiyle</em> ilgili: hangi süreç durduruldu, hangi
-              ayar hangi değerden hangi değere geçti, ne zaman geri alındı.
-              Profil dosyaların ise okunabilir JSON olarak
-              <code>%APPDATA%\Muifly\profiller</code> altında durur, sana aittir
-              ve serbestçe paylaşılabilir.
+              Şeffaflık iki katmanda: kod okunabilir ve program
+              <em>çalışırken ne yaptığını gösteriyor</em> — hangi süreç
+              durduruldu, hangi ayar hangi değerden hangi değere geçti, ne
+              zaman geri alındı. Profil dosyaların okunabilir JSON olarak
+              <code>%APPDATA%\Muifly\profiller</code> altında durur ve
+              serbestçe paylaşılabilir.
             </p>
           </div>
         </div>
@@ -580,11 +520,11 @@
         <div class="footer-satir">
           <a href="https://github.com/heraklessii/Muifly/releases">Sürümler</a>
           <a href="https://github.com/heraklessii/Muifly/issues">Hata bildir</a>
-          <a href="https://github.com/heraklessii/Muifly/blob/main/LICENSE.md">Kullanım koşulları</a>
+          <a href="https://github.com/heraklessii/Muifly/blob/main/LICENSE">Lisans (Apache 2.0)</a>
         </div>
         <p style="margin: 0">
           Muifly · Mui yazılım ailesi (Muitoon, Muita, Muiget, Muivly).
-          © 2026 · Tüm hakları saklıdır.
+          Copyright 2026 · Apache License 2.0.
         </p>
       </div>
     </footer>

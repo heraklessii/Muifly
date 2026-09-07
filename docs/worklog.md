@@ -1706,3 +1706,70 @@ Sekizinin de ayrıntısı karar #38'de.
 Saha denemeleri hâlâ yapılmadı ve bu tur onların yerine geçmiyor. Faz 1'in
 saha doğrulaması **dördüncü kez** ertelendi. `tasks.md` → Sıradaki 1-9
 olduğu gibi duruyor.
+
+---
+
+## Oturum 18 — 7 Eylül 2026 · Üç modül kaldırıldı, ürün Apache 2.0 oldu
+
+Proje sahibinin isteği iki cümleydi ve ikisi de kapsamla ilgiliydi:
+ölçekleme, kare üretimi ve çeviri kaldırılsın; ürün diğer Mui projeleri
+gibi açık kaynak ve Apache 2.0 olsun. Karar #39.
+
+### Ne silindi
+
+`src-tauri/src/scaling/` (9 dosya, ~4.500 satır), `src-tauri/src/ceviri/`
+(15 dosya, ~4.900 satır), `src-tauri/src/surum.rs`, dört arayüz bileşeni ve
+iki testi, `capabilities/ceviri.json`, iki fizibilite sondası
+(`arac/ceviri-sonda`, `arac/ocr-sonda`), `arac/vitrin-hazirla.mjs`,
+`docs/FRAME_GENERATION.md` ve `LICENSE.md`.
+
+Bağımlılık tarafında `ort` ile `tokenizers` düştü; `windows` crate'inden 12
+özellik çıktı (WinRT OCR yığını, D3D11/DXGI, `Win32_Networking_WinHttp`,
+`Win32_UI_Input_KeyboardAndMouse`).
+
+### Silmenin bıraktığı izler
+
+Üç yer, silinen kodun **etrafında** kurulmuştu ve tek tek elden geçti:
+
+1. **Profil şeması** — `scaling` ve `ceviri` bölümleri ve onları güvenli
+   hale getiren dört doğrulama bloğu gitti. Kalan doğrulamalar (realtime
+   öncelik, sistem süreçleri, oyunun kendisi) aynen duruyor.
+2. **`Motor::profil_uygula`** — 7. adım (ölçeklemeyi başlat) çıktı; adım
+   sayısı altıya indi. `oturumu_kapat`, `hepsini_geri_al` ve
+   `mod_guncelle` içindeki "önce ölçeklemeyi durdur" çağrıları da kalktı.
+3. **Demo kapısı** — `surum::ag_gerekli()` ve `profil_aktarimi_gerekli()`
+   ağ ve aktarım komutlarının başında duruyordu; ikisi de tamamen kalktı.
+   `state::profil_uygula` içindeki "ağ ayarları atlandı: demo sürümde
+   kapalı" dalı da öyle.
+
+### Ölçülen sonuç
+
+`cargo test` 487 → 286, `npm test` 79 → 51, `cargo clippy --all-targets`
+sıfır uyarı. Düşen test yok: kaldırılan yolların koruduğu hiçbir ürün
+duruşu, kalan modüllerde karşılıksız kalmadı.
+
+`--ignored` test kalmadı. Beşinin üçü gerçek model dosyalarına, ikisi
+gerçek ekrana ihtiyaç duyuyordu; ikisi de artık yok.
+
+### Lisans
+
+`LICENSE` dosyası Apache License 2.0'ın resmî metni, telif satırı
+doldurulmuş. `Cargo.toml` (`LicenseRef-Muifly-EULA` → `Apache-2.0`) ve
+`package.json` (`UNLICENSED` → `Apache-2.0`) güncellendi. README, site ve
+altı belge kapalı kaynak/ücretli dilinden çıkarıldı; kodun içindeki "EULA
+madde 8" atıfları da (üçüncü taraf bildirimleri artık bir sözleşme maddesine
+değil, dağıtımın kendisine bağlı).
+
+### Kapatılmayan bir şey
+
+`competitive` bayrağı ve "Rekabetçi Mod" artık **hiçbir davranışı
+değiştirmiyor** — koruduğu iki şey silindi. Bilerek bırakıldı: kaldırmak
+`katalog.json`, mod numaralandırması ve oturum geçmişine dokunmak demek ve
+bu ayrı bir karar. `tasks.md` → Değerlendirilecek'te duruyor ve şeffaflık
+ilkesi açısından bir borç: kullanıcıya hiçbir şey yapmayan bir mod
+gösteriliyor.
+
+### Sıradaki iş değişmedi
+
+Faz 1'in saha testi. Üç faz boyunca ertelenmişti (kararlar #33, #35, #37);
+o üç faz artık yok ve erteleyecek bir şey kalmadı.

@@ -49,23 +49,6 @@ pub enum Error {
     #[error("{0}")]
     Olcum(String),
 
-    /// Ekran çevirisi yapılamadı (Faz 5).
-    ///
-    /// Metin [`Error::Olcum`] gibi doğrudan kullanıcıya gösteriliyor ve zaten
-    /// Türkçe bir cümle: başına "hata:" gibi bir ek konmuyor, çünkü
-    /// varyantların bir kısmı hata değil bir durum bildiriyor ("alanda
-    /// okunabilir yazı yok" gibi).
-    #[error("{0}")]
-    Ceviri(String),
-
-    /// Çeviri modeli indirilemedi ya da indirilen dosya beklenen dosya değil.
-    ///
-    /// Ayrı bir varyant, çünkü kullanıcının yapacağı şey farklı: çeviri
-    /// hatasında alanı ya da anı değiştirmek, indirme hatasında yeniden
-    /// denemek ya da ağı kontrol etmek gerekiyor.
-    #[error("indirme başarısız: {0}")]
-    Indirme(String),
-
     #[error("dosya hatası: {0}")]
     Io(#[from] std::io::Error),
 
@@ -77,13 +60,6 @@ pub enum Error {
     /// ama sessizce boş bir ekran göstermektense söylenmesi doğru.
     #[error("üçüncü taraf bildirimleri okunamadı: {0}")]
     UcuncuTaraf(String),
-
-    /// Demo ikilisinde kapalı bir özellik istendi.
-    ///
-    /// Mesaj kullanıcıya gösteriliyor: neyin kapalı olduğu söyleniyor, baskı
-    /// kurulmuyor (`docs/DISTRIBUTION.md` — nag ekranı yok).
-    #[error("{0} demo sürümde kapalı")]
-    DemoKisiti(&'static str),
 
     /// Windows dışı bir hedefte derlenen sistem çağrıları buraya düşüyor.
     /// Ürün Windows'a özel; bu varyant yalnızca kodun başka bir platformda

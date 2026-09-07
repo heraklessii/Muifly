@@ -1,4 +1,4 @@
-//! Üçüncü taraf bildirimleri — EULA madde 8'in karşılığı.
+//! Üçüncü taraf bildirimleri.
 //!
 //! Madde 8 "uygulama içindeki 'Üçüncü taraf lisanslar' bölümü"nden söz
 //! ediyor. Bir lisans metninde verilen söz, ürünün tutması gereken bir
@@ -136,7 +136,7 @@ mod testler {
         assert_eq!(b.hedef, "x86_64-pc-windows-msvc");
     }
 
-    /// EULA madde 8'in vaadi: bu ekran boş olamaz.
+    /// Bu ekran boş olamaz: dağıtılan her bileşenin lisansı görünmeli.
     ///
     /// Sayı bir alt sınır; bağımlılıklar azalsa bile bu kadarının altına
     /// düşmesi dosyanın kırpıldığı ya da üretecin yarım kaldığı anlamına

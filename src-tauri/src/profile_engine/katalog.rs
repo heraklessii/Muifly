@@ -15,8 +15,9 @@
 //! kısmı bu türden ölçülmemiş iddialar. Gerekçe: `docs/decisions.md` #26.
 //!
 //! Katalogdaki tek "ayar" `rekabetci` bayrağı ve o da bir vaat değil,
-//! **kısıt**: şemada rekabetçi profilde kare üretimi ve agresif ölçekleme
-//! zorla kapanıyor (`schema.rs`). Yani katalog bir şey açmıyor, kapatıyor.
+//! bir **etiket**: profilin hangi oyun türüne ait olduğunu söylüyor ve
+//! arayüzde mod adı olarak görünüyor. Kendi başına sistemde hiçbir şeyi
+//! değiştirmiyor — katalog bir şey açmıyor.
 //!
 //! ## Kaynak
 //!
@@ -111,9 +112,7 @@ pub fn taslak(oyun_adi: &str, exeler: &[String]) -> Taslak {
             if g.rekabetci {
                 profil.competitive = true;
                 aciklamalar.push(
-                    "Rekabetçi oyun olarak işaretlendi: kare üretimi ve agresif ölçekleme \
-                     bu profilde kapalı kalır."
-                        .into(),
+                    "Rekabetçi oyun olarak işaretlendi: mod adı arayüzde böyle görünür.".into(),
                 );
             }
             if let Some(not) = &g.not {

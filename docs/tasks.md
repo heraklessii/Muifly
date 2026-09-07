@@ -24,18 +24,7 @@ Son madde en önemlisi: geri alma defterinin (karar #3) asıl sınavı bu.
 performans aracı kategorisinde bu doğrudan "virüs mü" algısı yaratıyor.
 Kodla çözülmüyor.
 
-### 3. Demo ikilisinin elle doğrulanması
-
-Kısıtlar kodda ve testte var (`cargo test --features demo`), ama demo ikilisi
-henüz elle çalıştırılıp gözden geçirilmedi:
-
-- [ ] Ağ sekmesi hiç görünmüyor mu
-- [ ] İkinci profil eklenmeye çalışılınca ne yazıyor
-- [ ] Windows ile başlat anahtarı kapalı ve gerekçesi okunuyor mu
-- [ ] Tam sürümde açılmış otomatik başlatma, demo ikilisinde **kapatılabiliyor**
-      mu (geri alma hiçbir sürümde kilitli değil)
-
-### 4. Kütüphane ekranının gerçek pencerede denenmesi
+### 3. Kütüphane ekranının gerçek pencerede denenmesi
 
 Mantık ve CSS ayrı ayrı doğrulandı (Rust testleri gerçek Steam/Epic
 kurulumuyla koştu, stiller tarayıcıda tek dosya olarak gözden geçirildi) ama
@@ -46,7 +35,7 @@ ekran `npm run tauri dev` ile açılmış bir pencerede bir kez denenmedi:
 - [ ] `.exe dosyası seç` penceresi süzgeci ve iptali
 - [ ] Kapağı olmayan oyunlarda ikon mu, baş harf mi çıkıyor
 
-### 5. Kare ölçümünün gerçek oyunda doğrulanması
+### 4. Kare ölçümünün gerçek oyunda doğrulanması
 
 Kod bitti — ETW oturumu, yükseltilmiş yardımcı (`muifly-olcum.exe`),
 komutlar, sidecar paketlemesi ve arayüz ekranı. Kalanların hepsi **elle
@@ -66,7 +55,7 @@ deneme**, kod işi değil:
 - [ ] **Yardımcının imzalanması** — M3'ün kapsamı büyüdü, `ROADMAP.md`'de
       not düşüldü.
 
-### 6. Oturum geçmişinin elle denenmesi
+### 5. Oturum geçmişinin elle denenmesi
 
 Kod ve testler tamam (karar #31); ekran gerçek bir pencerede bir kez
 görülmedi ve asıl sınavı zamanla ortaya çıkanlar:
@@ -78,203 +67,24 @@ görülmedi ve asıl sınavı zamanla ortaya çıkanlar:
 - [ ] Dışa aktarma penceresi ve yazılan dosyanın okunabilirliği
 - [ ] Ayar kapatılınca yeni kayıt yazılmıyor, var olanlar duruyor mu
 
-### 7. Ölçeklemenin gerçek bir oyunda denenmesi (Faz 3)
-
-Kod, testler ve arayüz tamam (karar #32). Boru hattı bu makinede bir kez
-uçtan uca koştu (`cargo test gercek_ekranda_bir_tur -- --ignored
---nocapture`): yakalama açıldı, gölgelendirici derlendi, kareler çizildi.
-Ama **görüntünün doğru göründüğünü ancak göz söyler**. Sırayla:
-
-- [x] Pencere açılıyor, gölgelendirici derleniyor, kare ölçülüyor
-      (`gercek_ekranda_bir_tur`)
-- [ ] **Kaçış kısayolu gerçekten çalışıyor mu** (karar #34). Ölçekleme
-      açıkken `Ctrl+Alt+Shift+S` — pencere kapanmalı, günlükte "ölçekleme
-      durduruldu (kaçış kısayolu)" satırı görünmeli. Oyun fareyi
-      yakalamışken de denenmeli: bu kısayolun asıl işi, başka hiçbir şey
-      çalışmadığı andır.
-- [ ] **Gizlenme kuralı** (karar #34). Masaüstündeyken "Başlat" → ekranda
-      hiçbir şey değişmemeli, panelde "ekranda henüz bir şey yok" şeridi
-      çıkmalı. Oyuna geçilince pencere gelmeli; Muifly'a dönülünce
-      kaybolup arayüz görünmeli; oyuna dönülünce kaldığı yerden sürmeli.
-- [ ] **Görüntü doğru mu.** `npm run tauri dev` → Ölçekleme sekmesi →
-      "Yakalamayı dene" → "Başlat". Düşük çözünürlüklü, **pencereli** bir
-      oyun/uygulama açıkken denenmeli: ölçeklenmiş görüntü ekranı kaplamalı
-      ve kaynağından büyük görünmeli.
-- [ ] **Kendini yakalama gerçekten kesildi mi.** `WDA_EXCLUDEFROMCAPTURE`
-      bu makinede hata vermedi ama etkisi gözle doğrulanmadı: ekranda
-      birbirinin içine giren bir tünel görünüyorsa çalışmıyor demektir.
-- [ ] **Odak ve tıklama geçişi.** Ölçekleme açıkken öndeki pencere hâlâ oyun
-      mu (`WS_EX_NOACTIVATE`), tıklamalar oyuna gidiyor mu
-      (`WS_EX_TRANSPARENT`), Alt+Tab listesinde bizim pencere görünüyor mu
-      (görünmemeli).
-- [ ] **Dört algoritmanın görsel karşılaştırması.** Aynı sahnede sırayla
-      denenip ekran görüntüsü alınmalı. CPU referansıyla aynı çıktıyı
-      verdikleri **varsayım**; sabit testleri satır satır eşitliği
-      kanıtlamıyor (karar #32).
-- [ ] **Münhasır tam ekran yolu.** Oyun exclusive tam ekrandayken hata
-      metni gerçekten çıkıyor mu ve kenarlıksız moda geçince düzeliyor mu.
-- [ ] **Ekran modu değişimi.** Oyun açılırken çözünürlük değişiyor;
-      `ErisimKesildi` sonrası yeniden açma yolu bir kez görülmedi.
-      Yol karar #36'da yeniden yazıldı (eskisi ekranı siyah bırakıyordu):
-      çözünürlük değişince görüntü kaldığı yerden sürmeli, ölçekleme
-      durmamalı, günlükte "boru hattı yeniden kuruldu" satırı görünmeli.
-- [ ] **Çok ekranlı kurulum.** İkinci ekran seçilince pencere doğru ekranda
-      mı açılıyor (masaüstü kökeni (0,0) değil).
-- [ ] **Ölçülen gecikmenin makul olup olmadığı.** "Sunum" satırı dikey
-      eşitleme beklemesini içeriyor; sayı ekran yenileme aralığına
-      yakınsa beklenen, çok üstündeyse bakılmalı.
-- [ ] **Oyun kapanınca pencere kapanıyor mu.** `oturumu_kapat` ölçeklemeyi
-      durduruyor; ekranda kalan siyah bir pencere en görünür hata olurdu.
-
-### 8. Kare üretiminin gerçek bir oyunda denenmesi (Faz 4a)
-
-Kod ve testler tamam (karar #35). Hareket tahmini sentetik gerçek-referansa
-karşı doğrulandı ve gölgelendirici derleniyor. Ama **görüntünün doğru
-göründüğünü ancak göz söyler** — birim testleri yanlış bir vektörün ekranda
-nasıl durduğunu göremez. Sırayla:
-
-- [x] Hareket tahmini bilinen kaydırmayı buluyor (`hareket::testler`)
-- [x] Gölgelendirici derleniyor (`golgelendirici_derleniyor`)
-- [x] Gölgelendirici sabitleri CPU referansıyla aynı
-      (`sabitler_referansla_ayni`)
-- [ ] **Ara kare makul görünüyor mu.** Ölçekleme çalışırken "Kare
-      üretimini aç". Hareketli bir sahnede, üretilen karede yırtılma,
-      hayalet iz ya da 16 pikselde bir basamak **olmamalı**. Basamak
-      görünüyorsa ızgara örneklemesi, hayalet iz görünüyorsa örtüşme eşiği
-      bakılacak.
-- [ ] **Açıp kapatmak ekranı karartmıyor mu.** Anahtar çalışırken
-      değiştirilebilmeli; farkın aynı sahnede görülebilmesinin tek yolu bu.
-      Karar #36'dan sonra ilk ara kare bir tur gecikiyor (ısınma):
-      anahtarı açtığın anda **tek karelik bir hayalet iz olmamalı**.
-- [ ] **Hızlı kamera hareketi.** ±24 pikselden hızlı hareket sınırın
-      dışında; orada üretilen kare "karışım yerine en yakın gerçek kare"ye
-      düşmeli, bozulmamalı.
-- [ ] **Arayüz katmanı ve yazı.** Oyun arayüzü (HUD, menü) sabit durur
-      ama arkası hareket eder; kare üretiminin klasik zayıf noktası burası.
-      Yazının titreyip titremediğine bakılacak.
-- [ ] **Ölçülen bedel makul mü.** "Kare üretimi (hesap süresi)" satırı.
-      Ekran yenileme aralığına yakınsa boru hattı sığmıyor demektir.
-      "Kaynağı bekleme" satırı ayrı okunmalı: o süre bedele dahil değil
-      (karar #36) ve kaynağın kare hızını gösteriyor.
-- [ ] **Yenileme hızı uyarısı.** 60 Hz bir ekranda uyarı çıkıyor mu;
-      yüksek yenilemeli ekranda çıkmıyor mu.
-- [ ] **Rekabetçi mod kapısı.** Rekabetçi moda geçilince kare üretimi
-      gerçekten kapanıyor mu (iki kapı da: profil ve çalışma zamanı).
-- [ ] **Kusur listesi.** Görülen her kusur yazılacak — `FRAME_GENERATION.md`
-      §5'e göre Faz 4b'nin (ML) açılma koşulu bu listenin varlığı.
-
-### 9. Ekran çevirisinin gerçek bir oyunda denenmesi (Faz 5)
-
-Kod, testler ve arayüz tamam (karar #37). Model bu makinede yüklendi,
-çeviri kalitesi ölçüldü ve üç zaafın üçü de beklenen davranışı gösterdi.
-Ama **hiçbiri gerçek bir oyunda denenmedi** ve bu özelliğin asıl sınavı
-orada. Sırayla:
-
-- [x] Model yükleniyor ve makul Türkçe üretiyor
-      (`ceviri::cevirici::testler::gercek_modelle_uctan_uca`)
-- [x] Boru hattının tamamı sentetik metinle koşuyor
-      (`gercek_modelle_akis`) — ön işleme, bölme, sözlük, bellek
-- [x] Terim işaretinin modelden sağ çıktığı ölçüldü (`isaret_adaylari`)
-- [ ] **Kısayol gerçekten çalışıyor mu.** Çeviri açıkken
-      `Ctrl+Alt+T`. Asıl sınav oyun fareyi yakalamışken: kısayolun işi tam
-      da başka hiçbir şeyin çalışmadığı andır. Kombinasyon başka bir
-      uygulamada kayıtlıysa sıradaki adaya düşmeli ve arayüzde **hangisinin**
-      alındığı yazmalı.
-- [ ] **Overlay gerçekten görünüyor mu.** Kenarlıksız pencere modunda bir
-      oyun açıkken kısayola bas: pencere ekranın altında belirmeli, oyunun
-      üstünde durmalı, kapatma düğmesi tıklanabilmeli. Münhasır tam ekranda
-      **görünmemesi beklenen** davranış — arayüz bunu baştan söylüyor,
-      doğrulanmalı.
-- [ ] **Alan seçici.** Profiller ekranından bir profil için "Alanı seç":
-      donmuş görüntü gelmeli, dikdörtgen çizilebilmeli, Esc kapatmalı.
-      Kaydedilen alan profil JSON'ında oran olarak görünmeli.
-- [ ] **Gerçek oyun metniyle OCR.** Karar #28'in külliyatı sentetikti ve bu
-      bilinen bir sınır. Gerçek bir oyunun altyazısında okuma ne kadar
-      doğru, `onisleme`nin uyarıları ne sıklıkta yanlış alarm veriyor?
-      Eşikler sentetik örneklere göre seçildi.
-- [ ] **Duran ekran sorunu.** Masaüstü çoğaltması yalnızca DEĞİŞİKLİK
-      veriyor. Oyunlar sürekli çizdiği için sorun beklenmiyor ama duraklatılmış
-      bir oyunda "ekrandan yeni bir kare gelmedi" hatası çıkabilir; çıkarsa
-      metin kullanıcıya ne yapacağını söylüyor mu?
-- [ ] **Model indirmesi uçtan uca.** Bu oturumda dosyalar `curl` ile
-      indirildi; ürünün kendi WinHTTP yolu (`ceviri::indirme`) **hiç
-      çalıştırılmadı**. İlerleme çubuğu, iptal ve yarım kalan indirmenin
-      `.yarim` dosyası bırakmadığı görülmeli.
-- [ ] **Vekil sunucu / kurumsal ağ.** WinHTTP otomatik vekil ayarını
-      kullanıyor ama bu makinede vekil yok; denenmedi.
-- [ ] **Çeviri sırasında oyunun takılıp takılmadığı.** Çıkarım iki
-      çekirdekle sınırlı ve istek tek seferlik; yine de kare süresine etkisi
-      `monitor::olcum` ile ölçülebilir. Kabul kriteri "çeviri isteği oyunun
-      akışını kesmiyor" ancak böyle doğrulanır.
-- [ ] **Kusur listesi.** Görülen her kusur yazılacak — hem OCR hem çeviri
-      tarafında. Karar #29'un üç zaafı bu listeye göre yeniden okunmalı.
-
 ## Değerlendirilecek
 
-- **Ölçekleme demo ikilisinde açık kalsın mı?** Şu an açık: `surum.rs`'teki
-  kısıtlar listesine eklenmedi, çünkü demo kapsamı bir ürün kararı ve
-  `DISTRIBUTION.md`'de yazılı. Soru gerçek: ölçekleme, ürünün üç ana
-  modülünden biri ve demoda tam açık olması "eksiksiz ama dar" dengesini
-  değiştirebilir. Karar verilirse hem `surum.rs`'e hem `DISTRIBUTION.md`'ye
-  hem de o kararı koruyan bir teste yazılmalı.
-- **Ölçeklemenin profil dosyasından otomatik açılması denenmedi.**
-  `scaling.enabled: true` olan bir profil uygulandığında ölçekleme
-  başlıyor (`state::profil_uygula` 7. adım) ve bu yol testlerle değil
-  yalnızca kodla duruyor: gerçek bir profille bir kez koşturulmalı.
-- **İkinci GPU'ya boşaltma (iGPU offload).** `MODULES.md`'de "nice to have"
-  olarak duruyor. Yakalama artık ekranı süren adaptörü buluyor; ölçeklemeyi
-  başka bir adaptöre taşımak ayrı bir paylaşımlı doku işi ve ölçülmeden
-  girilmemeli.
-- ~~Ekran çevirisi (Faz 5)~~ **Yazıldı** (karar #37). "Muifly modülü mü ayrı
-  ürün mü" sorusu da kapandı: Muifly'ın varsayılan kapalı bir modülü. Kalan
-  iş kod değil, saha denemesi — Sıradaki 9.
-- **Çeviri demo ikilisinde açık kalsın mı?** Ölçeklemeyle aynı soru, aynı
-  durum: `surum.rs`teki kısıt listesine eklenmedi. Çevirinin lehine bir
-  ayrıntı var — modeli indirmek zaten kullanıcının açık bir adımı, yani
-  demoda "açık" olması otomatik bir bedel getirmiyor. Karar verilirse hem
-  `surum.rs`e hem `DISTRIBUTION.md`ye hem de o kararı koruyan bir teste
-  yazılmalı.
-- **ONNX Runtime statik bağlı ve ikili 8,69 → 31,81 MiB büyüdü** (karar #37).
-  Kabul edilen bir bedel ama küçük değil ve `Cargo.toml`'daki "ikili boyutu
-  önemli" cümlesi hâlâ duruyor. Alternatif `load-dynamic`ti: DLL de model
-  gibi çalışma zamanında inerdi. Reddedilme gerekçesi kararda (imzalama,
-  arşiv açma, indirilen şeyin veri değil kod olması). Yeniden bakılacaksa
-  ölçülecek şey şu: kurulum boyutunun satın almaya etkisi mi büyük, imzasız
-  bir DLL'in SmartScreen riski mi?
-- ~~`sozluk`'ün işaretinin modelden sağ çıktığının ÖLÇÜLMESİ.~~ **Ölçüldü ve
-  varsayım çürüdü** (karar #37): `[[0]]` çıktıda `[0]` oluyordu, yani her
-  terim kayıp sayılıyordu. On beş aday sınandı, biçim `#0#` oldu. Ölçüm
-  testi `--ignored` olarak duruyor (`isaret_adaylari`) — model ya da
-  tokenizer değişirse aynı soru yeniden sorulmalı.
-- **OCR'ın gerçek ekran görüntüleriyle tekrar ölçülmesi.** Karar #28'in
-  külliyatı sentetik; bu makinede hiç oyun ekran görüntüsü yoktu. Yakalama
-  tarafı artık açık (karar #37), yani bu artık bir engel değil bir iş —
-  Sıradaki 9'a bağlı. `onisleme`'nin sezgisel uyarıları
-  (bitişik kelime, noktalama şüphesi) da o külliyatta yanlış alarm oranıyla
-  birlikte ölçülmeli — eşikler şu an sentetik örneklere göre seçildi.
 - **Tarayıcıda arayüz önizlemesi.** Oturum 5'te arayüzü gözle doğrulamak için
   geçici bir sahte backend yazıldı (`window.__TAURI_INTERNALS__.invoke`
   taklidi) ve iş bitince silindi. Kalıcı hale getirilirse `npm run dev` Rust
   derlemeden çalışan bir arayüz verir; bedeli, komut yüzeyiyle senkron
   tutulması gereken ikinci bir dosya. Arayüzde çok çalışılacaksa değer,
   yoksa borç.
-- **OCR'a giden kesitin büyütülmesi ölçülmedi.** Küçük punto yazıda OCR'ı
-  büyütülmüş bir görüntüyle beslemek doğruluğu artırabilir. Şu an kesit
-  olduğu gibi gidiyor ve bu **bilinçli**: karar #28 ölçümünü 1:1 görüntüyle
-  yaptı, ölçülmemiş bir dönüşüm eklemek doğruluğu artırdığı kadar
-  azaltabilir. Önce gerçek ekran görüntüleriyle ölçülmeli.
-- **Model boştayken düşüyor ama ne kadar bellek bıraktığı ölçülmedi.**
-  Varsayılan beş dakika (`ceviri_bosta_dusur_sn`). Yüklüyken tutulan
-  bellek bu makinede ölçülmedi; `RISKS.md`'deki "yüzlerce MB" tahmini hâlâ
-  tahmin.
 
-- **`site/` tanıtım sayfası iki fazdır geride.** Sayfa hâlâ "Üç şey yapar"
-  diyor ve Sistem / Ağ / Şeffaflık listeliyor; ölçekleme (Faz 3), kare
-  üretimi (Faz 4a) ve ekran çevirisi (Faz 5) hiç geçmiyor. Bu **şimdilik
-  doğru bir eksiklik**: üçü de sahada denenmedi ve tanıtım sayfasına
-  yazılan her satır bir vaattir (ilke 4). Saha denemeleri bitince üçü
-  birden eklenmeli — ekran çevirisi için üç sınırıyla birlikte (indirme
-  boyutu, tek yönlü dil çifti, münhasır tam ekranda görünmemesi).
+- **"Rekabetçi Mod" artık hiçbir şey yapmıyor.** Koruduğu iki şey (kare
+  üretimi, agresif ölçekleme) karar #39'la kaldırıldı; geriye mod adı,
+  profildeki `competitive` bayrağı ve `katalog.json`daki etiket kaldı.
+  Kullanıcıya davranışı değişmeyen bir mod göstermek şeffaflık ilkesiyle
+  çelişiyor. İki yol var: (a) tamamen kaldırmak — `katalog.json`, mod
+  numaralandırması ve oturum geçmişi kayıtlarına dokunur; (b) moda gerçek
+  bir içerik vermek (örneğin daha dar bir dondurma listesi ya da ölçüm
+  aralığını seyreltmek). Karar verilmeden önce hangisinin kullanıcıya ne
+  söylediğine bakılmalı.
 - **Katalogun büyütülmesi.** Şu an 142 oyun (`src-tauri/katalog.json`).
   Kapsam arttıkça değeri artıyor ve riski düşük: eşleşmeyen satır sessizce
   atlanıyor. Hazır ayar EKLENMEMELİ — karar #26. Yeni satır eklerken tek
@@ -297,10 +107,8 @@ orada. Sırayla:
   `upload-artifact@v4` Node 20 hedefliyor; runner onları zorla Node 24'te
   koşturuyor ve her çalışmada uyarı basıyor. Şimdilik çalışıyor; v5
   sürümleri çıktıkça yükseltilecek.
-- **Site'taki demo düğmesi "Demo yakında" oldu** (1 Eylül 2026). Demo
-  ikilisi M3'ü (kod imzalama) beklediği için düğme boş bir Releases
-  sayfasına gidiyordu. Demo yayımlandığında düğme ile README ve site'taki
-  gelecek zamanlı cümleler geri çevrilmeli.
+- **Kurulum paketi henüz yayınlanmadı.** README ve site Releases'e
+  yönlendiriyor ama orada henüz bir şey yok; M3 (kod imzalama) bekliyor.
 
 ## Ertelendi (gerekçesiyle)
 
@@ -308,11 +116,19 @@ orada. Sırayla:
 - **DNS otomatik uygulama** — karar #6
 - **Statik route ekleme** — karar #7
 - **Bellek/standby list temizleme** — karar #16
-- **Faz 3 (ölçekleme) ve Faz 4 (kare üretimi)** — faz disiplini gereği Faz 1
-  ve 2 sahada doğrulanmadan başlanmıyor
+- **Faz 3 (ölçekleme), Faz 4 (kare üretimi), Faz 5 (ekran çevirisi)** —
+  yazıldılar ve **kaldırıldılar** (karar #39). Ertelenmiş değil, kapsam
+  dışı: geri getirilecekse önce Faz 1 ve 2 sahada doğrulanmış olmalı
 
 ## Tamamlandı
 
+- [x] **Ölçekleme, kare üretimi ve çeviri kaldırıldı; ürün Apache 2.0
+      oldu** (7 Eylül 2026, karar #39). `scaling/` ve `ceviri/` modülleri,
+      `surum.rs`, dört arayüz bileşeni, iki fizibilite sondası, vitrin
+      betiği ve `FRAME_GENERATION.md` silindi; `ort` + `tokenizers`
+      bağımlılıkları ve 12 `windows` özelliği düştü. EULA yerine Apache
+      2.0, demo/tam sürüm ayrımı kalktı. `cargo test` 487 → 286,
+      `npm test` 79 → 51; hiçbiri düşmedi.
 - [x] **Denetim turu: bu makinede görünmeyen sekiz yol** (3 Eylül 2026,
       karar #38). Tur başlarken `cargo test` yeşil, clippy sıfır uyarıydı;
       sekizinin hiçbiri o iki aracın baktığı yerde değildi:

@@ -12,26 +12,15 @@ import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialo
 import { openUrl } from '@tauri-apps/plugin-opener';
 
 import type {
-  Alan,
-  AlgoritmaAnahtari,
-  AlgoritmaBilgisi,
   Ayarlar,
-  CeviriBellegi,
-  CeviriDurumu,
-  CeviriSonucu,
   DnsSonucu,
   Durum,
-  Ekran,
   GecmisOzeti,
   Karsilastirma,
   KareOlcumDurumu,
   Kayit,
   KatalogGirdisi,
-  Kisitlar,
-  ModelDurumu,
-  OcrDilDurumu,
   Onizleme,
-  OlceklemeDurumu,
   OlcumRaporu,
   Ornek,
   OturumKaydi,
@@ -45,7 +34,6 @@ import type {
   TcpDurumu,
   UcuncuTarafListesi,
   UygulamaSonucu,
-  YakalamaDenemesi,
   YolSonucu,
 } from './types';
 
@@ -53,12 +41,9 @@ import type {
 export const OLAY_DURUM = 'muifly://durum';
 export const OLAY_GUNLUK = 'muifly://gunluk';
 export const OLAY_ORNEK = 'muifly://ornek';
-export const OLAY_CEVIRI = 'muifly://ceviri';
-export const OLAY_CEVIRI_INDIRME = 'muifly://ceviri-indirme';
 
 export const surum = () => invoke<string>('surum');
-/** Demo/tam sürüm ayrımı. Açılışta bir kez okunuyor; çalışırken değişmez. */
-export const kisitlar = () => invoke<Kisitlar>('kisitlar');
+
 export const durum = () => invoke<Durum>('durum');
 
 export const gunluk = (adet?: number) => invoke<Satir[]>('gunluk', { adet: adet ?? null });
@@ -155,69 +140,7 @@ export const otomatikBaslatmaKomutu = () => invoke<string | null>('otomatik_basl
 
 export const yapilmayanlar = () => invoke<[string, string][]>('yapilmayanlar');
 
-// --- Ölçekleme (Faz 3) -----------------------------------------------------
-
-export const olceklemeEkranlari = () => invoke<Ekran[]>('olcekleme_ekranlari');
-export const olceklemeAlgoritmalari = () =>
-  invoke<AlgoritmaBilgisi[]>('olcekleme_algoritmalari');
-export const olceklemeDurumu = () => invoke<OlceklemeDurumu>('olcekleme_durumu');
-export const olceklemeBaslat = (algoritma: AlgoritmaAnahtari) =>
-  invoke<void>('olcekleme_baslat', { algoritma });
-export const olceklemeDurdur = () => invoke<void>('olcekleme_durdur');
-/** Çalışırken algoritma değiştirir; ekran kararmıyor. */
-export const olceklemeAlgoritma = (algoritma: AlgoritmaAnahtari) =>
-  invoke<void>('olcekleme_algoritma', { algoritma });
-/** Kare üretimini (Faz 4) çalışırken açar/kapatır. */
-export const olceklemeUretimi = (acik: boolean) =>
-  invoke<void>('olcekleme_uretimi', { acik });
-/** Pencereyi açmadan yakalamanın çalışıp çalışmadığını dener. */
-export const olceklemeDenemesi = () => invoke<YakalamaDenemesi>('olcekleme_denemesi');
-
-
-// --- Ekran çevirisi (Faz 5) ------------------------------------------------
-
-export const ceviriDurumu = () => invoke<CeviriDurumu>('ceviri_durumu');
-export const ceviriSonucu = () => invoke<CeviriSonucu | null>('ceviri_sonucu');
-/** Kısayolu sisteme kaydeder. Kaydedilemezse hata döner ve ayar yazılmaz. */
-export const ceviriAc = () => invoke<void>('ceviri_ac');
-export const ceviriKapat = () => invoke<void>('ceviri_kapat');
-/** Kısayola basmakla aynı şey — özelliği pencereden denemek için. */
-export const ceviriSimdi = () => invoke<void>('ceviri_simdi');
-/** Kaynak dilin OCR paketi kurulu mu (karar #28). */
-export const ceviriDilDurumu = () => invoke<OcrDilDurumu>('ceviri_dil_durumu');
-
-export const ceviriModelDurumu = () => invoke<ModelDurumu>('ceviri_model_durumu');
-/** İndirme uzun sürüyor; ilerleme `OLAY_CEVIRI_INDIRME` ile akıyor. */
-export const ceviriModelIndir = () => invoke<void>('ceviri_model_indir');
-export const ceviriModelIndirmeyiDurdur = () =>
-  invoke<void>('ceviri_model_indirmeyi_durdur');
-export const ceviriModelSil = () => invoke<void>('ceviri_model_sil');
-/** Diskteki dosyaların SHA-256'sını beklenenle karşılaştırır. Yavaş. */
-export const ceviriModelDogrula = () => invoke<void>('ceviri_model_dogrula');
-
-/** Alan seçici penceresini açar. */
-export const ceviriAlanSeciciAc = (kimlik: string) =>
-  invoke<void>('ceviri_alan_secici_ac', { kimlik });
-export const ceviriAlanSeciciKapat = () => invoke<void>('ceviri_alan_secici_kapat');
-export const ceviriOverlayKapat = () => invoke<void>('ceviri_overlay_kapat');
-/** Alan seçicinin gösterdiği donmuş ekran görüntüsü (`data:` adresi). */
-export const ceviriEkranGoruntusu = () => invoke<string>('ceviri_ekran_goruntusu');
-/** Seçilen alanı profile yazar. `null` = ekranın tamamı. */
-export const ceviriAlaniKaydet = (kimlik: string, alan: Alan | null) =>
-  invoke<string[]>('ceviri_alani_kaydet', { kimlik, alan });
-
-export const ceviriBellegi = () => invoke<CeviriBellegi>('ceviri_bellegi');
-/** Kullanıcının düzelttiği çeviri. Makine çevirisiyle ezilmiyor (karar #22). */
-export const ceviriDuzelt = (metin: string, ceviri: string) =>
-  invoke<void>('ceviri_duzelt', { metin, ceviri });
-export const ceviriKaydiSil = (metin: string) => invoke<void>('ceviri_kaydi_sil', { metin });
-export const ceviriTerimEkle = (terim: string, karsilik: string) =>
-  invoke<void>('ceviri_terim_ekle', { terim, karsilik });
-export const ceviriTerimSil = (terim: string) => invoke<void>('ceviri_terim_sil', { terim });
-/** Makine kayıtlarını siler; kullanıcı düzeltmelerine dokunmaz. */
-export const ceviriBelleginiTemizle = () => invoke<void>('ceviri_bellegini_temizle');
-
-/** Üçüncü taraf bileşenler — metinler hariç (EULA madde 8). */
+/** Üçüncü taraf bileşenler — metinler hariç. */
 export const ucuncuTarafListesi = () => invoke<UcuncuTarafListesi>('ucuncu_taraf_listesi');
 /** Tek bir lisans metni. `no`, listedeki `metinNo` alanı. */
 export const ucuncuTarafMetni = (no: number) => invoke<string>('ucuncu_taraf_metni', { no });

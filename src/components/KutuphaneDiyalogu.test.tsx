@@ -62,8 +62,6 @@ const TASLAK: Taslak = {
       power_plan: null,
     },
     network: { preferred_dns: null, qos_priority: false, tcp_nodelay: false },
-    scaling: { enabled: false, algorithm: null, frame_generation: false },
-    ceviri: { enabled: false, region: null, source_language: null },
     created_by: 'user',
     shared: false,
   },

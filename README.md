@@ -3,13 +3,10 @@
 **Windows için oyun performans aracı — ne yaptığını gösteren, her adımı geri
 alınabilen türden.**
 
-Sistem optimizasyonu, ağ ölçümü ve görüntü ölçekleme tek uygulamada.
-Yanında, isteyen için ekran çevirisi.
+Sistem optimizasyonu ve ağ ölçümü tek uygulamada.
 Abonelik yok, reklam yok, telemetri yok.
 
-> Bu depo tanıtım sayfası ve demo dağıtımı içindir. Muifly kapalı kaynaklı,
-> tek seferlik ücretli bir üründür — kaynak kod burada yayınlanmaz.
-> Bkz. [LICENSE.md](LICENSE.md).
+> Muifly açık kaynak ve ücretsizdir — [Apache License 2.0](LICENSE).
 
 ## Ne yapar
 
@@ -28,6 +25,11 @@ Abonelik yok, reklam yok, telemetri yok.
 - Nagle birleştirmesini ve Windows'un çokluortam ağ kısıtlamasını kaldırabilir
 - Oyun trafiğine QoS önceliği tanımlayabilir
 
+**Ölçüm**
+- Oyun çalışırken kare süresini ölçer; ortalama, %1 en kötü ve takılma sayısı
+  ayrı ayrı gösterilir
+- Optimizasyon öncesi ve sonrası ölçümler yan yana durur
+
 **Kütüphane**
 - Kurulu Steam ve Epic oyunlarını kapak görselleriyle listeler; profili
   oyuna tıklayarak açarsın, exe adını bilmen gerekmez
@@ -35,19 +37,10 @@ Abonelik yok, reklam yok, telemetri yok.
 - Bunların hepsi **senin diskinden** okunur: hiçbir servise sorulmaz, hangi
   oyunlara sahip olduğun hiçbir yere gönderilmez
 
-**Ekran çevirisi** (isteğe bağlı, varsayılan kapalı)
-- Tuşa basınca seçtiğin ekran alanındaki İngilizce yazıyı okur ve
-  **bu bilgisayarda** Türkçeye çevirir — hiçbir metin dışarı gönderilmez
-- Çeviri her zaman özgün metinle birlikte gösterilir; makine çevirisi
-  olduğu saklanmaz
-- Düzelttiğin çeviriler oyun başına bir dosyada birikir ve bir daha aynen
-  kullanılır; oyuna özel terim sözlüğü tanımlayabilirsin
-- Çeviri modeli kuruluma dahil değildir, isteyen ayrıca indirir
-
 **Şeffaflık**
 - Yapılan her değişiklik günlüğe yazılır: ne, ne zaman, hangi değerden hangi değere
 - Her değişiklik tek tıkla geri alınabilir
-- Optimizasyon öncesi ve sonrası ölçümler yan yana gösterilir
+- Biten oturumlar geçmişte durur; dosya bu bilgisayardan çıkmaz
 
 ## Ne yapmaz
 
@@ -57,27 +50,38 @@ Bunlar eksik özellik değil, bilinçli sınırlar:
 |---|---|
 | Oyun sürecine kod enjekte etmez | DLL injection ve bellek hook'lama anti-cheat riski taşır. Yalnızca resmi Windows API'leri kullanılır. |
 | Ağ trafiğini kendi sunucularına yönlendirmez | VPN tüneli çoğu zaman ping'i kötüleştirir, abonelik modeline zorlar ve trafiğini görebileceğimiz bir konuma geçmemizi gerektirir. |
-| Ekran çevirisinde kalite garantisi vermez | Model bu bilgisayarda çalışan küçük bir çeviri modeli; bir cümleyi atlayabilir ya da oyun terimini bilmeyebilir. Bu yüzden özgün metin her zaman yanında durur ve düzeltmen kalıcı olarak kaydedilir. |
-| Çeviri penceresi münhasır tam ekranda görünmez | Üstte duran bir pencere, oyun münhasır tam ekrandayken çizilemez. Kenarlıksız pencere modu gerekir; bu bir eksiklik değil, işletim sisteminin sınırı. |
 | DNS ayarını kendiliğinden değiştirmez | Adaptör DNS'ini programın değiştirmesi, yanlış gittiğinde seni internetsiz bırakır. Ölçüp öneriyoruz. |
 | Süreçleri kapatmaz | Dondurma tersine çevrilebilir, kapatma değil. |
 | Bellek "temizlemez" | Standby list temizlemenin ölçülebilir bir faydası gösterilemiyor. |
+| Görüntü ölçekleme ve kare üretimi yapmaz | Denendi ve çıkarıldı: sonuç yeterince iyi değildi ve bakımı, aracın asıl işinden çalıyordu. Bu iş için ayrı araçlar var. |
 | Oyun kütüphaneni dışarı bildirmez | Oyun adları ve kapaklar Steam ve Epic'in kendi disk dosyalarından okunur. Kütüphanen için tek bir ağ isteği yapılmaz. |
 | Telemetri toplamaz | Kullanım istatistiği, çökme raporu, analytics — hiçbiri gönderilmiyor. |
 | Sayısal vaat vermez | "Ping'i 20 ms düşürür" gibi bir iddia dürüst olamaz. Gösterilen her sayı senin makinende ölçülür. |
 
 ## Kurulum
 
-- **Steam** — *(mağaza sayfası hazırlanıyor)*
-- **itch.io** — *(hazırlanıyor)*
-- **Demo** — *(hazırlanıyor; yayımlandığında bu deponun
-  [Releases](../../releases) bölümünde olacak)*
+Hazır kurulum dosyaları [Releases](../../releases) bölümünde olacak.
 
 Sistem gereksinimi: Windows 10 sürüm 1809 veya üzeri, x64.
 
-Demo süresiz olacak; zaman sınırı, nag ekranı veya kapanma sayacı içermeyecek. Sınır
-özellik seviyesinde: System Boost'un tamamı ve öncesi/sonrası ölçüm demoda
-olacak, Network Boost ve çoklu profil tam sürümde.
+## Kaynaktan derleme
+
+Gerekenler: [Rust](https://rustup.rs) (1.77.2+), [Node.js](https://nodejs.org)
+(20+) ve Visual Studio Build Tools (C++ iş yükü).
+
+```bash
+npm install
+node arac/olcum-yardimcisi-hazirla.mjs   # kare ölçümü yardımcısı — build öncesi şart
+npm run tauri dev                        # geliştirme
+npm run tauri build                      # kurulum paketi
+```
+
+Testler:
+
+```bash
+npm test                                  # arayüz (vitest)
+cargo test --manifest-path src-tauri/Cargo.toml
+```
 
 ## Sık sorulanlar
 
@@ -89,8 +93,8 @@ bunu net söylemeyi tercih ediyoruz.
 
 **Yönetici yetkisi neden isteniyor?**
 Sürekli istenmiyor. Arka plan izleme yükseltilmiş yetkiyle çalışmaz. Yalnızca
-sistem geneli ağ ayarları (Nagle, QoS) için yönetici gerekir ve ne için
-istendiği ekranda yazar.
+sistem geneli ağ ayarları (Nagle, QoS) ve kare ölçümü için yönetici gerekir ve
+ne için istendiği ekranda yazar.
 
 **Program çökerse sistemim değişmiş halde mi kalır?**
 Hayır. Geri alma defteri diske yazılır; bir sonraki açılışta bekleyen
@@ -99,18 +103,23 @@ planı eski haline döner.
 
 **Profillerimi paylaşabilir miyim?**
 Evet. Profiller `%APPDATA%\Muifly\profiller` altında okunabilir JSON dosyaları
-olarak durur. Format belgelidir ve profil dosyaları sana aittir.
+olarak durur. Format belgelidir.
 
-## Hata bildirimi
+## Katkı
 
-[Issues](../../issues) bölümünü kullan. Kaynak kod paylaşılmıyor ama hata
-raporları ve özellik istekleri buradan takip ediliyor.
+Hata bildirimi ve özellik isteği için [Issues](../../issues), kod için pull
+request. Katkı gönderdiğinde, katkının Apache License 2.0 altında
+lisanslanmasını kabul etmiş olursun (lisans metni, madde 5).
+
+Kod yazmadan önce [`docs/DESIGN_PRINCIPLES.md`](docs/DESIGN_PRINCIPLES.md)
+okunmalı: beş ilkenin çoğu testle korunuyor ve ihlal eden bir yama CI'da
+kırmızıya döner.
 
 ## Mui ailesi
 
 Muifly; Muitoon, Muita, Muiget ve Muivly ile aynı tasarım dilini paylaşır.
-Muiget ve Muivly açık kaynak ve ücretsizdir; Muifly ticari bir üründür.
+Hepsi açık kaynak ve ücretsizdir.
 
 ---
 
-© 2026 Muifly. Tüm hakları saklıdır. Kullanım koşulları: [LICENSE.md](LICENSE.md)
+Copyright 2026 Muifly · [Apache License 2.0](LICENSE)

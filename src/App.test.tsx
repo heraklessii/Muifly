@@ -7,9 +7,8 @@
  *    güvenli hale getirdiğinde (`profile_engine::schema`) düzeltmeleri geri
  *    döndürüyor; bunları sessizce yutmak, kullanıcının kaydettiğini sandığı
  *    profille diskteki profili ayırırdı (şeffaflık ilkesi).
- * 2. **Demo ikilisinde ağ sekmesi hiç görünmüyor.** Kısıtlar `surum.rs`'ten
- *    geliyor; arayüz kapalı özelliği "kapalı" diye göstermek yerine hiç
- *    göstermiyor (karar #20).
+ * 2. **Ctrl+1..n kenar çubuğundaki sırayı takip ediyor.** Sabit bir eşleme,
+ *    sekme sırası değiştiğinde kullanıcıyı beklemediği ekrana götürürdü.
  */
 
 import { render, screen, waitFor, within } from '@testing-library/react';
@@ -17,7 +16,7 @@ import userEvent from '@testing-library/user-event';
 
 import App from './App';
 import * as api from './lib/api';
-import { KISITLAR_DEMO, KISITLAR_TAM, durum, onizleme, ozet, profil } from './test/ornekler';
+import { durum, onizleme, ozet, profil } from './test/ornekler';
 
 vi.mock('./lib/api', () => ({
   OLAY_DURUM: 'muifly://durum',
@@ -26,7 +25,6 @@ vi.mock('./lib/api', () => ({
   // Olay aboneliği: testte hiçbir olay yayınlanmıyor, bırakma fonksiyonu boş.
   dinle: vi.fn(async () => () => {}),
   surum: vi.fn(async () => '0.1.0'),
-  kisitlar: vi.fn(),
   yapilmayanlar: vi.fn(async () => []),
   durum: vi.fn(),
   gunluk: vi.fn(async () => []),
@@ -59,25 +57,6 @@ vi.mock('./lib/api', () => ({
   gecmisiTemizle: vi.fn(async () => undefined),
   gecmisDisaAktar: vi.fn(async () => undefined),
   metinDosyasiHedefi: vi.fn(async () => null),
-  // Ölçekleme: sekme açılınca okunuyor, bu testlerin konusu değil.
-  olceklemeAlgoritmalari: vi.fn(async () => []),
-  olceklemeEkranlari: vi.fn(async () => []),
-  olceklemeDurumu: vi.fn(async () => ({
-    calisiyor: false,
-    algoritma: null,
-    ekran: null,
-    kaynakGenislik: 0,
-    kaynakYukseklik: 0,
-    hedefGenislik: 0,
-    hedefYukseklik: 0,
-    gecikme: null,
-    sonEngel: null,
-    uyari: null,
-  })),
-  olceklemeBaslat: vi.fn(async () => undefined),
-  olceklemeDurdur: vi.fn(async () => undefined),
-  olceklemeAlgoritma: vi.fn(async () => undefined),
-  olceklemeDenemesi: vi.fn(),
   ayarlariYaz: vi.fn(async (a) => a),
   otomatikBaslatmaAyarla: vi.fn(async () => false),
   otomatikBaslatmaKomutu: vi.fn(async () => null),
@@ -111,7 +90,6 @@ vi.mock('./lib/api', () => ({
 const sahte = vi.mocked(api);
 
 beforeEach(() => {
-  sahte.kisitlar.mockResolvedValue(KISITLAR_TAM);
   sahte.durum.mockResolvedValue(durum());
   sahte.ozet.mockResolvedValue(ozet());
   sahte.profiller.mockResolvedValue([]);
@@ -123,40 +101,9 @@ async function uygulamayiAc() {
   await screen.findByRole('button', { name: /durum/i });
 }
 
-describe('App — sürüm kısıtları', () => {
-  it('tam sürümde ağ sekmesi görünüyor', async () => {
-    await uygulamayiAc();
-    expect(screen.getByRole('button', { name: /ağ/i })).toBeTruthy();
-  });
-
-  it('demo ikilisinde ağ sekmesi hiç görünmüyor', async () => {
-    sahte.kisitlar.mockResolvedValue(KISITLAR_DEMO);
-    await uygulamayiAc();
-
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /^ağ$/i })).toBeNull();
-    });
-  });
-
-  it('kısıtlar okunamazsa tam sürüm gibi davranıyor', async () => {
-    // Komut hata verse bile arayüz kilitlenmemeli: eksik bilgi yüzünden
-    // özellik gizlemek, çalışan bir kurulumu bozuk gösterirdi.
-    sahte.kisitlar.mockRejectedValue(new Error('komut yok'));
-    await uygulamayiAc();
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /ağ/i })).toBeTruthy();
-    });
-  });
-});
-
 describe('App — klavye kısayolları', () => {
-  /**
-   * Numaralar GÖRÜNEN sekmelere göre sayılıyor. Demoda ağ sekmesi hiç
-   * çizilmediği için Ctrl+3 oradaki üçüncü sekmeyi (Ölçekleme) açmalı; sabit
-   * bir eşleme, kullanıcıyı var olmayan bir sekmeye götürürdü.
-   */
-  it('Ctrl+3 tam sürümde ağ sekmesini açıyor', async () => {
+  /** Numaralar kenar çubuğundaki sırayla: üçüncü sekme Ağ. */
+  it('Ctrl+3 ağ sekmesini açıyor', async () => {
     const kullanici = userEvent.setup();
     await uygulamayiAc();
 
@@ -168,31 +115,7 @@ describe('App — klavye kısayolları', () => {
     });
   });
 
-  it('Ctrl+3 demo ikilisinde bir sonraki sekmeyi açıyor', async () => {
-    sahte.kisitlar.mockResolvedValue(KISITLAR_DEMO);
-    const kullanici = userEvent.setup();
-    await uygulamayiAc();
-    // Ağ sekmesinin gerçekten çizilmediğinden emin ol, sonra kısayolu dene.
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /^ağ$/i })).toBeNull();
-    });
-
-    await kullanici.keyboard('{Control>}3{/Control}');
-
-    // Ağ sekmesi yokken üçüncü sıra Ölçekleme'ye kayıyor: numaralar
-    // ekrandaki sıralamayı takip ediyor, sabit bir sekmeyi değil.
-    await waitFor(() => {
-      const dugme = screen.getByRole('button', { name: /^ölçekleme$/i });
-      expect(dugme.getAttribute('aria-current')).toBe('page');
-    });
-  });
-
-  /**
-   * Geçmiş sekmesi demoda da var: kayıtları göstermek bir ücretli özellik
-   * değil, şeffaflık ilkesinin gereği (`monitor::gecmis`).
-   */
-  it('Geçmiş sekmesi demo ikilisinde de görünüyor', async () => {
-    sahte.kisitlar.mockResolvedValue(KISITLAR_DEMO);
+  it('Geçmiş sekmesi kenar çubuğunda duruyor', async () => {
     await uygulamayiAc();
 
     await waitFor(() => {
@@ -233,21 +156,6 @@ describe('App — profil kaydetme', () => {
     expect(await screen.findByText(/profil kaydedildi/i)).toBeTruthy();
   });
 
-  it('demo sınırı dolduğunda yeni profil düğmesi kapalı', async () => {
-    sahte.kisitlar.mockResolvedValue(KISITLAR_DEMO);
-    sahte.profiller.mockResolvedValue([profil()]);
-    const kullanici = userEvent.setup();
-    await uygulamayiAc();
-
-    await kullanici.click(screen.getByRole('button', { name: /profiller/i }));
-
-    await waitFor(() => {
-      const dugme = screen.getByRole('button', { name: /yeni profil/i }) as HTMLButtonElement;
-      expect(dugme.disabled).toBe(true);
-    });
-    // Neden kapalı olduğu yazıyor: kapalı bir düğme gerekçesiz bırakılmıyor.
-    expect(screen.getByText(/tek profil oluşturulabiliyor/i)).toBeTruthy();
-  });
 });
 
 describe('App — profil içe/dışa aktarma', () => {
@@ -315,19 +223,6 @@ describe('App — profil içe/dışa aktarma', () => {
 
     await waitFor(() => {
       expect(sahte.profilOnizle).not.toHaveBeenCalled();
-    });
-  });
-
-  it('demo ikilisinde aktarım düğmeleri kapalı ve gerekçesi yazıyor', async () => {
-    sahte.kisitlar.mockResolvedValue(KISITLAR_DEMO);
-    sahte.profiller.mockResolvedValue([profil()]);
-    const kullanici = userEvent.setup();
-    await profillerSekmesi(kullanici);
-
-    await waitFor(() => {
-      const dugme = screen.getByRole('button', { name: 'İçe aktar' }) as HTMLButtonElement;
-      expect(dugme.disabled).toBe(true);
-      expect(dugme.title).toMatch(/demo/i);
     });
   });
 

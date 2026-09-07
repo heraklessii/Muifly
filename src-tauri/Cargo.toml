@@ -3,7 +3,7 @@ name = "muifly"
 version = "0.5.0"
 description = "Windows icin oyun performans optimizasyon araci"
 authors = ["Muifly"]
-license = "LicenseRef-Muifly-EULA"
+license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.77.2"
 publish = false
@@ -33,11 +33,6 @@ path = "src/bin/muifly-olcum.rs"
 required-features = ["olcum-yardimcisi"]
 
 [features]
-# Demo ikilisi: `cargo build --features demo`. Kapsam ve gerekcesi
-# docs/DISTRIBUTION.md'de, uygulanmasi src/surum.rs'de. Zaman sinirli deneme
-# DEGIL - sinir ozellik seviyesinde.
-demo = []
-
 # Olcum yardimcisini derler. Yalnizca `arac/olcum-yardimcisi-hazirla.mjs`
 # kullaniyor; elle acilmasi gerekmiyor.
 olcum-yardimcisi = []
@@ -60,36 +55,11 @@ tauri-plugin-log = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 parking_lot = "0.12"
 
-# Ekran cevirisi (Faz 5, karar #37). Ikisi de yalnizca `ceviri::cevirici`
-# icinde kullaniliyor ve modelin kendisi ikiliye GIRMIYOR (karar #1).
-#
-# `ort` = ONNX Runtime baglamalari. `download-binaries` calisma zamaninda
-# degil DERLEME zamaninda indiriyor ve statik bagliyor. Bunun bedeli ikili
-# boyutu, kazanci calisma zamaninda indirilen bir DLL'in hic olmamasi:
-# indirilen tek sey modelin agirliklari, yani veri. Olculen buyume ve
-# reddedilen alternatif (load-dynamic) karar #37'de.
-#
-# `tokenizers` = SentencePiece Unigram parcalamasi. Sayiya cevirmeyi bu kasa
-# YAPMIYOR, biz yapiyoruz (`cevirici::Sozluk`): deponun tokenizer.json'unun
-# id uzayi modelin gomme matrisiyle ayni degil, olculen tablo karar #29'da.
-ort = { version = "2.0.0-rc.13", features = ["download-binaries"] }
-tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
-
 # Yalnizca Windows API cagrilari icin. Bu urun Windows'a ozel: sistem
 # optimizasyonunun tamami platform API'lerine dayaniyor, capraz platform bir
 # soyutlama katmani yazmak bos emek olurdu (bkz. docs/decisions.md #2).
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
-  # WinRT tarafi: OCR dil paketi sorgusu (ceviri::ocr_dil) ve karenin OCR
-  # motoruna verilmesi (ceviri::ocr). Karar #28: OCR icin ikiliye gomulen ya
-  # da indirilen model YOK, bunlar Windows'un kendi bilesenlerinin baglanmasi.
-  "Foundation",
-  "Globalization",
-  "Media_Ocr",
-  "Graphics_Imaging",
-  "Storage_Streams",
-  "Win32_System_WinRT",
-
   "Win32_Foundation",
   "Win32_Security",
   "Win32_System_Threading",
@@ -106,28 +76,10 @@ windows = { version = "0.62", features = [
   "Win32_System_Memory",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Shell",
-  # Kacis kisayolu (karar #34) ve ceviri kisayolu (karar #37):
-  # RegisterHotKey. Klavye kancasi DEGIL - tus basislari okunmuyor, tek bir
-  # kombinasyon sisteme kaydediliyor.
-  "Win32_UI_Input_KeyboardAndMouse",
   "Win32_Graphics_Gdi",
 
-  # Faz 3 (scaling): Desktop Duplication ile yakalama, D3D11 ile olcekleme
-  # ve sunum. Fxc, golgelendiricinin calisma zamaninda derlenmesi icin
-  # (karar #32). Yeni bir bagimlilik degil, ayni crate'in ozellikleri:
-  # Cargo.lock degismiyor, ucuncu-taraf-uret.mjs gerekmiyor.
-  "Win32_Graphics_Direct3D",
-  "Win32_Graphics_Direct3D11",
-  "Win32_Graphics_Direct3D_Fxc",
-  "Win32_Graphics_Dxgi",
-  "Win32_Graphics_Dxgi_Common",
   "Win32_NetworkManagement_IpHelper",
   "Win32_Networking_WinSock",
-  # Ceviri modelinin indirilmesi (karar #37). Yeni bir HTTP kasasi
-  # EKLENMEDI: WinHTTP isletim sisteminin kendi yigini, sertifika deposu da
-  # oyle. `library::png`teki gerekce burada da gecerli - tek bir indirme icin
-  # onlarca kasa bagimliligi tasimak bos emek.
-  "Win32_Networking_WinHttp",
 ] }
 
 [dev-dependencies]

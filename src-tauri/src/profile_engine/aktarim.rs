@@ -197,9 +197,6 @@ pub fn etkiler(profil: &Profil) -> Vec<String> {
     if profil.network.tcp_nodelay {
         v.push("Nagle paket birleştirmesi kapatılır (kayıt defterinde kalıcı)".to_string());
     }
-    if profil.competitive {
-        v.push("Rekabetçi profil: kare üretimi ve agresif ölçekleme açılmaz".to_string());
-    }
 
     v
 }

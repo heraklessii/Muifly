@@ -31,10 +31,10 @@ Program ne yaptığını her zaman göstermeli.
 - Öncesi/sonrası ölçülebilir kanıt (FPS, ping, jitter grafiği) sunulmalı; rakiplerin
   çoğu bunu sunmuyor ve kullanıcı "gerçekten iyileşti mi" tahmin etmek zorunda kalıyor.
 
-**Şeffaflık ≠ açık kaynak.** Muifly kapalı kaynak ve ücretli bir üründür
-(`DISTRIBUTION.md`). Buradaki şeffaflık, programın çalışırken ne yaptığını
-göstermesidir; kaynak kodun yayınlanması değil. "Açık kaynak" / "open source"
-ifadeleri Muifly için hiçbir metinde kullanılmaz.
+**Kaynak açık olması bunun yerine geçmez.** Muifly açık kaynaktır
+(`DISTRIBUTION.md`, Apache 2.0) ama buradaki şeffaflık ayrı bir iş:
+programın çalışırken ne yaptığını göstermesi. Kimse bir aracı her
+çalıştırmadan önce kaynağını okumuyor; günlük olmadan kaynak da yetmez.
 
 ## 3. Anti-Cheat Güvenliği
 
@@ -44,14 +44,14 @@ herhangi bir şey enjekte etme YASAK.
 - Sadece resmi/dokümante Windows API'leri kullanılır: `SetPriorityClass`,
   `SetProcessAffinityMask`, `NtSuspendProcess`/`NtResumeProcess` (yaygın kullanılan
   ama gayrı resmi — bilinen risk, `RISKS.md`'de not edilmiştir), `powercfg`,
-  QoS Packet Scheduler, Desktop Duplication API.
-- Ekran yakalama (scaling modülü için) Desktop Duplication API ile **dışarıdan**
-  yapılır — oyun process'ine dokunulmaz, sadece ekran çıktısı okunur. Bu, DLL
-  injection'dan mimari olarak tamamen farklıdır ve anti-cheat sistemleri tarafından
-  genellikle sorun olarak görülmez (kesin garanti verilemez, kullanıcıya bu netlikle
+  QoS Packet Scheduler, ETW (kare ölçümü).
+- Oyunun kare süresi ETW ile **dışarıdan** okunur — oyun sürecine dokunulmaz,
+  sistemin kendi olay akışı dinlenir. Bu, DLL injection'dan mimari olarak
+  tamamen farklıdır ve anti-cheat sistemleri tarafından genellikle sorun
+  olarak görülmez (kesin garanti verilemez, kullanıcıya bu netlikle
   iletilmeli).
-- Overlay ihtiyacı DirectX hook gerektiriyorsa, önce `RISKS.md`'deki değerlendirme
-  yapılmalı; alternatif olarak ayrı bir pencere/widget tercih edilebilir.
+- Overlay ihtiyacı DirectX hook gerektiriyorsa yapılmaz; alternatif olarak
+  ayrı bir pencere/widget tercih edilir.
 
 **Gerekçe**: Kullanıcının hesabının banlanması, bir "performans aracı" için kabul
 edilemez bir risktir. Bu ilke pazarlık konusu değildir.
@@ -80,5 +80,10 @@ program bunu garanti edemez. Yanlış vaat hem teknik olarak yanlış hem de gü
 
 ## Faz Disiplini
 
-Faz 1 stabil ve kullanıcı tarafından doğrulanmadan Faz 3/4'e (scaling, ML frame
-generation) geçilmez. Sıra atlanmaz — bkz. `ROADMAP.md`.
+Bir faz stabil ve kullanıcı tarafından **sahada** doğrulanmadan bir sonrakine
+geçilmez. Sıra atlanmaz — bkz. `ROADMAP.md`.
+
+Bu kuralın bir kez çiğnenmesinin bedeli ödendi: Faz 1 saha testi yapılmadan
+Faz 3 ve 4 yazıldı (karar #33), ikisi de gözle denendiğinde yeterince iyi
+çıkmadı ve karar #39'la tamamen silindi. Yazılan kod kadar, o kod için
+verilmeyen saha testi de kayıptı.
