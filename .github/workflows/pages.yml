@@ -1,8 +1,8 @@
 # Tanitim sayfasini GitHub Pages'e yayinlar.
 #
-# YALNIZCA `site/` klasoru yayinlaniyor. Bu depo public oldugunda kaynak kod
-# burada bulunmayacak (bkz. docs/DISTRIBUTION.md); is akisi da bilerek dar
-# tutuldu ki yanlislikla baska bir klasor yayinlanmasin.
+# YALNIZCA `site/` klasoru yayinlaniyor. Depo public ve kaynak kod da burada
+# (bkz. docs/DISTRIBUTION.md); is akisi yine de dar tutuluyor ki Pages'e
+# yanlislikla derleme ciktisi ya da baska bir klasor gitmesin.
 name: Tanitim sayfasi
 
 on:
