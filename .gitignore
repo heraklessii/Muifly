@@ -7,10 +7,4 @@ src-tauri/gen/
 Thumbs.db
 arac/etw-sonda/target/
 arac/etw-sonda/Cargo.lock
-arac/ocr-sonda/target/
-arac/ocr-sonda/Cargo.lock
-arac/ocr-sonda/ornekler/
-arac/ceviri-sonda/target/
-arac/ceviri-sonda/Cargo.lock
-arac/ceviri-sonda/model/
 src-tauri/binaries/

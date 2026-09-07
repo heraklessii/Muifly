@@ -38,6 +38,13 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # Olcum yardimcisi sidecar'i: `tauri-build` derleme zamaninda
+      # `binaries/muifly-olcum-<ucluk>.exe` dosyasini ARIYOR ve bulamazsa
+      # derleme kiriliyor. Dosya uretilmis bir cikti, surum kontrolunde degil
+      # (.gitignore) - o yuzden CI'da da uretilmesi gerekiyor.
+      - name: Olcum yardimcisi
+        run: node arac/olcum-yardimcisi-hazirla.mjs
+
       - name: Rust testleri
         working-directory: src-tauri
         run: cargo test --all-features

@@ -266,7 +266,9 @@ mod testler {
         atomik_yaz(&yol, "eski").unwrap();
 
         // Geçici dosya elle oluşturuluyor: `atomik_yaz`ın yarıda kaldığı an.
-        let gecici = dizin.path().join(format!("a.json.{}.yeni", std::process::id()));
+        let gecici = dizin
+            .path()
+            .join(format!("a.json.{}.yeni", std::process::id()));
         std::fs::write(&gecici, "yarim").unwrap();
         assert_eq!(
             std::fs::read_to_string(&yol).unwrap(),

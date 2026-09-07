@@ -255,7 +255,10 @@ mod testler {
         let dizin = tempfile::tempdir().unwrap();
         kaddet_yardimci(dizin.path(), "oyun.1", "a.exe");
         assert!(sil(dizin.path(), "oyun 1").is_err());
-        assert!(yolu(dizin.path(), "oyun.1").exists(), "yanlış profil silindi");
+        assert!(
+            yolu(dizin.path(), "oyun.1").exists(),
+            "yanlış profil silindi"
+        );
         sil(dizin.path(), "oyun.1").expect("kendi profili silinebilmeli");
     }
 

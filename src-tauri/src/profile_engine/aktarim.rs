@@ -298,7 +298,10 @@ mod testler {
         );
         assert_ne!(onizleme.bos_kimlik, "oyun 1");
         assert!(
-            onizleme.uyarilar.iter().any(|u| u.contains(&onizleme.bos_kimlik)),
+            onizleme
+                .uyarilar
+                .iter()
+                .any(|u| u.contains(&onizleme.bos_kimlik)),
             "kimliğin değişeceği söylenmedi: {:?}",
             onizleme.uyarilar
         );

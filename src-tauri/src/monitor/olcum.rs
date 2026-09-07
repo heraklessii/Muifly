@@ -593,7 +593,11 @@ mod testler {
     /// sonrakiyle birleşir.
     #[test]
     fn ters_bolu_ile_biten_yol_bozulmuyor() {
-        let cozulen = argv_coz(&format!("{} {}", tirnakla(r"C:\a b\"), tirnakla("--sonraki")));
+        let cozulen = argv_coz(&format!(
+            "{} {}",
+            tirnakla(r"C:\a b\"),
+            tirnakla("--sonraki")
+        ));
         assert_eq!(cozulen, vec![r"C:\a b\".to_string(), "--sonraki".into()]);
     }
 
@@ -627,7 +631,10 @@ mod testler {
         assert!(a.0.is_dir() && b.0.is_dir());
         // Klasör adı süreç kimliğinden ya da saatten türetilebilir olmamalı.
         let ad = a.0.file_name().unwrap().to_string_lossy().into_owned();
-        assert!(!ad.contains(&std::process::id().to_string()), "ad pid taşıyor: {ad}");
+        assert!(
+            !ad.contains(&std::process::id().to_string()),
+            "ad pid taşıyor: {ad}"
+        );
 
         let yol = a.0.clone();
         drop(a);
